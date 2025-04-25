@@ -1,5 +1,6 @@
 import re
 from bs4 import BeautifulSoup
+import html_sanitizer
 
 class PostManager:
     def __init__(self, session_manager):
@@ -144,6 +145,10 @@ class PostManager:
                 tts_element = soup.find('textarea', {'id': 'text-to-speech'})
                 if tts_element:
                     content = tts_element.text.strip()
+
+            ## Erfassung des vollständigen HTML-Inhalts des Artikels
+            full_article_html = str(soup.find('div', class_='article'))
+            full_article_html = PostManager.clean_post_html(full_article_html)
             
             ## Social Stats (Likes, Views) extrahieren
             stats = {}
@@ -180,7 +185,8 @@ class PostManager:
                 'title': title,
                 'author': author,
                 'date': date,
-                'content': content,
+                'content': content,  # Textinhalt für Abwärtskompatibilität
+                'full_html': full_article_html,  # Vollständiges HTML des Artikels
                 'stats': stats,
                 'status': status,
                 'is_own_post': is_own_post,
@@ -462,6 +468,9 @@ class PostManager:
                     text = '\n'.join([p.text.strip() for p in text_paragraphs])
                 else:
                     text = text_element.text.strip()
+
+            ## Erfassung des vollständigen HTML-Inhalts des Kommentars
+            full_comment_html = PostManager.clean_post_html( str(text_element) )
             
             ## Kommentar-ID (z.B. für Bearbeiten)
             comment_id = None
@@ -486,9 +495,28 @@ class PostManager:
                 'author': author,
                 'date': date,
                 'text': text,
+                'full_html': full_comment_html,
                 'highlight': highlight,
                 'highlight_id': highlight_id if highlight else None,
                 'can_edit': edit_link is not None
             })
         
         return comments
+
+    def clean_post_html(html_text):
+        ## Erweitere die Standardeinstellungen für hmtl_sanitizer
+        my_settings = dict(html_sanitizer.sanitizer.DEFAULT_SETTINGS)
+        ## Füge Bild, Video und Audio hinzu.
+        my_settings['tags'].add('img')
+        my_settings['tags'].add('video')
+        my_settings['tags'].add('audio')
+        my_settings['empty'].add('img')
+        my_settings['empty'].add('video')
+        my_settings['empty'].add('audio')
+        my_settings['attributes'].update({'img': ('src', )})
+        my_settings['attributes'].update({'video': ('src', )})
+        my_settings['attributes'].update({'audio': ('src', )})
+        ## Bereinige das vollständige HTML des Beitrags.
+        s= html_sanitizer.Sanitizer(settings = my_settings)
+
+        return s.sanitize(html_text)

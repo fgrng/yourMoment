@@ -101,6 +101,10 @@ def cmd_show_post(args, scraper):
         print("\nINHALT:")
         print(post['content'])
         print("-" * 80)
+
+        print("\nINHALT (HTML):")
+        print(post['full_html'])
+        print("-" * 80)
         
         ## Kommentare anzeigen, falls vorhanden
         if post.get('comments'):
@@ -109,7 +113,10 @@ def cmd_show_post(args, scraper):
                 print(f"- {comment['author']} ({comment['date']})")
                 if comment.get('highlight'):
                     print(f"  Hervorgehobener Text: \"{comment['highlight']}\"")
+                print(f"  INHALT:")
                 print(f"  {comment['text']}")
+                print(f"  INHALT (HTML):")
+                print(f"  {comment['full_html']}")
                 if comment.get('can_edit'):
                     print(f"  [Kommentar-ID: {comment['id']} - kann bearbeitet werden]")
                 print()

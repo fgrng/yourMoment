@@ -8,7 +8,6 @@ class CommentManager:
         self.base_url = session_manager.base_url
         self.session = session_manager.session
 
-
     def add_comment(self, post_id, text, highlight=None):
         """Fügt einen Kommentar zu einem Beitrag hinzu."""
         try:
