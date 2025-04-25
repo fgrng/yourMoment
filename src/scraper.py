@@ -181,45 +181,77 @@ class WebScraper:
             
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            ## Struktur basierend auf der tatsächlichen Beitragsseite extrahieren
-            ## Dies muss angepasst werden, wenn wir das tatsächliche HTML der Beitragsseite sehen
+            ## Prüfen, ob der Beitrag dem aktuellen Benutzer gehört
+            is_own_post = False
+            edit_button = soup.find('button', {'data-bs-target': '##edit_article_modal'})
+            draft_button = soup.find('button', {'data-bs-target': '##draft_article_modal'})
+            if edit_button or draft_button:
+                is_own_post = True
             
-            ## Vermutlich hat die Seite einen Titel, Autor, Datum und Inhalt
+            ## Titel extrahieren - basierend auf der Detailseite
             title = 'Unbekannter Titel'
             title_element = soup.find('h1')
             if title_element:
                 title = title_element.text.strip()
-            
-            ## Autor und Datum sind wahrscheinlich in bestimmten Klassen oder Elementen
-            author = 'Unbekannter Autor'
-            author_element = soup.find('div', class_='article-author')
-            if author_element:
-                author = author_element.text.strip()
-            
-            date = 'Unbekanntes Datum'
-            date_element = soup.find('div', class_='article-date')
-            if date_element:
-                date = date_element.text.strip()
-            
-            ## Inhalt des Beitrags
-            content = 'Kein Inhalt verfügbar'
-            content_element = soup.find('div', class_='article-content')
-            if content_element:
-                content = content_element.text.strip()
-            
-            ## Kommentare extrahieren, falls vorhanden
-            comments = []
-            comment_elements = soup.select('.comment')
-            for comment in comment_elements:
-                comment_author_element = comment.find(class_='comment-author')
-                comment_date_element = comment.find(class_='comment-date')
-                comment_text_element = comment.find(class_='comment-text')
                 
-                comments.append({
-                    'author': comment_author_element.text.strip() if comment_author_element else 'Unbekannt',
-                    'date': comment_date_element.text.strip() if comment_date_element else 'Unbekannt',
-                    'text': comment_text_element.text.strip() if comment_text_element else 'Kein Text'
-                })
+                ## Autor aus dem Titel extrahieren, falls er im Format "Titel von Autor" ist
+                if ' von ' in title:
+                    parts = title.split(' von ')
+                    title = parts[0].strip()
+                    author = parts[1].strip()
+                else:
+                    author = 'Unbekannter Autor'
+            else:
+                author = 'Unbekannter Autor'
+            
+            ## Datum extrahieren 
+            date = 'Unbekanntes Datum'
+            date_element = soup.find('h6', class_='d-flex')
+            if date_element:
+                date_text = date_element.get_text().strip()
+                if 'Letzte Aktualisierung:' in date_text:
+                    date = date_text.split('Letzte Aktualisierung:')[1].strip().split('\n')[0]
+            
+            ## Inhalt des Beitrags extrahieren
+            content = ''
+            content_elements = soup.select('.article .highlight-target p')
+            if content_elements:
+                content = '\n'.join([el.text.strip() for el in content_elements])
+            else:
+                ## Alternative: Versuch den Text aus dem Text-to-Speech Bereich zu extrahieren
+                tts_element = soup.find('textarea', {'id': 'text-to-speech'})
+                if tts_element:
+                    content = tts_element.text.strip()
+            
+            ## Social Stats (Likes, Views) extrahieren
+            stats = {}
+            social_items = soup.select('.social .list-group-item')
+            for item in social_items:
+                text = item.text.strip()
+                if ':' in text:
+                    key, value = text.split(':')
+                    stats[key.strip()] = value.strip()
+            
+            ## Status-Info extrahieren
+            status = 'Unbekannt'
+            status_alert = soup.find('div', class_='alert')
+            if status_alert:
+                status_text = status_alert.text.strip()
+                if 'sichtbar' in status_text.lower():
+                    status = 'Publiziert'
+                elif 'entwurf' in status_text.lower():
+                    status = 'Entwurf'
+            
+            ## Kommentare extrahieren
+            comments = self.get_comments_from_html(soup)
+            
+            ## Kommentarformular für CSRF-Token
+            csrf_token = None
+            comment_form = soup.find('form', {'action': re.compile(r'/article/\d+/comment/')})
+            if comment_form:
+                csrf_input = comment_form.find('input', {'name': 'csrfmiddlewaretoken'})
+                if csrf_input:
+                    csrf_token = csrf_input.get('value')
             
             return {
                 'id': post_id,
@@ -227,12 +259,78 @@ class WebScraper:
                 'author': author,
                 'date': date,
                 'content': content,
+                'stats': stats,
+                'status': status,
+                'is_own_post': is_own_post,
                 'comments': comments,
+                'csrf_token': csrf_token,
                 'url': f"{self.base_url}/article/{post_id}/"
             }
         except Exception as e:
             print(f"Fehler beim Abrufen des Beitrags: {e}")
             return None
+
+    def get_comments_from_html(self, soup):
+        """Extrahiert Kommentare aus der HTML-Struktur."""
+        comments = []
+        comment_elements = soup.select('.comment')
+        for comment in comment_elements:
+            card = comment.find('div', class_='card')
+            if not card:
+                continue
+                
+            ## Autor des Kommentars
+            author_element = card.find('h5', class_='card-title')
+            author = 'Unbekannter Autor'
+            if author_element:
+                author_text = author_element.get_text().strip()
+                if 'von ' in author_text:
+                    author = author_text.split('von ')[1].strip()
+            
+            ## Datum des Kommentars
+            date_element = card.find('h6', class_='card-subtitle')
+            date = date_element.text.strip() if date_element else 'Unbekanntes Datum'
+            
+            ## Text des Kommentars
+            text_element = card.find('span', class_='card-text')
+            text = ''
+            if text_element:
+                ## Text aus allen p-Elementen extrahieren
+                text_paragraphs = text_element.find_all('p')
+                if text_paragraphs:
+                    text = '\n'.join([p.text.strip() for p in text_paragraphs])
+                else:
+                    text = text_element.text.strip()
+            
+            ## Kommentar-ID (z.B. für Bearbeiten)
+            comment_id = None
+            edit_link = card.find('a', {'href': re.compile(r'/comment/\d+/')})
+            if edit_link:
+                href = edit_link.get('href', '')
+                comment_id = href.strip('/').split('/')[-1]
+            
+            ## Texthervorhebung
+            highlight = None
+            highlight_div = comment.find('div', {'id': re.compile(r'highlight-\d+')})
+            if highlight_div:
+                highlight = highlight_div.text.strip()
+                
+                ## ID der Hervorhebung
+                highlight_id = None
+                if highlight_div.get('id'):
+                    highlight_id = highlight_div.get('id').replace('highlight-', '')
+            
+            comments.append({
+                'id': comment_id,
+                'author': author,
+                'date': date,
+                'text': text,
+                'highlight': highlight,
+                'highlight_id': highlight_id if highlight else None,
+                'can_edit': edit_link is not None
+            })
+        
+        return comments
 
     def get_post_edit(self, post_id):
         """Ruft einen Beitrag im Bearbeitungsmodus ab."""
@@ -241,7 +339,7 @@ class WebScraper:
             response = self.session.get(f"{self.base_url}/article/edit/{post_id}/")
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            ## Struktur für den Edit-Modus (vermutlich ein Formular)
+            ## Formular-Elemente für den Edit-Modus extrahieren
             title = 'Unbekannter Titel'
             title_element = soup.find('input', {'name': 'title'})
             if title_element:
@@ -253,17 +351,45 @@ class WebScraper:
             if content_element:
                 content = content_element.text.strip()
             
-            ## Autor und Datum sind möglicherweise woanders oder nicht verfügbar im Edit-Modus
-            author = 'Eigener Beitrag'
-            date = 'In Bearbeitung'
+            ## Kategorie
+            category_id = None
+            category_name = None
+            category_select = soup.find('select', {'name': 'category'})
+            if category_select:
+                selected_option = category_select.find('option', selected=True)
+                if selected_option:
+                    category_id = selected_option.get('value')
+                    category_name = selected_option.text.strip()
+            
+            ## Status (Entwurf, Publiziert)
+            status_id = None
+            status_name = None
+            status_select = soup.find('select', {'name': 'status'})
+            if status_select:
+                selected_option = status_select.find('option', selected=True)
+                if selected_option:
+                    status_id = selected_option.get('value')
+                    status_name = selected_option.text.strip()
+            
+            ## CSRF-Token extrahieren
+            csrf_token = None
+            csrf_input = soup.find('input', {'name': 'csrfmiddlewaretoken'})
+            if csrf_input:
+                csrf_token = csrf_input.get('value')
             
             return {
                 'id': post_id,
                 'title': title,
-                'author': author,
-                'date': date,
                 'content': content,
-                'comments': [],  ## Im Edit-Modus wahrscheinlich keine Kommentare sichtbar
+                'category': {
+                    'id': category_id,
+                    'name': category_name
+                } if category_id else None,
+                'status': {
+                    'id': status_id,
+                    'name': status_name
+                } if status_id else None,
+                'csrf_token': csrf_token,
                 'url': f"{self.base_url}/article/edit/{post_id}/",
                 'is_edit_mode': True
             }
@@ -287,6 +413,7 @@ class WebScraper:
                 'csrfmiddlewaretoken': csrf_token,
                 'title': title,
                 'content': content,
+                'status': '10'  ## 10 = Entwurf (Standard)
             }
             
             ## Kategorie hinzufügen, falls angegeben
@@ -321,33 +448,94 @@ class WebScraper:
             print(f"Fehler beim Erstellen des Beitrags: {e}")
             return False, None
 
-    def add_comment(self, post_id, text):
-        """Fügt einen Kommentar zu einem Beitrag hinzu."""
+    def update_post(self, post_id, title=None, content=None, category_id=None, status_id=None):
+        """Aktualisiert einen bestehenden Beitrag."""
         try:
-            ## Beitragsseite laden, um CSRF-Token zu bekommen
-            post_url = f"{self.base_url}/article/{post_id}/"
-            post_page = self.session.get(post_url)
-            soup = BeautifulSoup(post_page.text, 'html.parser')
+            ## Zuerst den Beitrag im Edit-Modus laden, um die aktuellen Werte zu erhalten
+            post = self.get_post_edit(post_id)
+            if not post or not post.get('csrf_token'):
+                print("Konnte Beitrag nicht im Edit-Modus laden.")
+                return False
             
-            ## CSRF-Token extrahieren
-            csrf_token = soup.find('input', {'name': 'csrfmiddlewaretoken'}).get('value')
-            
-            ## Kommentar-Formulardaten
-            ## Die genauen Feldnamen müssen angepasst werden, sobald das tatsächliche Formular bekannt ist
-            comment_data = {
-                'csrfmiddlewaretoken': csrf_token,
-                'comment_text': text  ## Name des Feldes könnte anders sein
+            ## Formulardaten zusammenstellen mit Standardwerten aus dem bestehenden Post
+            post_data = {
+                'csrfmiddlewaretoken': post['csrf_token'],
+                'title': title if title is not None else post['title'],
+                'content': content if content is not None else post['content'],
+                'status': status_id if status_id is not None else (
+                    post['status']['id'] if post.get('status') and post['status'].get('id') else '10'
+                )
             }
             
-            ## Kommentar-URL könnte variieren
+            ## Kategorie hinzufügen, falls angegeben
+            if category_id is not None:
+                post_data['category'] = category_id
+            elif post.get('category') and post['category'].get('id'):
+                post_data['category'] = post['category']['id']
+            
+            ## Post aktualisieren
+            update_url = f"{self.base_url}/article/edit/{post_id}/"
+            response = self.session.post(
+                update_url,
+                data=post_data,
+                headers={
+                    'Referer': update_url,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            )
+            
+            ## Erfolg prüfen
+            return response.status_code == 200 or response.status_code == 302
+        except Exception as e:
+            print(f"Fehler beim Aktualisieren des Beitrags: {e}")
+            return False
+
+    def publish_post(self, post_id):
+        """Veröffentlicht einen Beitrag."""
+        try:
+            publish_url = f"{self.base_url}/article/{post_id}/publish/"
+            response = self.session.get(publish_url, allow_redirects=True)
+            return response.status_code == 200 or response.status_code == 302
+        except Exception as e:
+            print(f"Fehler beim Veröffentlichen des Beitrags: {e}")
+            return False
+
+    def draft_post(self, post_id):
+        """Zieht einen Beitrag zurück (als Entwurf markieren)."""
+        try:
+            draft_url = f"{self.base_url}/article/{post_id}/draft/"
+            response = self.session.get(draft_url, allow_redirects=True)
+            return response.status_code == 200 or response.status_code == 302
+        except Exception as e:
+            print(f"Fehler beim Zurückziehen des Beitrags: {e}")
+            return False
+
+    def add_comment(self, post_id, text, highlight=None):
+        """Fügt einen Kommentar zu einem Beitrag hinzu."""
+        try:
+            ## Zuerst die Detailseite des Beitrags laden, um das CSRF-Token zu bekommen
+            post = self.get_post(post_id)
+            if not post or not post.get('csrf_token'):
+                print("Konnte CSRF-Token nicht finden, um Kommentar hinzuzufügen.")
+                return False
+            
+            ## Kommentar-URL für diesen Beitrag
             comment_url = f"{self.base_url}/article/{post_id}/comment/"
+            
+            ## Kommentar-Daten zusammenstellen
+            comment_data = {
+                'csrfmiddlewaretoken': post['csrf_token'],
+                'text': text,
+                'status': '20',  ## 20 = Publiziert (aus dem HTML erkennbar)
+                'highlight': highlight or ''   ## Optional: Text-Hervorhebung
+            }
             
             ## Kommentar absenden
             response = self.session.post(
                 comment_url,
                 data=comment_data,
                 headers={
-                    'Referer': post_url,
+                    'Referer': post['url'],
                     'Content-Type': 'application/x-www-form-urlencoded'
                 }
             )
@@ -356,6 +544,56 @@ class WebScraper:
             return response.status_code == 200 or response.status_code == 302
         except Exception as e:
             print(f"Fehler beim Hinzufügen des Kommentars: {e}")
+            return False
+
+    def get_comments(self, post_id):
+        """Ruft alle Kommentare eines Beitrags ab."""
+        post = self.get_post(post_id)
+        if not post:
+            print(f"Beitrag mit ID {post_id} nicht gefunden.")
+            return []
+        
+        return post.get('comments', [])
+
+    def edit_comment(self, comment_id, text):
+        """Bearbeitet einen eigenen Kommentar."""
+        try:
+            ## Kommentar-Bearbeitungsseite laden
+            edit_url = f"{self.base_url}/comment/{comment_id}/"
+            edit_page = self.session.get(edit_url)
+            
+            soup = BeautifulSoup(edit_page.text, 'html.parser')
+            
+            ## CSRF-Token extrahieren
+            csrf_token = None
+            csrf_input = soup.find('input', {'name': 'csrfmiddlewaretoken'})
+            if csrf_input:
+                csrf_token = csrf_input.get('value')
+            else:
+                print("Konnte CSRF-Token nicht finden, um Kommentar zu bearbeiten.")
+                return False
+            
+            ## Kommentar-Daten zusammenstellen
+            comment_data = {
+                'csrfmiddlewaretoken': csrf_token,
+                'text': text,
+                'status': '20',  ## 20 = Publiziert (Standard)
+            }
+            
+            ## Kommentar aktualisieren
+            response = self.session.post(
+                edit_url,
+                data=comment_data,
+                headers={
+                    'Referer': edit_url,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            )
+            
+            ## Erfolg prüfen
+            return response.status_code == 200 or response.status_code == 302
+        except Exception as e:
+            print(f"Fehler beim Bearbeiten des Kommentars: {e}")
             return False
 
     def get_categories(self):
@@ -385,3 +623,36 @@ class WebScraper:
         except Exception as e:
             print(f"Fehler beim Abrufen der Kategorien: {e}")
             return []
+            
+    def like_post(self, post_id):
+        """Fügt einen 'Gefällt mir' zu einem Beitrag hinzu."""
+        try:
+            ## Zuerst die Detailseite des Beitrags laden, um das CSRF-Token zu bekommen
+            post = self.get_post(post_id)
+            if not post or not post.get('csrf_token'):
+                print("Konnte CSRF-Token nicht finden, um 'Gefällt mir' hinzuzufügen.")
+                return False
+            
+            ## Like-URL für diesen Beitrag
+            like_url = f"{self.base_url}/article/{post_id}/increment_likes/"
+            
+            ## Like-Daten zusammenstellen
+            like_data = {
+                'csrfmiddlewaretoken': post['csrf_token']
+            }
+            
+            ## Like absenden
+            response = self.session.post(
+                like_url,
+                data=like_data,
+                headers={
+                    'Referer': post['url'],
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            )
+            
+            ## Erfolg prüfen
+            return response.status_code == 200 or response.status_code == 302
+        except Exception as e:
+            print(f"Fehler beim Hinzufügen von 'Gefällt mir': {e}")
+            return False

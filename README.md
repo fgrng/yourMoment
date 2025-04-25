@@ -1,6 +1,6 @@
 # myMoment Web Scraper
 
-Dieses Tool ermöglicht die Interaktion mit der myMoment-Schreibplattform über die Kommandozeile. Es unterstützt das Anmelden, Auflisten von Beiträgen, Anzeigen einzelner Beiträge, Erstellen neuer Beiträge und Hinzufügen von Kommentaren.
+Dieses Tool ermöglicht die Interaktion mit der myMoment-Schreibplattform über die Kommandozeile. Es unterstützt das Anmelden, Auflisten von Beiträgen, Anzeigen einzelner Beiträge, Erstellen neuer Beiträge, Hinzufügen von Kommentaren und Vergeben von "Gefällt mir".
 
 ## Installation
 
@@ -78,6 +78,14 @@ python main.py show BEITRAG_ID
 
 Ersetzt `BEITRAG_ID` durch die tatsächliche ID des Beitrags. Die IDs werden beim Auflisten der Beiträge angezeigt.
 
+### Kommentare eines Beitrags anzeigen
+
+```bash
+python main.py comments BEITRAG_ID
+```
+
+Zeigt alle Kommentare eines bestimmten Beitrags an.
+
 ### Kategorien auflisten
 
 ```bash
@@ -104,13 +112,57 @@ Optional können Sie eine Kategorie angeben:
 python main.py create --title "Mein Beitragstitel" --content "Inhalt" --category 9
 ```
 
+### Beitrag aktualisieren
+
+```bash
+python main.py update BEITRAG_ID --title "Neuer Titel" --content "Neuer Inhalt"
+```
+
+Nur die Parameter, die Sie angeben, werden aktualisiert. Die anderen bleiben unverändert.
+
+### Beitrag veröffentlichen
+
+```bash
+python main.py publish BEITRAG_ID
+```
+
+Veröffentlicht einen Beitrag, der im Entwurfsmodus ist.
+
+### Beitrag zurückziehen
+
+```bash
+python main.py draft BEITRAG_ID
+```
+
+Zieht einen veröffentlichten Beitrag zurück (als Entwurf markieren).
+
 ### Kommentar hinzufügen
 
 ```bash
 python main.py comment BEITRAG_ID --text "Mein Kommentar zum Beitrag."
 ```
 
-Ersetzt `BEITRAG_ID` durch die tatsächliche ID des Beitrags.
+Optional können Sie einen Text im Beitrag hervorheben:
+
+```bash
+python main.py comment BEITRAG_ID --text "Mein Kommentar" --highlight "Dieser Teil des Textes"
+```
+
+### Kommentar bearbeiten
+
+```bash
+python main.py edit-comment KOMMENTAR_ID --text "Neuer Kommentartext"
+```
+
+Bearbeitet einen eigenen Kommentar. Die Kommentar-ID wird bei der Anzeige des Beitrags angezeigt, wenn es ein eigener Kommentar ist.
+
+### "Gefällt mir" vergeben
+
+```bash
+python main.py like BEITRAG_ID
+```
+
+Fügt einem Beitrag ein "Gefällt mir" hinzu.
 
 ## Konfiguration
 
@@ -119,6 +171,74 @@ Die Anwendung erstellt automatisch eine Konfigurationsdatei unter `~/.mymoment_c
 ## Session-Management
 
 Nach erfolgreicher Anmeldung mit der Option `--save` wird die Session lokal unter `~/.mymoment_session` gespeichert. Dies ermöglicht es, die Anwendung ohne erneutes Anmelden zu verwenden, solange die Session gültig ist.
+
+## Beispiel-Workflow für eigene Beiträge
+
+Ein typischer Workflow für eigene Beiträge könnte wie folgt aussehen:
+
+1. Anmelden und Session speichern:
+   ```bash
+   python main.py login --save
+   ```
+
+2. Verfügbare Kategorien anzeigen:
+   ```bash
+   python main.py categories
+   ```
+
+3. Neuen Beitrag erstellen (standardmäßig als Entwurf):
+   ```bash
+   python main.py create --title "Mein erster Beitrag" --content "Hallo Welt!" --category 9
+   ```
+
+4. Beitrag bearbeiten:
+   ```bash
+   python main.py update 123 --content "Hallo Welt! Hier ist ein aktualisierter Inhalt."
+   ```
+
+5. Beitrag veröffentlichen:
+   ```bash
+   python main.py publish 123
+   ```
+
+6. Später den Beitrag wieder zurückziehen:
+   ```bash
+   python main.py draft 123
+   ```
+
+## Beispiel-Workflow für Interaktion mit anderen Beiträgen
+
+Ein typischer Workflow für die Interaktion mit fremden Beiträgen:
+
+1. Beiträge auflisten:
+   ```bash
+   python main.py list --tab alle
+   ```
+
+2. Einen bestimmten Beitrag anzeigen:
+   ```bash
+   python main.py show 90
+   ```
+
+3. Einen Kommentar hinterlassen:
+   ```bash
+   python main.py comment 90 --text "Das ist ein toller Beitrag!"
+   ```
+
+4. Einen Kommentar mit Texthervorhebung hinterlassen:
+   ```bash
+   python main.py comment 90 --text "Ist das richtig geschrieben?" --highlight "Gestern"
+   ```
+
+5. Dem Beitrag ein "Gefällt mir" geben:
+   ```bash
+   python main.py like 90
+   ```
+
+6. Später den eigenen Kommentar bearbeiten:
+   ```bash
+   python main.py edit-comment 186 --text "War das nicht heute? Ich bin mir nicht sicher."
+   ```
 
 ## Hinweise
 
