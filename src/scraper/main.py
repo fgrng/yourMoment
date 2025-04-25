@@ -1,6 +1,7 @@
 from .auth import SessionManager
 from .posts import PostManager
 from .comments import CommentManager
+from .monitor import PostMonitor
 
 class WebScraper:
     """Hauptklasse für den myMoment Web Scraper.
@@ -14,6 +15,7 @@ class WebScraper:
         self.session_manager = SessionManager(base_url)
         self.post_manager = PostManager(self.session_manager)
         self.comment_manager = CommentManager(self.session_manager, self.post_manager)
+        self.monitor = None  # Wird bei Bedarf initialisiert
         
     ## Session-Management-Methoden
     def is_logged_in(self):
@@ -59,3 +61,22 @@ class WebScraper:
         
     def edit_comment(self, comment_id, text):
         return self.comment_manager.edit_comment(comment_id, text)
+
+    ## Monitoring-Methoden
+    def get_monitor(self):
+        """Gibt eine Monitor-Instanz zurück oder erstellt sie, falls noch nicht vorhanden."""
+        if self.monitor is None:
+            self.monitor = PostMonitor(self)
+        return self.monitor
+        
+    def start_monitoring(self, interval=300, tab="alle", comment_template=None, max_posts=20, max_runtime=None):
+        """Startet die Überwachung nach neuen Beiträgen."""
+        monitor = self.get_monitor()
+        return monitor.monitor(interval, tab, comment_template, max_posts, max_runtime)
+        
+    def stop_monitoring(self):
+        """Stoppt die laufende Überwachung."""
+        if self.monitor:
+            self.monitor.stop()
+            return True
+        return False

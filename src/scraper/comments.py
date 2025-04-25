@@ -12,7 +12,7 @@ class CommentManager:
         """Fügt einen Kommentar zu einem Beitrag hinzu."""
         try:
             ## Zuerst die Detailseite des Beitrags laden, um das CSRF-Token zu bekommen
-            post = self.get_post(post_id)
+            post = self.post_manager.get_post(post_id)
             if not post or not post.get('csrf_token'):
                 print("Konnte CSRF-Token nicht finden, um Kommentar hinzuzufügen.")
                 return False
@@ -46,7 +46,7 @@ class CommentManager:
 
     def get_comments(self, post_id):
         """Ruft alle Kommentare eines Beitrags ab."""
-        post = self.get_post(post_id)
+        post = self.post_manager.get_post(post_id)
         if not post:
             print(f"Beitrag mit ID {post_id} nicht gefunden.")
             return []

@@ -164,6 +164,43 @@ python main.py like BEITRAG_ID
 
 Fügt einem Beitrag ein "Gefällt mir" hinzu.
 
+## Beiträge überwachen und automatisch kommentieren
+
+Das Tool unterstützt die automatische Überwachung neuer Beiträge und das automatische Kommentieren:
+
+```bash
+python main.py monitor
+```
+
+Diese Funktion prüft regelmäßig nach neuen Beiträgen und hinterlässt automatisch Kommentare. Standardmäßig wird alle 5 Minuten geprüft und ein allgemeiner Kommentar hinterlassen.
+
+Optionen für erweiterte Kontrolle:
+
+```bash
+# Überwachung alle 10 Minuten
+python main.py monitor --interval 600
+
+# Bestimmten Tab überwachen
+python main.py monitor --tab meine
+
+# Personalisierter Kommentar mit Platzhaltern
+python main.py monitor --comment "Ich finde deinen Beitrag '{title}' großartig, {author}!"
+
+# Maximale Anzahl der zu prüfenden Beiträge pro Durchlauf
+python main.py monitor --max-posts 50
+
+# Automatisches Beenden nach 1 Stunde (3600 Sekunden)
+python main.py monitor --max-runtime 3600
+```
+
+Um den Status der Überwachung und bereits kommentierte Beiträge anzuzeigen:
+
+```bash
+python main.py monitor-status
+```
+
+Die Überwachung kann jederzeit mit der Tastenkombination `Strg+C` beendet werden.
+
 ## Konfiguration
 
 Die Anwendung erstellt automatisch eine Konfigurationsdatei unter `~/.mymoment_config.json`. Die Standard-URL ist `https://new.mymoment.ch`, kann aber bei Bedarf angepasst werden.

@@ -1,7 +1,7 @@
 import argparse
 from src.scraper import WebScraper
 from src.config import load_config
-from src.commands import add_auth_subparsers, add_post_subparsers, add_comment_subparsers
+from src.commands import add_auth_subparsers, add_post_subparsers, add_comment_subparsers, add_monitor_subparsers
 
 def main():
     parser = argparse.ArgumentParser(description="Kommandozeilen-Client für myMoment Schreibplattform")
@@ -11,6 +11,7 @@ def main():
     add_auth_subparsers(subparsers)
     add_post_subparsers(subparsers)
     add_comment_subparsers(subparsers)
+    add_monitor_subparsers(subparsers)
     
     args = parser.parse_args()
     
