@@ -1,7 +1,7 @@
 import os
 import json
 
-CONFIG_FILE = os.path.expanduser('~/.writingapp_config.json')
+CONFIG_FILE = os.path.expanduser('~/.mymoment_config.json')
 
 def load_config():
     """Lädt die Konfiguration aus der Konfigurationsdatei."""
@@ -14,7 +14,7 @@ def load_config():
     
     ## Standardkonfiguration zurückgeben, wenn keine Datei existiert
     return {
-        "base_url": "https://example.com"
+        "base_url": "https://new.mymoment.ch"
     }
 
 def save_config(config):
