@@ -1,90 +1,12 @@
-import os
-import pickle
-import requests
-from bs4 import BeautifulSoup
-import time
 import re
+from bs4 import BeautifulSoup
 
-class WebScraper:
-    def __init__(self, base_url="https://new.mymoment.ch"):
-        self.base_url = base_url
-        self.session = requests.Session()
-        self.session_file = os.path.expanduser("~/.mymoment_session")
-        self._load_session()
+class PostManager:
+    def __init__(self, session_manager):
+        self.session_manager = session_manager
+        self.base_url = session_manager.base_url
+        self.session = session_manager.session
 
-    def _load_session(self):
-        """Lädt eine gespeicherte Session, falls vorhanden."""
-        if os.path.exists(self.session_file):
-            try:
-                with open(self.session_file, 'rb') as f:
-                    self.session.cookies.update(pickle.load(f))
-                return True
-            except Exception:
-                return False
-        return False
-
-    def save_session(self):
-        """Speichert die aktuelle Session."""
-        os.makedirs(os.path.dirname(self.session_file), exist_ok=True)
-        with open(self.session_file, 'wb') as f:
-            pickle.dump(self.session.cookies, f)
-
-    def is_logged_in(self):
-        """Überprüft, ob der Nutzer eingeloggt ist."""
-        try:
-            ## Bei myMoment schauen wir nach, ob auf der Hauptseite ein Abmelden-Button vorhanden ist
-            response = self.session.get(f"{self.base_url}/")
-            
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.text, 'html.parser')
-                ## Suche nach dem Abmelden-Button, der nur für eingeloggte Benutzer sichtbar ist
-                logout_form = soup.find('form', attrs={'action': '/accounts/logout/'})
-                return logout_form is not None
-            return False
-        except Exception as e:
-            print(f"Fehler bei der Login-Überprüfung: {e}")
-            return False
-
-    def login(self, username, password):
-        """Loggt den Nutzer in myMoment ein."""
-        try:
-            ## Login-Seite laden, um CSRF-Token zu erhalten
-            login_url = f"{self.base_url}/accounts/login/"
-            login_page = self.session.get(login_url)
-            soup = BeautifulSoup(login_page.text, 'html.parser')
-            
-            ## CSRF-Token extrahieren
-            csrf_token = soup.find('input', {'name': 'csrfmiddlewaretoken'}).get('value')
-            
-            ## Login-Daten zusammenstellen
-            login_data = {
-                'csrfmiddlewaretoken': csrf_token,
-                'username': username,
-                'password': password,
-                'next': ''  ## aus dem Formular ersichtlich
-            }
-            
-            ## Login durchführen
-            response = self.session.post(
-                login_url,
-                data=login_data,
-                headers={
-                    'Referer': login_url,
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                }
-            )
-            
-            ## Erfolg überprüfen
-            if response.status_code == 200 or response.status_code == 302:
-                ## Session speichern bei erfolgreicher Anmeldung
-                if self.is_logged_in():
-                    self.save_session()
-                    return True
-            
-            return False
-        except Exception as e:
-            print(f"Login-Fehler: {e}")
-            return False
 
     def get_posts(self, limit=10, tab="home"):
         """Ruft die Liste der neuesten Beiträge ab.
@@ -270,68 +192,6 @@ class WebScraper:
             print(f"Fehler beim Abrufen des Beitrags: {e}")
             return None
 
-    def get_comments_from_html(self, soup):
-        """Extrahiert Kommentare aus der HTML-Struktur."""
-        comments = []
-        comment_elements = soup.select('.comment')
-        for comment in comment_elements:
-            card = comment.find('div', class_='card')
-            if not card:
-                continue
-                
-            ## Autor des Kommentars
-            author_element = card.find('h5', class_='card-title')
-            author = 'Unbekannter Autor'
-            if author_element:
-                author_text = author_element.get_text().strip()
-                if 'von ' in author_text:
-                    author = author_text.split('von ')[1].strip()
-            
-            ## Datum des Kommentars
-            date_element = card.find('h6', class_='card-subtitle')
-            date = date_element.text.strip() if date_element else 'Unbekanntes Datum'
-            
-            ## Text des Kommentars
-            text_element = card.find('span', class_='card-text')
-            text = ''
-            if text_element:
-                ## Text aus allen p-Elementen extrahieren
-                text_paragraphs = text_element.find_all('p')
-                if text_paragraphs:
-                    text = '\n'.join([p.text.strip() for p in text_paragraphs])
-                else:
-                    text = text_element.text.strip()
-            
-            ## Kommentar-ID (z.B. für Bearbeiten)
-            comment_id = None
-            edit_link = card.find('a', {'href': re.compile(r'/comment/\d+/')})
-            if edit_link:
-                href = edit_link.get('href', '')
-                comment_id = href.strip('/').split('/')[-1]
-            
-            ## Texthervorhebung
-            highlight = None
-            highlight_div = comment.find('div', {'id': re.compile(r'highlight-\d+')})
-            if highlight_div:
-                highlight = highlight_div.text.strip()
-                
-                ## ID der Hervorhebung
-                highlight_id = None
-                if highlight_div.get('id'):
-                    highlight_id = highlight_div.get('id').replace('highlight-', '')
-            
-            comments.append({
-                'id': comment_id,
-                'author': author,
-                'date': date,
-                'text': text,
-                'highlight': highlight,
-                'highlight_id': highlight_id if highlight else None,
-                'can_edit': edit_link is not None
-            })
-        
-        return comments
-
     def get_post_edit(self, post_id):
         """Ruft einen Beitrag im Bearbeitungsmodus ab."""
         try:
@@ -510,92 +370,6 @@ class WebScraper:
             print(f"Fehler beim Zurückziehen des Beitrags: {e}")
             return False
 
-    def add_comment(self, post_id, text, highlight=None):
-        """Fügt einen Kommentar zu einem Beitrag hinzu."""
-        try:
-            ## Zuerst die Detailseite des Beitrags laden, um das CSRF-Token zu bekommen
-            post = self.get_post(post_id)
-            if not post or not post.get('csrf_token'):
-                print("Konnte CSRF-Token nicht finden, um Kommentar hinzuzufügen.")
-                return False
-            
-            ## Kommentar-URL für diesen Beitrag
-            comment_url = f"{self.base_url}/article/{post_id}/comment/"
-            
-            ## Kommentar-Daten zusammenstellen
-            comment_data = {
-                'csrfmiddlewaretoken': post['csrf_token'],
-                'text': text,
-                'status': '20',  ## 20 = Publiziert (aus dem HTML erkennbar)
-                'highlight': highlight or ''   ## Optional: Text-Hervorhebung
-            }
-            
-            ## Kommentar absenden
-            response = self.session.post(
-                comment_url,
-                data=comment_data,
-                headers={
-                    'Referer': post['url'],
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                }
-            )
-            
-            ## Erfolg prüfen
-            return response.status_code == 200 or response.status_code == 302
-        except Exception as e:
-            print(f"Fehler beim Hinzufügen des Kommentars: {e}")
-            return False
-
-    def get_comments(self, post_id):
-        """Ruft alle Kommentare eines Beitrags ab."""
-        post = self.get_post(post_id)
-        if not post:
-            print(f"Beitrag mit ID {post_id} nicht gefunden.")
-            return []
-        
-        return post.get('comments', [])
-
-    def edit_comment(self, comment_id, text):
-        """Bearbeitet einen eigenen Kommentar."""
-        try:
-            ## Kommentar-Bearbeitungsseite laden
-            edit_url = f"{self.base_url}/comment/{comment_id}/"
-            edit_page = self.session.get(edit_url)
-            
-            soup = BeautifulSoup(edit_page.text, 'html.parser')
-            
-            ## CSRF-Token extrahieren
-            csrf_token = None
-            csrf_input = soup.find('input', {'name': 'csrfmiddlewaretoken'})
-            if csrf_input:
-                csrf_token = csrf_input.get('value')
-            else:
-                print("Konnte CSRF-Token nicht finden, um Kommentar zu bearbeiten.")
-                return False
-            
-            ## Kommentar-Daten zusammenstellen
-            comment_data = {
-                'csrfmiddlewaretoken': csrf_token,
-                'text': text,
-                'status': '20',  ## 20 = Publiziert (Standard)
-            }
-            
-            ## Kommentar aktualisieren
-            response = self.session.post(
-                edit_url,
-                data=comment_data,
-                headers={
-                    'Referer': edit_url,
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                }
-            )
-            
-            ## Erfolg prüfen
-            return response.status_code == 200 or response.status_code == 302
-        except Exception as e:
-            print(f"Fehler beim Bearbeiten des Kommentars: {e}")
-            return False
-
     def get_categories(self):
         """Ruft die verfügbaren Kategorien ab."""
         try:
@@ -656,3 +430,65 @@ class WebScraper:
         except Exception as e:
             print(f"Fehler beim Hinzufügen von 'Gefällt mir': {e}")
             return False
+
+    def get_comments_from_html(self, soup):
+        """Extrahiert Kommentare aus der HTML-Struktur."""
+        comments = []
+        comment_elements = soup.select('.comment')
+        for comment in comment_elements:
+            card = comment.find('div', class_='card')
+            if not card:
+                continue
+                
+            ## Autor des Kommentars
+            author_element = card.find('h5', class_='card-title')
+            author = 'Unbekannter Autor'
+            if author_element:
+                author_text = author_element.get_text().strip()
+                if 'von ' in author_text:
+                    author = author_text.split('von ')[1].strip()
+            
+            ## Datum des Kommentars
+            date_element = card.find('h6', class_='card-subtitle')
+            date = date_element.text.strip() if date_element else 'Unbekanntes Datum'
+            
+            ## Text des Kommentars
+            text_element = card.find('span', class_='card-text')
+            text = ''
+            if text_element:
+                ## Text aus allen p-Elementen extrahieren
+                text_paragraphs = text_element.find_all('p')
+                if text_paragraphs:
+                    text = '\n'.join([p.text.strip() for p in text_paragraphs])
+                else:
+                    text = text_element.text.strip()
+            
+            ## Kommentar-ID (z.B. für Bearbeiten)
+            comment_id = None
+            edit_link = card.find('a', {'href': re.compile(r'/comment/\d+/')})
+            if edit_link:
+                href = edit_link.get('href', '')
+                comment_id = href.strip('/').split('/')[-1]
+            
+            ## Texthervorhebung
+            highlight = None
+            highlight_div = comment.find('div', {'id': re.compile(r'highlight-\d+')})
+            if highlight_div:
+                highlight = highlight_div.text.strip()
+                
+                ## ID der Hervorhebung
+                highlight_id = None
+                if highlight_div.get('id'):
+                    highlight_id = highlight_div.get('id').replace('highlight-', '')
+            
+            comments.append({
+                'id': comment_id,
+                'author': author,
+                'date': date,
+                'text': text,
+                'highlight': highlight,
+                'highlight_id': highlight_id if highlight else None,
+                'can_edit': edit_link is not None
+            })
+        
+        return comments
