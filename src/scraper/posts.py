@@ -3,6 +3,56 @@ from bs4 import BeautifulSoup
 import html_sanitizer
 
 class PostManager:
+
+    ## Dictionary für die Beitrags-Kategorien/-Arrangements
+    categories = {
+        "blank": {
+            "id": 4,
+            "name": "Anleiten"
+        },
+        "blank_1": {
+            "id": 14,
+            "name": "Berichten"
+        },
+        "blank_2": {
+            "id": 5,
+            "name": "Erklären"
+        },
+        "blank_3": {
+            "id": 6,
+            "name": "Fragen"
+        },
+        "media/2025/2/14/informieren.png.1500x1500_q85_upscale.png": {
+            "id": 7,
+            "name": "Informieren"
+        },
+        "blank_5": {
+            "id": 8,
+            "name": "Überzeugen"
+        },
+        "/media/2025/2/14/unterhalten.png.1500x1500_q85_upscale.png": {
+            "id": 9,
+            "name": "Unterhalten"
+        },
+        "/media/2025/2/14/sa-fiktionaler_dialog.png.1500x1500_q85_upscale.png": {
+            "id": 10,
+            "name": "Schreibaufgabe: Fiktionaler Dialog"
+        },
+        "blank_8": {
+            "id": 11,
+            "name": "Schreibaufgabe: Wegbeschreibung"
+        },
+        "blank_9": {
+            "id": 12,
+            "name": "Schreibaufgabe: Schaltplan"
+        },
+        "blank_10": {
+            "id": 13,
+            "name": "Schreibaufgabe: Reisebericht"
+        }
+    }
+
+    
     def __init__(self, session_manager):
         self.session_manager = session_manager
         self.base_url = session_manager.base_url
@@ -75,6 +125,14 @@ class PostManager:
                 ## Bild URL extrahieren
                 img_element = card.find('div', class_='card-body').find('img')
                 img_url = img_element.get('src') if img_element else None
+
+                ## Kategorie herausfinden
+                if img_url in PostManager.categories:
+                    cat_id = PostManager.categories[img_url]["id"]
+                    cat_name = PostManager.categories[img_url]["name"]
+                else:
+                    cat_id = ""
+                    cat_name = ""
                 
                 posts.append({
                     'id': post_id,
@@ -84,6 +142,8 @@ class PostManager:
                     'status': status,
                     'visibility': visibility,
                     'img_url': img_url,
+                    'category_id': cat_id,
+                    'category_name': cat_name,
                     'url': f"{self.base_url}{href}" if href.startswith('/') else href
                 })
             

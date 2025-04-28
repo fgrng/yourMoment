@@ -64,6 +64,7 @@ def cmd_list_posts(args, scraper):
         for post in posts:
             print(f"ID: {post['id']} | Status: {post['status']}")
             print(f"Titel: {post['title']}")
+            print(f"Category: {post['category_id']}")
             print(f"Autor: {post['author']} | Datum: {post['date']}")
             print(f"Sichtbar für: {post['visibility']}")
             print(f"URL: {post['url']}")
