@@ -147,7 +147,13 @@ class PostManager:
                     content = tts_element.text.strip()
 
             ## Erfassung des vollständigen HTML-Inhalts des Artikels
-            full_article_html = str(soup.find('div', class_='article'))
+            full_article_html = soup.find('div', class_='article')
+            ## textarea-Element innerhalb des div finden und entfernen
+            tmp_textarea = full_article_html.find('textarea')
+            if tmp_textarea:
+                tmp_textarea.decompose()  # entfernt das Element vollständig
+
+            full_article_html = str(full_article_html)
             full_article_html = PostManager.clean_post_html(full_article_html)
             
             ## Social Stats (Likes, Views) extrahieren
