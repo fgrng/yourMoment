@@ -1,6 +1,6 @@
 # myMoment Web Scraper
 
-Dieses Tool ermöglicht die Interaktion mit der myMoment-Schreibplattform über die Kommandozeile. Es unterstützt das Anmelden, Auflisten von Beiträgen, Anzeigen einzelner Beiträge, Erstellen neuer Beiträge, Hinzufügen von Kommentaren und Vergeben von "Gefällt mir".
+Dieses Tool ermöglicht die Interaktion mit der myMoment-Schreibplattform über die Kommandozeile. Es unterstützt das Anmelden, Auflisten von Beiträgen, Anzeigen einzelner Beiträge, Erstellen neuer Beiträge, Hinzufügen von Kommentaren und Vergeben von "Gefällt mir". Ein besonderes Feature ist die KI-gestützte automatische Kommentierung von Beiträgen.
 
 ## Installation
 
@@ -16,10 +16,16 @@ Dieses Tool ermöglicht die Interaktion mit der myMoment-Schreibplattform über 
 2. Installieren Sie die benötigten Abhängigkeiten:
 
 ```bash
-pip install requests beautifulsoup4
+pip install requests beautifulsoup4 html-sanitizer
 ```
 
-3. Machen Sie die Hauptdatei ausführbar (nur Linux/macOS):
+3. Um die KI-Funktionen zu nutzen (optional):
+
+```bash
+pip install mistralai
+```
+
+4. Machen Sie die Hauptdatei ausführbar (nur Linux/macOS):
 
 ```bash
 chmod +x main.py
@@ -32,7 +38,24 @@ mymoment-scraper/
 ├── main.py                # Hauptanwendung (Kommandozeilen-Interface)
 ├── src/
 │   ├── __init__.py        # Paket-Initialisierungsdatei
-│   ├── scraper.py         # Web-Scraper-Logik
+│   ├── ai/                # KI-Module für automatische Kommentare
+│   │   ├── __init__.py    # AI-Modul-Initialisierung
+│   │   ├── base.py        # Basisklasse für Kommentierer
+│   │   ├── mistral.py     # Mistral AI-Integration
+│   │   └── template.py    # Vorlagenbasierte Kommentargenerierung
+│   ├── commands/          # Kommandozeilenbefehle
+│   │   ├── __init__.py    # Kommando-Modul-Initialisierung
+│   │   ├── auth.py        # Authentifizierungsbefehle
+│   │   ├── comments.py    # Kommentarbefehle
+│   │   ├── monitor.py     # Überwachungsbefehle
+│   │   └── posts.py       # Beitragsbefehle
+│   ├── scraper/           # Web-Scraper-Funktionalität
+│   │   ├── __init__.py    # Scraper-Modul-Initialisierung
+│   │   ├── auth.py        # Authentifizierungslogik
+│   │   ├── comments.py    # Kommentarverwaltung
+│   │   ├── main.py        # Hauptscraper-Klasse
+│   │   ├── monitor.py     # Überwachungsfunktionalität
+│   │   └── posts.py       # Beitragsverwaltung
 │   └── config.py          # Konfigurationsmanagement
 └── README.md              # Diese Datei
 ```
@@ -164,9 +187,24 @@ python main.py like BEITRAG_ID
 
 Fügt einem Beitrag ein "Gefällt mir" hinzu.
 
-## Beiträge überwachen und automatisch kommentieren
+## KI-gestützte Kommentierung
 
-Das Tool unterstützt die automatische Überwachung neuer Beiträge und das automatische Kommentieren:
+Das Tool bietet KI-gestützte automatische Kommentargenerierung mit verschiedenen Optionen:
+
+### KI-Kommentierer verwenden
+
+Zur Einrichtung der MistralAI-Integration:
+
+1. Besorgen Sie einen API-Schlüssel von MistralAI
+2. Setzen Sie den API-Schlüssel als Umgebungsvariable:
+
+```bash
+export MISTRAL_API_KEY=Ihr_API_Schlüssel
+```
+
+Oder übergeben Sie ihn direkt beim Aufruf des Monitoring-Befehls.
+
+### Beiträge überwachen und automatisch kommentieren
 
 ```bash
 python main.py monitor
@@ -191,6 +229,9 @@ python main.py monitor --max-posts 50
 
 # Automatisches Beenden nach 1 Stunde (3600 Sekunden)
 python main.py monitor --max-runtime 3600
+
+# Spezifischen KI-Kommentarstil verwenden (nur mit KI-Integration)
+python main.py monitor --ai mistral --style questioning
 ```
 
 Um den Status der Überwachung und bereits kommentierte Beiträge anzuzeigen:
@@ -200,6 +241,14 @@ python main.py monitor-status
 ```
 
 Die Überwachung kann jederzeit mit der Tastenkombination `Strg+C` beendet werden.
+
+### Verfügbare KI-Kommentarstile
+
+Bei Verwendung der MistralAI-Integration stehen verschiedene Kommentarstile zur Auswahl:
+
+- `motivation`: Ermutigt den Autor und gibt positives Feedback
+- `questioning`: Stellt kritische Fragen zum Text, um den Autor zum Nachdenken anzuregen
+- `arrangement_10`: Spezifischer Stil für das Schreibarrangement "Fiktionaler Dialog"
 
 ## Konfiguration
 
@@ -277,10 +326,28 @@ Ein typischer Workflow für die Interaktion mit fremden Beiträgen:
    python main.py edit-comment 186 --text "War das nicht heute? Ich bin mir nicht sicher."
    ```
 
+## Beispiel für automatische KI-gestützte Interaktion
+
+1. Anmelden und Session speichern:
+   ```bash
+   python main.py login --save
+   ```
+
+2. Monitoring mit MistralAI starten:
+   ```bash
+   python main.py monitor --interval 300 --tab alle --ai mistral --style motivation
+   ```
+
+3. In einem anderen Terminal den Status prüfen:
+   ```bash
+   python main.py monitor-status
+   ```
+
 ## Hinweise
 
 - Dieses Tool ist ein inoffizieller Client für die myMoment-Plattform.
 - Da es auf Web-Scraping basiert, können Änderungen an der Website zu Funktionsstörungen führen.
+- Die KI-Integration mit MistralAI erfordert einen gültigen API-Schlüssel und Internetverbindung.
 - Verwenden Sie dieses Tool nur für legitime Zwecke und beachten Sie die Nutzungsbedingungen der myMoment-Plattform.
 
 ## Fehlerbehebung
@@ -289,4 +356,5 @@ Falls Probleme auftreten:
 
 1. Stellen Sie sicher, dass Ihre Anmeldedaten korrekt sind.
 2. Prüfen Sie Ihre Internetverbindung.
-3. Bei anhaltenden Fehlern kann ein Update des Tools erforderlich sein, falls sich die Struktur der Website geändert hat.
+3. Für KI-Funktionen: Überprüfen Sie, ob der API-Schlüssel korrekt eingerichtet ist.
+4. Bei anhaltenden Fehlern kann ein Update des Tools erforderlich sein, falls sich die Struktur der Website geändert hat.

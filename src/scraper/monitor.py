@@ -78,19 +78,19 @@ class PostMonitor:
         }
         self.save_commented_posts()
     
-    def monitor(self, interval=300, tab="alle", comment_template=None, max_posts=20, max_runtime=None):
+    def monitor(self, interval=300, tab="alle", category=0, commenter=None, max_posts=20, max_runtime=None, dry_run=False):
         """
         Startet die Überwachung nach neuen Beiträgen.
         
         Args:
             interval: Zeitintervall zwischen den Prüfungen in Sekunden (Standard: 300)
             tab: Welcher Tab soll überwacht werden (Standard: "alle")
-            comment_template: Vorlage für den Kommentar (Standard: None)
+            commenter: Instanz einer Kommentierer-Klasse (Standard: None)
             max_posts: Maximale Anzahl der zu prüfenden Beiträge pro Durchlauf (Standard: 20)
             max_runtime: Maximale Laufzeit in Sekunden, None für unbegrenzt (Standard: None)
         """
-        if not comment_template:
-            comment_template = "Interessanter Beitrag! Danke fürs Teilen."
+        if not commenter:
+            comment_text = "Interessanter Beitrag! Danke fürs Teilen."
             
         ## Überprüfen, ob der Benutzer eingeloggt ist
         if not self.scraper.is_logged_in():
@@ -115,6 +115,10 @@ class PostMonitor:
                 ## Neueste Beiträge abrufen
                 self.logger.info(f"Suche nach neuen Beiträgen im Tab '{tab}'...")
                 posts = self.scraper.get_posts(max_posts, tab)
+
+                ## Reduziere auf Beiträge der Kategorie
+                if not (category == 0):
+                    posts = [post for post in posts if post.get('category_id') == category]
                 
                 if not posts:
                     self.logger.warning("Keine Beiträge gefunden.")
@@ -133,15 +137,14 @@ class PostMonitor:
                             self.logger.info(f"Neuer Beitrag gefunden: {post.get('title')} (ID: {post_id})")
                             
                             ## Personalisieren des Kommentars falls gewünscht
-                            comment_text = comment_template.replace("{title}", post.get('title', ""))
-                            comment_text = comment_text.replace("{author}", post.get('author', ""))
-                            comment_text = comment_text.replace("{date}", post.get('date', ""))
+                            comment_text = commenter.generate_comment(post)
                             
                             ## Kommentar hinzufügen
-                            success = self.scraper.add_comment(post_id, comment_text)
-                            
-                            if success:
-                                self.logger.info(f"Kommentar zu Beitrag {post_id} erfolgreich hinzugefügt")
+                            if not dry_run:
+                                success = self.scraper.add_comment(post_id, comment_text)
+
+                            if dry_run or success:
+                                self.logger.info(f"Kommentar zu Beitrag {post_id} erfolgreich hinzugefügt (dry-run)")
                                 self.mark_as_commented(post_id, comment_text)
                                 new_post_count += 1
                             else:

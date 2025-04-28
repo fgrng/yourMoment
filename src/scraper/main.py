@@ -69,10 +69,10 @@ class WebScraper:
             self.monitor = PostMonitor(self)
         return self.monitor
         
-    def start_monitoring(self, interval=300, tab="alle", comment_template=None, max_posts=20, max_runtime=None):
+    def start_monitoring(self, interval=300, tab="alle", category=0, commenter=None, max_posts=20, max_runtime=None, dry_run=False):
         """Startet die Überwachung nach neuen Beiträgen."""
         monitor = self.get_monitor()
-        return monitor.monitor(interval, tab, comment_template, max_posts, max_runtime)
+        return monitor.monitor(interval, tab, category, commenter, max_posts, max_runtime, dry_run)
         
     def stop_monitoring(self):
         """Stoppt die laufende Überwachung."""
