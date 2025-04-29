@@ -1,4 +1,4 @@
-# myMoment Web Scraper
+# yourMoment: the poor man's API to myMoment
 
 Dieses Tool ermöglicht die Interaktion mit der myMoment-Schreibplattform über die Kommandozeile. Es unterstützt das Anmelden, Auflisten von Beiträgen, Anzeigen einzelner Beiträge, Erstellen neuer Beiträge, Hinzufügen von Kommentaren und Vergeben von "Gefällt mir". Ein besonderes Feature ist die KI-gestützte automatische Kommentierung von Beiträgen.
 
