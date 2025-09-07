@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 from src.scraper import WebScraper
 from src.config import load_config

@@ -1,6 +1,8 @@
-# yourMoment: the poor man's API to myMoment
+# myMoment Web Scraper
 
-Dieses Tool ermöglicht die Interaktion mit der myMoment-Schreibplattform über die Kommandozeile. Es unterstützt das Anmelden, Auflisten von Beiträgen, Anzeigen einzelner Beiträge, Erstellen neuer Beiträge, Hinzufügen von Kommentaren und Vergeben von "Gefällt mir". Ein besonderes Feature ist die KI-gestützte automatische Kommentierung von Beiträgen.
+Dieses Tool ermöglicht die Interaktion mit der myMoment-Schreibplattform über die Kommandozeile. Es unterstützt das Anmelden, Auflisten von Beiträgen, Anzeigen einzelner Beiträge, Erstellen neuer Beiträge, Hinzufügen von Kommentaren und Vergeben von "Gefällt mir". 
+
+Ein besonderes Feature ist die KI-gestützte automatische Kommentierung von Beiträgen.
 
 ## Installation
 
@@ -65,13 +67,13 @@ mymoment-scraper/
 ### Anmelden
 
 ```bash
-python main.py login
+yourMoment login
 ```
 
 oder mit direkter Angabe des Benutzernamens:
 
 ```bash
-python main.py login --username BENUTZERNAME
+yourMoment login --username BENUTZERNAME
 ```
 
 Beim Aufruf ohne Parameter werden Sie nach Benutzername und Passwort gefragt. Mit der Option `--save` wird die Session lokal gespeichert, um wiederholte Logins zu vermeiden.
@@ -79,24 +81,24 @@ Beim Aufruf ohne Parameter werden Sie nach Benutzername und Passwort gefragt. Mi
 ### Beiträge auflisten
 
 ```bash
-python main.py list
+yourMoment list
 ```
 
 Standardmäßig werden die 10 neuesten Beiträge aus dem Tab "Meine" angezeigt. Weitere Optionen:
 
 ```bash
 # 20 Beiträge anzeigen
-python main.py list --count 20
+yourMoment list --count 20
 
 # Beiträge aus anderen Tabs anzeigen
-python main.py list --tab alle
-python main.py list --tab 17  # 17 ist die ID des Klassenraums
+yourMoment list --tab alle
+yourMoment list --tab 17  # 17 ist die ID des Klassenraums
 ```
 
 ### Einzelnen Beitrag anzeigen
 
 ```bash
-python main.py show BEITRAG_ID
+yourMoment show BEITRAG_ID
 ```
 
 Ersetzt `BEITRAG_ID` durch die tatsächliche ID des Beitrags. Die IDs werden beim Auflisten der Beiträge angezeigt.
@@ -104,7 +106,7 @@ Ersetzt `BEITRAG_ID` durch die tatsächliche ID des Beitrags. Die IDs werden bei
 ### Kommentare eines Beitrags anzeigen
 
 ```bash
-python main.py comments BEITRAG_ID
+yourMoment comments BEITRAG_ID
 ```
 
 Zeigt alle Kommentare eines bestimmten Beitrags an.
@@ -112,77 +114,36 @@ Zeigt alle Kommentare eines bestimmten Beitrags an.
 ### Kategorien auflisten
 
 ```bash
-python main.py categories
+yourMoment categories
 ```
 
 Zeigt alle verfügbaren Kategorien mit ihren IDs an.
 
-### Neuen Beitrag erstellen
-
-```bash
-python main.py create --title "Mein Beitragstitel" --content "Hier ist der Inhalt des Beitrags."
-```
-
-Alternativ kann der Inhalt aus einer Datei geladen werden:
-
-```bash
-python main.py create --title "Mein Beitragstitel" --file inhalt.txt
-```
-
-Optional können Sie eine Kategorie angeben:
-
-```bash
-python main.py create --title "Mein Beitragstitel" --content "Inhalt" --category 9
-```
-
-### Beitrag aktualisieren
-
-```bash
-python main.py update BEITRAG_ID --title "Neuer Titel" --content "Neuer Inhalt"
-```
-
-Nur die Parameter, die Sie angeben, werden aktualisiert. Die anderen bleiben unverändert.
-
-### Beitrag veröffentlichen
-
-```bash
-python main.py publish BEITRAG_ID
-```
-
-Veröffentlicht einen Beitrag, der im Entwurfsmodus ist.
-
-### Beitrag zurückziehen
-
-```bash
-python main.py draft BEITRAG_ID
-```
-
-Zieht einen veröffentlichten Beitrag zurück (als Entwurf markieren).
-
 ### Kommentar hinzufügen
 
 ```bash
-python main.py comment BEITRAG_ID --text "Mein Kommentar zum Beitrag."
+yourMoment comment BEITRAG_ID --text "Mein Kommentar zum Beitrag."
 ```
 
 Optional können Sie einen Text im Beitrag hervorheben:
 
 ```bash
-python main.py comment BEITRAG_ID --text "Mein Kommentar" --highlight "Dieser Teil des Textes"
+yourMoment comment BEITRAG_ID --text "Mein Kommentar" --highlight "Dieser Teil des Textes"
 ```
 
-### Kommentar bearbeiten
+Kommentare können versteckt sein. Auf der Plattform werden sie erst nach einem Knopfdruck sichtbar. Solche Kommentare können Sie erstellen:
 
 ```bash
-python main.py edit-comment KOMMENTAR_ID --text "Neuer Kommentartext"
-```
+yourMoment comment BEITRAG_ID --text "Mein Kommentar" --hidden
 
-Bearbeitet einen eigenen Kommentar. Die Kommentar-ID wird bei der Anzeige des Beitrags angezeigt, wenn es ein eigener Kommentar ist.
+# In Kombination:
+yourMoment comment BEITRAG_ID --text "Mein Kommentar" --highlight "Dieser Teil des Textes" --hidden
+```
 
 ### "Gefällt mir" vergeben
 
 ```bash
-python main.py like BEITRAG_ID
+yourMoment like BEITRAG_ID
 ```
 
 Fügt einem Beitrag ein "Gefällt mir" hinzu.
@@ -207,7 +168,7 @@ Oder übergeben Sie ihn direkt beim Aufruf des Monitoring-Befehls.
 ### Beiträge überwachen und automatisch kommentieren
 
 ```bash
-python main.py monitor
+yourMoment monitor
 ```
 
 Diese Funktion prüft regelmäßig nach neuen Beiträgen und hinterlässt automatisch Kommentare. Standardmäßig wird alle 5 Minuten geprüft und ein allgemeiner Kommentar hinterlassen.
@@ -216,28 +177,28 @@ Optionen für erweiterte Kontrolle:
 
 ```bash
 # Überwachung alle 10 Minuten
-python main.py monitor --interval 600
+yourMoment monitor --interval 600
 
 # Bestimmten Tab überwachen
-python main.py monitor --tab meine
+yourMoment monitor --tab meine
 
 # Personalisierter Kommentar mit Platzhaltern
-python main.py monitor --comment "Ich finde deinen Beitrag '{title}' großartig, {author}!"
+yourMoment monitor --comment "Ich finde deinen Beitrag '{title}' großartig, {author}!"
 
 # Maximale Anzahl der zu prüfenden Beiträge pro Durchlauf
-python main.py monitor --max-posts 50
+yourMoment monitor --max-posts 50
 
 # Automatisches Beenden nach 1 Stunde (3600 Sekunden)
-python main.py monitor --max-runtime 3600
+yourMoment monitor --max-runtime 3600
 
 # Spezifischen KI-Kommentarstil verwenden (nur mit KI-Integration)
-python main.py monitor --ai mistral --style questioning
+yourMoment monitor --ai mistral --style questioning
 ```
 
 Um den Status der Überwachung und bereits kommentierte Beiträge anzuzeigen:
 
 ```bash
-python main.py monitor-status
+yourMoment monitor-status
 ```
 
 Die Überwachung kann jederzeit mit der Tastenkombination `Strg+C` beendet werden.
@@ -258,89 +219,55 @@ Die Anwendung erstellt automatisch eine Konfigurationsdatei unter `~/.mymoment_c
 
 Nach erfolgreicher Anmeldung mit der Option `--save` wird die Session lokal unter `~/.mymoment_session` gespeichert. Dies ermöglicht es, die Anwendung ohne erneutes Anmelden zu verwenden, solange die Session gültig ist.
 
-## Beispiel-Workflow für eigene Beiträge
-
-Ein typischer Workflow für eigene Beiträge könnte wie folgt aussehen:
-
-1. Anmelden und Session speichern:
-   ```bash
-   python main.py login --save
-   ```
-
-2. Verfügbare Kategorien anzeigen:
-   ```bash
-   python main.py categories
-   ```
-
-3. Neuen Beitrag erstellen (standardmäßig als Entwurf):
-   ```bash
-   python main.py create --title "Mein erster Beitrag" --content "Hallo Welt!" --category 9
-   ```
-
-4. Beitrag bearbeiten:
-   ```bash
-   python main.py update 123 --content "Hallo Welt! Hier ist ein aktualisierter Inhalt."
-   ```
-
-5. Beitrag veröffentlichen:
-   ```bash
-   python main.py publish 123
-   ```
-
-6. Später den Beitrag wieder zurückziehen:
-   ```bash
-   python main.py draft 123
-   ```
-
 ## Beispiel-Workflow für Interaktion mit anderen Beiträgen
 
 Ein typischer Workflow für die Interaktion mit fremden Beiträgen:
 
 1. Beiträge auflisten:
    ```bash
-   python main.py list --tab alle
+   yourMoment list --tab alle
    ```
 
 2. Einen bestimmten Beitrag anzeigen:
    ```bash
-   python main.py show 90
+   yourMoment show 90
    ```
 
 3. Einen Kommentar hinterlassen:
    ```bash
-   python main.py comment 90 --text "Das ist ein toller Beitrag!"
+   yourMoment comment 90 --text "Das ist ein toller Beitrag!"
    ```
 
 4. Einen Kommentar mit Texthervorhebung hinterlassen:
    ```bash
-   python main.py comment 90 --text "Ist das richtig geschrieben?" --highlight "Gestern"
+   yourMoment comment 90 --text "Ist das richtig geschrieben?" --highlight "Gestern"
    ```
 
 5. Dem Beitrag ein "Gefällt mir" geben:
    ```bash
-   python main.py like 90
+   yourMoment like 90
    ```
 
 6. Später den eigenen Kommentar bearbeiten:
    ```bash
-   python main.py edit-comment 186 --text "War das nicht heute? Ich bin mir nicht sicher."
+   yourMoment edit-comment 186 --text "War das nicht heute? Ich bin mir nicht sicher."
    ```
 
 ## Beispiel für automatische KI-gestützte Interaktion
 
 1. Anmelden und Session speichern:
    ```bash
-   python main.py login --save
+   yourMoment login --save
    ```
 
 2. Monitoring mit MistralAI starten:
    ```bash
-   python main.py monitor --interval 300 --tab alle --ai mistral --style motivation
+   yourMoment monitor --interval 300 --tab alle --ai mistral --style motivation
    ```
 
 3. In einem anderen Terminal den Status prüfen:
    ```bash
-   python main.py monitor-status
+   yourMoment monitor-status
    ```
 
 ## Hinweise
@@ -349,12 +276,3 @@ Ein typischer Workflow für die Interaktion mit fremden Beiträgen:
 - Da es auf Web-Scraping basiert, können Änderungen an der Website zu Funktionsstörungen führen.
 - Die KI-Integration mit MistralAI erfordert einen gültigen API-Schlüssel und Internetverbindung.
 - Verwenden Sie dieses Tool nur für legitime Zwecke und beachten Sie die Nutzungsbedingungen der myMoment-Plattform.
-
-## Fehlerbehebung
-
-Falls Probleme auftreten:
-
-1. Stellen Sie sicher, dass Ihre Anmeldedaten korrekt sind.
-2. Prüfen Sie Ihre Internetverbindung.
-3. Für KI-Funktionen: Überprüfen Sie, ob der API-Schlüssel korrekt eingerichtet ist.
-4. Bei anhaltenden Fehlern kann ein Update des Tools erforderlich sein, falls sich die Struktur der Website geändert hat.
