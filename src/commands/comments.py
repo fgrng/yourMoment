@@ -12,6 +12,7 @@ def add_comment_subparsers(subparsers):
     comment_parser.add_argument("post_id", help="ID des Beitrags")
     comment_parser.add_argument("--text", "-t", required=True, help="Text des Kommentars")
     comment_parser.add_argument("--highlight", "-H", help="Hervorgehobener Text im Beitrag")
+    comment_parser.add_argument("--hidden", action="store_true", help="Kommentar verstecken")
     comment_parser.set_defaults(func=cmd_add_comment)
     
     ## Kommentar bearbeiten
@@ -46,7 +47,7 @@ def cmd_add_comment(args, scraper):
     check_login(scraper)
     
     print(f"Füge Kommentar zu Beitrag {args.post_id} hinzu...")
-    success = scraper.add_comment(args.post_id, args.text, args.highlight)
+    success = scraper.add_comment(args.post_id, args.text, args.highlight, args.hidden)
     
     if success:
         print("Kommentar erfolgreich hinzugefügt!")

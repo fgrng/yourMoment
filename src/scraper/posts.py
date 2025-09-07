@@ -547,12 +547,12 @@ class PostManager:
             
             ## Texthervorhebung
             highlight = None
-            highlight_id = None
             highlight_div = comment.find('div', {'id': re.compile(r'highlight-\d+')})
             if highlight_div:
                 highlight = highlight_div.text.strip()
-
+                
                 ## ID der Hervorhebung
+                highlight_id = None
                 if highlight_div.get('id'):
                     highlight_id = highlight_div.get('id').replace('highlight-', '')
             

@@ -56,8 +56,8 @@ class WebScraper:
     def get_comments(self, post_id):
         return self.comment_manager.get_comments(post_id)
         
-    def add_comment(self, post_id, text, highlight=None):
-        return self.comment_manager.add_comment(post_id, text, highlight)
+    def add_comment(self, post_id, text, highlight=None, hidden=False):
+        return self.comment_manager.add_comment(post_id, text, highlight, hidden)
         
     def edit_comment(self, comment_id, text):
         return self.comment_manager.edit_comment(comment_id, text)
@@ -69,10 +69,10 @@ class WebScraper:
             self.monitor = PostMonitor(self)
         return self.monitor
         
-    def start_monitoring(self, interval=300, tab="alle", category=0, commenter=None, max_posts=20, max_runtime=None, dry_run=False):
+    def start_monitoring(self, interval=300, tab="alle", category=0, commenter=None, max_posts=20, max_runtime=None, dry_run=False, hidden=False):
         """Startet die Überwachung nach neuen Beiträgen."""
         monitor = self.get_monitor()
-        return monitor.monitor(interval, tab, category, commenter, max_posts, max_runtime, dry_run)
+        return monitor.monitor(interval, tab, category, commenter, max_posts, max_runtime, dry_run, hidden)
         
     def stop_monitoring(self):
         """Stoppt die laufende Überwachung."""

@@ -8,8 +8,18 @@ class CommentManager:
         self.base_url = session_manager.base_url
         self.session = session_manager.session
 
-    def add_comment(self, post_id, text, highlight=None):
-        """Fügt einen Kommentar zu einem Beitrag hinzu."""
+    def add_comment(self, post_id, text, highlight=None, hidden=False):
+        """Fügt einen Kommentar zu einem Beitrag hinzu.
+        
+        Args:
+            post_id (str): ID des Beitrags
+            text (str): Text des Kommentars
+            highlight (str, optional): Hervorgehobener Text im Beitrag
+            hidden (bool, optional): Ob der Kommentar versteckt sein soll. Standard ist False.
+
+        Returns:
+            bool: True, wenn der Kommentar erfolgreich hinzugefügt wurde, sonst False.
+        """
         try:
             ## Zuerst die Detailseite des Beitrags laden, um das CSRF-Token zu bekommen
             post = self.post_manager.get_post(post_id)
@@ -27,6 +37,10 @@ class CommentManager:
                 'status': '20',  ## 20 = Publiziert (aus dem HTML erkennbar)
                 'highlight': highlight or ''   ## Optional: Text-Hervorhebung
             }
+
+            ## Verstecken-Option hinzufügen, falls aktiviert
+            if hidden:
+                comment_data['hide'] = 'on'
             
             ## Kommentar absenden
             response = self.session.post(

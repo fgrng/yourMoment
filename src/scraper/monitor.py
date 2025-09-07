@@ -78,16 +78,17 @@ class PostMonitor:
         }
         self.save_commented_posts()
     
-    def monitor(self, interval=300, tab="alle", category=0, commenter=None, max_posts=20, max_runtime=None, dry_run=False):
+    def monitor(self, interval=300, tab="alle", category=0, commenter=None, max_posts=20, max_runtime=None, dry_run=False, hidden=False):
         """
         Startet die Überwachung nach neuen Beiträgen.
-        
+
         Args:
             interval: Zeitintervall zwischen den Prüfungen in Sekunden (Standard: 300)
             tab: Welcher Tab soll überwacht werden (Standard: "alle")
-            commenter: Instanz einer Kommentierer-Klasse (Standard: None)
+            comment_template: Vorlage für den Kommentar (Standard: None)
             max_posts: Maximale Anzahl der zu prüfenden Beiträge pro Durchlauf (Standard: 20)
             max_runtime: Maximale Laufzeit in Sekunden, None für unbegrenzt (Standard: None)
+            hidden: Ob die Kommentare versteckt sein sollen (Standard: False)
         """
         if not commenter:
             comment_text = "Interessanter Beitrag! Danke fürs Teilen."
@@ -141,10 +142,10 @@ class PostMonitor:
                             
                             ## Kommentar hinzufügen
                             if not dry_run:
-                                success = self.scraper.add_comment(post_id, comment_text)
+                                success = self.scraper.add_comment(post_id, comment_text, hidden=hidden)
 
                             if dry_run or success:
-                                self.logger.info(f"Kommentar zu Beitrag {post_id} erfolgreich hinzugefügt (dry-run)")
+                                self.logger.info(f"Kommentar zu Beitrag {post_id} erfolgreich hinzugefügt.")
                                 self.mark_as_commented(post_id, comment_text)
                                 new_post_count += 1
                             else:
