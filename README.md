@@ -52,14 +52,21 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env with your configuration (see Configuration section)
 
-# Initialize database
-alembic upgrade head
+# Initialize database and seed development data
+python cli.py db migrate
+python cli.py db seed  # Creates system templates + test user in development
 
 # Start development server
-python manage.py run
+python cli.py server
 ```
 
-Access the application at `http://localhost:8000` (UI) and `http://localhost:8000/docs` (API docs).
+Access the application at `http://localhost:8000` (UI) and `http://localhost:8000/api/v1/docs` (API docs).
+
+**Development test credentials:**
+- Email: `test@yourmoment.dev`
+- Password: `Valid!Password123`
+
+**Note:** The seed command is environment-aware. In production (`ENVIRONMENT=production`), it only creates system templates and prompts you to use `python cli.py user create` for secure user creation.
 
 ### Background Workers (Optional)
 
@@ -67,10 +74,10 @@ For automated monitoring processes, start Celery workers:
 
 ```bash
 # Terminal 1: Worker
-python celery_cli.py worker
+python cli.py worker
 
 # Terminal 2: Beat scheduler
-python celery_cli.py beat
+python cli.py scheduler
 ```
 
 ## Configuration
@@ -167,6 +174,32 @@ Tests use isolated configuration:
 
 Set `ENVIRONMENT=testing` for test-specific behavior.
 
+## Management CLI
+
+yourMoment includes a unified `cli.py` script for all management operations. See [CLI.md](./CLI.md) for complete documentation.
+
+**Common commands:**
+```bash
+# Server management
+python cli.py server                    # Start web server
+python cli.py worker                    # Start Celery worker
+python cli.py scheduler                 # Start beat scheduler
+
+# Database operations
+python cli.py db migrate                # Run migrations
+python cli.py db seed                   # Seed test data
+python cli.py db stats                  # Show statistics
+python cli.py db reset                  # Reset database (⚠️ destructive)
+
+# User management
+python cli.py user create               # Create new user
+
+# Celery monitoring
+python cli.py celery info               # Show configuration
+python cli.py celery health             # Check health
+python cli.py celery clear              # Clear queues
+```
+
 ## Production Considerations
 
 ### Security Checklist
@@ -180,6 +213,21 @@ Set `ENVIRONMENT=testing` for test-specific behavior.
 - [ ] Secure Redis instance with authentication if exposed
 - [ ] Set appropriate `SESSION_TIMEOUT_MINUTES` for your use case
 
+### Production Deployment
+
+```bash
+# 1. Web server (use --workers for multi-process)
+ENVIRONMENT=production python cli.py server --workers 4
+
+# 2. Celery workers (multiple instances for scalability)
+python cli.py worker --concurrency 4
+
+# 3. Beat scheduler (single instance only)
+python cli.py scheduler
+```
+
+See [CLI.md](./CLI.md) for systemd service examples and Docker Compose configuration.
+
 ### Scalability
 
 - **Target load**: 100 concurrent users, ~10 processes each
@@ -191,7 +239,7 @@ Set `ENVIRONMENT=testing` for test-specific behavior.
 ### Monitoring
 
 - **Logs**: Structured logging via Loguru with rotation (see `LOG_FILE_*` settings)
-- **Health checks**: Built-in process health monitoring
+- **Health checks**: Built-in process health monitoring (`python cli.py celery health`)
 - **Metrics**: Process execution time, comment generation success rate, session lifecycle
 - **Alerts**: Configure Sentry integration for error tracking (optional)
 

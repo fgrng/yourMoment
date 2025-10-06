@@ -1,0 +1,96 @@
+{% extends "simple_base.html" %}
+
+{% block title %}myMoment Credentials - yourMoment{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1><i class="bi bi-person-circle me-2"></i>myMoment Credentials</h1>
+                <p class="text-muted">Manage the credentials used to access myMoment for automated commenting</p>
+            </div>
+            <div>
+                <a href="/settings/mymoment-credentials/new" class="btn btn-primary">
+                    <i class="bi bi-plus-circle me-2"></i>Add Credential
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="alertContainer" class="mt-3"></div>
+
+{% if credentials %}
+<div class="row mt-4">
+    {% for credential in credentials %}
+    <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-person-badge me-2"></i>{{ credential.name or credential.username or 'Credential' }}
+                </h5>
+                <span class="badge {{ 'bg-success' if credential.is_active else 'bg-secondary' }}">
+                    {{ 'Active' if credential.is_active else 'Inactive' }}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <strong>Username:</strong><br>
+                    <code class="text-muted small">{{ credential.username }}</code>
+                </div>
+                <div class="mb-2">
+                    <strong>Created:</strong><br>
+                    <small class="text-muted">
+                        {{ credential.created_at.strftime('%Y-%m-%d %H:%M') if credential.created_at else '—' }}
+                    </small>
+                </div>
+                <div class="mb-2">
+                    <strong>Last Used:</strong><br>
+                    <small class="text-muted">
+                        {{ credential.last_used.strftime('%Y-%m-%d %H:%M') if credential.last_used else 'Not yet used' }}
+                    </small>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <div class="btn-group w-100" role="group">
+                    <a href="/settings/mymoment-credentials/{{ credential.id }}/edit"
+                       class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-pencil"></i> Edit
+                    </a>
+                    <button type="button"
+                            class="btn btn-outline-info btn-sm"
+                            data-credential-id="{{ credential.id }}"
+                            data-action="test-credential">
+                        <i class="bi bi-check-circle"></i> Test
+                    </button>
+                    <button type="button"
+                            class="btn btn-outline-danger btn-sm"
+                            data-credential-id="{{ credential.id }}"
+                            data-action="delete-credential">
+                        <i class="bi bi-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center my-5">
+    <i class="bi bi-person-circle text-muted" style="font-size: 4rem;"></i>
+    <h3 class="mt-3">No myMoment Credentials</h3>
+    <p class="text-muted">Add your first credential to start monitoring articles.</p>
+    <a href="/settings/mymoment-credentials/new" class="btn btn-primary mt-3">
+        <i class="bi bi-plus-circle me-2"></i>Add Your First Credential
+    </a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script type="module">
+    import { initCredentialsPage } from '{{ url_for("static", path="/js/pages.js") }}';
+    initCredentialsPage();
+</script>
+{% endblock %}

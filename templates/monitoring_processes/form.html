@@ -1,0 +1,584 @@
+{% extends "simple_base.html" %}
+
+{% block title %}{{ 'Edit' if process_id else 'New' }} Monitoring Process - yourMoment{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+            <div>
+                <h1 class="mb-0"><i class="bi bi-activity me-2"></i>{{ 'Edit' if process_id else 'Create' }} Monitoring Process</h1>
+                <p class="text-muted mb-0">Configure automated article monitoring and AI comment generation</p>
+            </div>
+            <div>
+                <a href="/processes" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-2"></i>Back to Processes
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="alertContainer" class="mt-3"></div>
+
+<div id="loadingState" class="text-center my-5" style="display: {{ 'block' if process_id else 'none' }};">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <p class="mt-2 text-muted">Loading monitoring process...</p>
+</div>
+
+<div class="row mt-4" id="formContainer" style="display: {{ 'none' if process_id else 'flex' }};">
+    <div class="col-lg-8">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-sliders me-2"></i>Process Configuration</h5>
+            </div>
+            <div class="card-body">
+                <form id="processForm">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Process Name <span class="text-danger">*</span></label>
+                        <input type="text" id="name" name="name" class="form-control" maxlength="100" required placeholder="e.g., Tech Articles Monitor">
+                        <div class="form-text">A descriptive name to identify this monitoring process</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea id="description" name="description" class="form-control" rows="2" maxlength="500" placeholder="Optional notes about this process"></textarea>
+                        <div class="form-text">Optional context for your team or future reference</div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="maxDuration" class="form-label">Maximum Duration (minutes) <span class="text-danger">*</span></label>
+                            <input type="number" id="maxDuration" name="max_duration_minutes" class="form-control" min="1" max="1440" required placeholder="60">
+                            <div class="form-text">Process stops automatically when this limit is reached</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="llmProvider" class="form-label">LLM Provider <span class="text-danger">*</span></label>
+                            <select id="llmProvider" name="llm_provider_id" class="form-select" required>
+                                <option value="">Select provider</option>
+                            </select>
+                            <div class="form-text">AI provider used to generate comments</div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mt-1">
+                        <div class="col-md-6">
+                            <label for="promptTemplates" class="form-label">Prompt Templates <span class="text-danger">*</span></label>
+                            <select id="promptTemplates" name="prompt_template_ids" class="form-select" size="6" required></select>
+                            <div class="form-text">Prompt template used to generate comments</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="loginIds" class="form-label">myMoment Credentials <span class="text-danger">*</span></label>
+                            <select id="loginIds" name="mymoment_login_ids" class="form-select" size="6" required></select>
+                            <div class="form-text">myMoment credentials used to post comments</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <label class="form-label">Target Filters</label>
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label for="tabFilter" class="form-label small">
+                                    Tab
+                                    <span id="tabLoadingIndicator" class="spinner-border spinner-border-sm ms-2" style="display: none;" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </span>
+                                </label>
+                                <select id="tabFilter" class="form-select" disabled>
+                                    <option value="">Select a credential first</option>
+                                </select>
+                                <div class="form-text" id="tabFilterHelp">Select a myMoment credential to load available tabs</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="categoryFilter" class="form-label small">Category</label>
+                                <select id="categoryFilter" class="form-select">
+                                    <option value="">All categories</option>
+                                    <option value="9">Unterhalten</option>
+                                    <option value="7">Informieren</option>
+                                    <option value="4">Anleiten</option>
+                                    <option value="14">Berichten</option>
+                                    <option value="5">Erklären</option>
+                                    <option value="6">Fragen</option>
+                                    <option value="8">Überzeugen</option>
+                                    <option value="12">Schreibaufgabe: Schaltplan</option>
+                                    <option value="11">Schreibaufgabe: Wegbeschreibung</option>
+                                    <option value="10">Schreibaufgabe: Fiktionaler Dialog</option>
+                                    <option value="13">Schreibaufgabe: Reisebericht</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="searchFilter" class="form-label small">Search Query</label>
+                                <input type="text" id="searchFilter" class="form-control" placeholder="Keywords">
+                            </div>
+                        </div>
+                        <div class="form-text">Optional filters to target specific articles on myMoment</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="generateOnlyCheckbox" checked>
+                            <label class="form-check-label" for="generateOnlyCheckbox">
+                                <strong>Generate comments only (don't post to myMoment)</strong>
+                            </label>
+                            <div class="form-text">
+                                When checked, comments are generated and saved but NOT posted to myMoment.
+                                Uncheck to automatically post generated comments to myMoment articles.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info mt-4" role="alert">
+                        <i class="bi bi-lightbulb me-2"></i>
+                        <strong>Important:</strong> All AI comments will automatically include the German prefix:
+                        <code>[Dieser Kommentar stammt von einem KI-ChatBot.]</code>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-3">
+                        <button type="submit" class="btn btn-primary" id="submitBtn">
+                            <i class="bi bi-check-circle me-2"></i>{{ 'Save Changes' if process_id else 'Create Process' }}
+                        </button>
+                        <a href="/processes" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>How It Works</h5>
+            </div>
+            <div class="card-body small">
+                <ol class="mb-0">
+                    <li>Process monitors myMoment for new articles matching your filters</li>
+                    <li>For each new article, selects a prompt template randomly</li>
+                    <li>Generates an AI comment using your LLM provider</li>
+                    <li>Posts comments using each selected myMoment credential</li>
+                    <li>Automatically stops when max duration is reached</li>
+                </ol>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>Security & Compliance</h5>
+            </div>
+            <div class="card-body small">
+                <ul class="mb-0">
+                    <li>All credentials are encrypted at rest</li>
+                    <li>AI comments include mandatory German disclosure prefix</li>
+                    <li>Process runtime is strictly limited by max duration</li>
+                    <li>You can start/stop processes anytime from the dashboard</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const processId = {% if process_id %}'{{ process_id | safe }}'{% else %}null{% endif %};
+const isEditMode = Boolean(processId);
+
+document.addEventListener('DOMContentLoaded', async function() {
+    const form = document.getElementById('processForm');
+    const nameInput = document.getElementById('name');
+    const descriptionInput = document.getElementById('description');
+    const maxDurationInput = document.getElementById('maxDuration');
+    const providerSelect = document.getElementById('llmProvider');
+    const promptSelect = document.getElementById('promptTemplates');
+    const loginSelect = document.getElementById('loginIds');
+    const categoryFilter = document.getElementById('categoryFilter');
+    const tabFilter = document.getElementById('tabFilter');
+    const tabLoadingIndicator = document.getElementById('tabLoadingIndicator');
+    const tabFilterHelp = document.getElementById('tabFilterHelp');
+    const searchFilter = document.getElementById('searchFilter');
+    const submitBtn = document.getElementById('submitBtn');
+    const alertContainer = document.getElementById('alertContainer');
+    const loadingState = document.getElementById('loadingState');
+    const formContainer = document.getElementById('formContainer');
+    const defaultSubmitLabel = submitBtn.innerHTML;
+
+    let currentTabValue = null;
+    let loadedTabs = [];
+
+    try {
+        await loadSupportingData();
+        if (isEditMode) {
+            await loadProcess();
+        } else {
+            formContainer.style.display = 'flex';
+        }
+    } catch (error) {
+        console.error('Initialization error:', error);
+        showAlert(error.message || 'Unable to load form data.', 'danger');
+        loadingState.style.display = 'none';
+        return;
+    }
+
+    // Listen for credential selection changes
+    loginSelect.addEventListener('change', async function() {
+        const selectedCredentials = Array.from(loginSelect.selectedOptions).map(opt => opt.value);
+
+        if (selectedCredentials.length > 0) {
+            // Use the first selected credential to load tabs
+            const firstCredentialId = selectedCredentials[0];
+            await loadTabsForCredential(firstCredentialId);
+        } else {
+            // Reset tab selector if no credentials selected
+            tabFilter.disabled = true;
+            tabFilter.innerHTML = '<option value="">Select a credential first</option>';
+            tabFilterHelp.textContent = 'Select a myMoment credential to load available tabs';
+            currentTabValue = null;
+            loadedTabs = [];
+        }
+    });
+
+    form.addEventListener('submit', async function(event) {
+        event.preventDefault();
+
+        const payload = buildPayload();
+        if (!payload) {
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Saving...';
+
+        try {
+            const response = await fetch(
+                isEditMode ? `/api/v1/monitoring-processes/${processId}` : '/api/v1/monitoring-processes/create',
+                {
+                    method: isEditMode ? 'PATCH' : 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                }
+            );
+
+            if (!response.ok) {
+                const error = await safeParseJson(response);
+                const message = extractErrorMessage(error) || 'Unable to save monitoring process.';
+                showAlert(message, 'danger');
+                resetSubmitButton();
+                return;
+            }
+
+            showAlert('Monitoring process saved successfully.', 'success');
+            setTimeout(() => {
+                window.location.href = '/processes';
+            }, 1000);
+        } catch (error) {
+            console.error('Save process error:', error);
+            showAlert(error.message || 'Unexpected error while saving.', 'danger');
+            resetSubmitButton();
+        }
+    });
+
+    async function loadSupportingData() {
+        const [providersResp, templatesResp, loginsResp] = await Promise.all([
+            fetch('/api/v1/llm-providers/index', fetchOptions()),
+            fetch('/api/v1/prompt-templates/index?limit=100', fetchOptions()),
+            fetch('/api/v1/mymoment-credentials/index', fetchOptions())
+        ]);
+
+        await assertOk(providersResp, 'Failed to load LLM providers.');
+        await assertOk(templatesResp, 'Failed to load prompt templates.');
+        await assertOk(loginsResp, 'Failed to load myMoment credentials.');
+
+        const providers = await providersResp.json();
+        populateProviderSelect(providers);
+
+        const templates = await templatesResp.json();
+        populateMultiSelect(promptSelect, templates, template => ({
+            value: template.id,
+            label: template.name
+        }));
+
+        const logins = await loginsResp.json();
+        populateMultiSelect(loginSelect, logins, credential => ({
+            value: credential.id,
+            label: credential.name || credential.username
+        }));
+    }
+
+    async function loadProcess() {
+        const response = await fetch(`/api/v1/monitoring-processes/${processId}`, fetchOptions());
+        await assertOk(response, 'Failed to load monitoring process details.');
+        const process = await response.json();
+
+        nameInput.value = process.name || '';
+        descriptionInput.value = process.description || '';
+        maxDurationInput.value = process.max_duration_minutes || '';
+        providerSelect.value = process.llm_provider_id || '';
+
+        // Parse target_filters
+        const filters = process.target_filters || {};
+        if (filters.category) {
+            categoryFilter.value = filters.category;
+        }
+        if (filters.search) {
+            searchFilter.value = filters.search;
+        }
+
+        // Store the tab value to restore after loading tabs
+        currentTabValue = filters.tab || null;
+
+        selectValues(promptSelect, process.prompt_template_ids || []);
+        selectValues(loginSelect, process.mymoment_login_ids || []);
+
+        // Set generate_only checkbox
+        const generateOnlyCheckbox = document.getElementById('generateOnlyCheckbox');
+        generateOnlyCheckbox.checked = process.generate_only !== undefined ? process.generate_only : true;
+
+        // Pre-populate tab selector with current value if exists
+        if (currentTabValue) {
+            tabFilter.innerHTML = `<option value="${currentTabValue}" selected>Current: ${currentTabValue}</option>`;
+            tabFilter.disabled = false;
+            tabFilterHelp.textContent = 'Loading available tabs...';
+        }
+
+        // Show form immediately
+        loadingState.style.display = 'none';
+        formContainer.style.display = 'flex';
+
+        // Load tabs asynchronously in the background (non-blocking)
+        const selectedCredentials = process.mymoment_login_ids || [];
+        if (selectedCredentials.length > 0) {
+            loadTabsForCredential(selectedCredentials[0]).catch(error => {
+                console.error('Error loading tabs in background:', error);
+                tabFilterHelp.textContent = 'Failed to load tabs. You can still submit with the current value.';
+            });
+        }
+    }
+
+    function populateProviderSelect(providers) {
+        providerSelect.innerHTML = '<option value="">Select provider</option>';
+        providers.forEach(provider => {
+            const option = document.createElement('option');
+            option.value = provider.id;
+            option.textContent = `${formatProviderLabel(provider.provider_name)} - ${provider.model_name || 'Model not set'}`;
+            providerSelect.appendChild(option);
+        });
+    }
+
+    function populateMultiSelect(select, items, mapFn) {
+        select.innerHTML = '';
+        items.forEach(item => {
+            const { value, label } = mapFn(item);
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            select.appendChild(option);
+        });
+    }
+
+    function selectValues(select, values) {
+        const valueSet = new Set(values);
+        Array.from(select.options).forEach(option => {
+            option.selected = valueSet.has(option.value);
+        });
+    }
+
+    function buildPayload() {
+        const name = nameInput.value.trim();
+        const description = descriptionInput.value.trim();
+        const maxDuration = maxDurationInput.value.trim();
+        const providerId = providerSelect.value;
+        const promptIds = Array.from(promptSelect.selectedOptions).map(opt => opt.value);
+        const loginIds = Array.from(loginSelect.selectedOptions).map(opt => opt.value);
+
+        if (!name) {
+            showAlert('Name is required.', 'warning');
+            return null;
+        }
+        if (!maxDuration || Number(maxDuration) < 1) {
+            showAlert('Maximum duration must be at least 1 minute.', 'warning');
+            return null;
+        }
+        if (!providerId) {
+            showAlert('Select an LLM provider.', 'warning');
+            return null;
+        }
+        if (!promptIds.length) {
+            showAlert('Select at least one prompt template.', 'warning');
+            return null;
+        }
+        if (!loginIds.length) {
+            showAlert('Select at least one myMoment credential.', 'warning');
+            return null;
+        }
+
+        // Build target filters
+        const targetFilters = {};
+        const category = categoryFilter.value.trim();
+        if (category) {
+            targetFilters.category = parseInt(category, 10);
+        }
+        const tab = tabFilter.value;
+        if (tab) {
+            targetFilters.tab = tab;
+        }
+        const search = searchFilter.value.trim();
+        if (search) {
+            targetFilters.search = search;
+        }
+
+        const generateOnly = document.getElementById('generateOnlyCheckbox').checked;
+
+        const payload = {
+            name,
+            description: description || null,
+            max_duration_minutes: Number(maxDuration),
+            llm_provider_id: providerId,
+            prompt_template_ids: promptIds,
+            mymoment_login_ids: loginIds,
+            target_filters: targetFilters,
+            generate_only: generateOnly
+        };
+
+        return payload;
+    }
+
+    function fetchOptions() {
+        return {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        };
+    }
+
+    async function assertOk(response, message) {
+        if (!response.ok) {
+            const errorBody = await safeParseJson(response);
+            const detail = extractErrorMessage(errorBody) || `${message} (HTTP ${response.status})`;
+            throw new Error(detail);
+        }
+    }
+
+    async function safeParseJson(response) {
+        try {
+            return await response.json();
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function extractErrorMessage(error) {
+        if (!error) {
+            return null;
+        }
+        if (typeof error.detail === 'string') {
+            return error.detail;
+        }
+        if (error.detail && error.detail.message) {
+            return error.detail.message;
+        }
+        if (Array.isArray(error.detail)) {
+            return error.detail.map(item => item.msg || item.message).join('\n');
+        }
+        return error.message || null;
+    }
+
+    function showAlert(message, type) {
+        alertContainer.innerHTML = `
+            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        `;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function resetSubmitButton() {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = defaultSubmitLabel;
+    }
+
+    async function loadTabsForCredential(credentialId) {
+        // Show loading indicator (but keep form enabled)
+        tabLoadingIndicator.style.display = 'inline-block';
+        const previousValue = tabFilter.value || currentTabValue;
+
+        // Keep the current selection visible while loading
+        if (previousValue && tabFilter.options.length === 1) {
+            // We already have a pre-populated value, just update help text
+            tabFilterHelp.textContent = 'Loading available tabs...';
+        } else {
+            tabFilter.disabled = true;
+            tabFilter.innerHTML = '<option value="">Loading tabs...</option>';
+            tabFilterHelp.textContent = 'Fetching available tabs from myMoment...';
+        }
+
+        try {
+            const response = await fetch(`/api/v1/mymoment-articles/${credentialId}/tabs`, fetchOptions());
+
+            if (!response.ok) {
+                throw new Error(`Failed to load tabs (HTTP ${response.status})`);
+            }
+
+            const data = await response.json();
+            loadedTabs = data.items || [];
+
+            // Populate tab selector
+            tabFilter.innerHTML = '<option value="">All tabs</option>';
+            loadedTabs.forEach(tab => {
+                const option = document.createElement('option');
+                option.value = tab.id;
+                option.textContent = tab.name;
+                tabFilter.appendChild(option);
+            });
+
+            // Restore previous selection if it exists in the new tabs
+            if (previousValue) {
+                const tabExists = loadedTabs.some(tab => tab.id === previousValue);
+                if (tabExists) {
+                    tabFilter.value = previousValue;
+                } else if (previousValue) {
+                    // Tab no longer available, but preserve it as an option
+                    const option = document.createElement('option');
+                    option.value = previousValue;
+                    option.textContent = `${previousValue} (no longer available)`;
+                    option.selected = true;
+                    tabFilter.appendChild(option);
+                }
+            }
+
+            tabFilter.disabled = false;
+            tabFilterHelp.textContent = `${loadedTabs.length} tab${loadedTabs.length !== 1 ? 's' : ''} available`;
+
+        } catch (error) {
+            console.error('Error loading tabs:', error);
+
+            // If we had a pre-populated value, keep it
+            if (previousValue) {
+                tabFilter.innerHTML = `<option value="${previousValue}" selected>${previousValue} (failed to refresh)</option>`;
+                tabFilter.disabled = false;
+            } else {
+                tabFilter.innerHTML = '<option value="">Failed to load tabs</option>';
+            }
+
+            tabFilterHelp.innerHTML = '<span class="text-danger">Unable to load tabs. You can still submit with the current value.</span>';
+        } finally {
+            tabLoadingIndicator.style.display = 'none';
+        }
+    }
+
+    function formatProviderLabel(providerName) {
+        const labels = {
+            'openai': 'OpenAI',
+            'mistral': 'Mistral'
+        };
+        return labels[providerName] || providerName || 'Unknown provider';
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,170 @@
+{% extends "simple_base.html" %}
+
+{% block title %}Prompt Templates - yourMoment{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+        <div>
+            <h1 class="mb-1"><i class="bi bi-braces-asterisk me-2"></i>Prompt Templates</h1>
+            <p class="text-muted mb-0">Curate reusable prompts for AI-generated comments</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/settings/prompt-templates/new" class="btn btn-primary">
+                <i class="bi bi-plus-circle me-2"></i>New Prompt Template
+            </a>
+        </div>
+    </div>
+</div>
+
+<div id="alertContainer" class="mt-3"></div>
+
+<div class="row mt-4 g-4">
+    <div class="col-lg-8">
+        <section class="mb-4">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h2 class="h5 mb-0">My Templates</h2>
+                {% if user_templates %}
+                <span class="badge bg-primary">{{ user_templates|length }}</span>
+                {% endif %}
+            </div>
+            {% if user_templates %}
+            <div class="row g-3">
+                {% for template in user_templates %}
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-start gap-2">
+                            <div>
+                                <h5 class="mb-1 text-truncate" title="{{ template.name }}">{{ template.name }}</h5>
+                                <div class="badge {{ 'bg-success' if template.is_active else 'bg-secondary' }}">
+                                    {{ 'Active' if template.is_active else 'Inactive' }}
+                                </div>
+                            </div>
+                            <small class="text-muted text-end">
+                                {{ template.created_at.strftime('%Y-%m-%d') if template.created_at else '' }}
+                            </small>
+                        </div>
+                        <div class="card-body">
+                            {% if template.description %}
+                                <p class="small text-muted">{{ template.description }}</p>
+                            {% else %}
+                                <p class="small text-muted fst-italic">No description provided.</p>
+                            {% endif %}
+                            <div class="mb-3">
+                                <div class="fw-semibold mb-1">System Prompt</div>
+                                <pre class="bg-light rounded border p-2 small" style="max-height: 140px; overflow:auto; white-space: pre-wrap;">{{ template.system_prompt }}</pre>
+                            </div>
+                            <div>
+                                <div class="fw-semibold mb-1">User Prompt Template</div>
+                                <pre class="bg-light rounded border p-2 small" style="max-height: 140px; overflow:auto; white-space: pre-wrap;">{{ template.user_prompt_template }}</pre>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-transparent">
+                            <div class="d-flex gap-2">
+                                <a href="/settings/prompt-templates/{{ template.id }}/edit" class="btn btn-outline-primary btn-sm flex-fill">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </a>
+                                <button type="button"
+                                        class="btn btn-outline-danger btn-sm flex-fill"
+                                        data-template-id="{{ template.id }}"
+                                        data-action="delete-template">
+                                    <i class="bi bi-trash"></i> Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                You haven't created any prompt templates yet. Use the button above to add your first template.
+            </div>
+            {% endif %}
+        </section>
+
+        <section>
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h2 class="h5 mb-0">System Templates</h2>
+                {% if system_templates %}
+                <span class="badge bg-secondary">{{ system_templates|length }}</span>
+                {% endif %}
+            </div>
+            {% if system_templates %}
+            <div class="row g-3">
+                {% for template in system_templates %}
+                <div class="col-md-6">
+                    <div class="card h-100 border-secondary-subtle">
+                        <div class="card-header bg-secondary-subtle d-flex justify-content-between align-items-start gap-2">
+                            <div>
+                                <h5 class="mb-1 text-truncate" title="{{ template.name }}">{{ template.name }}</h5>
+                                <span class="badge bg-secondary">System</span>
+                            </div>
+                            <small class="text-muted text-end">
+                                {{ template.created_at.strftime('%Y-%m-%d') if template.created_at else '' }}
+                            </small>
+                        </div>
+                        <div class="card-body">
+                            {% if template.description %}
+                                <p class="small text-muted">{{ template.description }}</p>
+                            {% else %}
+                                <p class="small text-muted fst-italic">No description provided.</p>
+                            {% endif %}
+                            <div class="mb-3">
+                                <div class="fw-semibold mb-1">System Prompt</div>
+                                <pre class="bg-light rounded border p-2 small" style="max-height: 140px; overflow:auto; white-space: pre-wrap;">{{ template.system_prompt }}</pre>
+                            </div>
+                            <div>
+                                <div class="fw-semibold mb-1">User Prompt Template</div>
+                                <pre class="bg-light rounded border p-2 small" style="max-height: 140px; overflow:auto; white-space: pre-wrap;">{{ template.user_prompt_template }}</pre>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-transparent text-muted small">
+                            System templates are read-only and maintained by yourMoment.
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="alert alert-secondary">
+                System templates are not available at the moment.
+            </div>
+            {% endif %}
+        </section>
+    </div>
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h2 class="h5 mb-0">Supported Placeholders</h2>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted">Use these placeholders inside your user prompt template to inject article data.</p>
+                <ul class="list-group list-group-flush">
+                    {% for placeholder in placeholders %}
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <code>{{ '{' }}{{ placeholder.name }}{{ '}' }}</code>
+                                {% if placeholder.is_required %}
+                                <span class="badge bg-warning text-dark ms-2">Required</span>
+                                {% endif %}
+                                <div class="small text-muted mt-1">{{ placeholder.description }}</div>
+                            </div>
+                        </div>
+                        <div class="small mt-2"><strong>Example:</strong> {{ placeholder.example_value }}</div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script type="module">
+    import { initPromptTemplatesPage } from '{{ url_for("static", path="/js/pages.js") }}';
+    initPromptTemplatesPage();
+</script>
+{% endblock %}

@@ -1,0 +1,409 @@
+{% extends "simple_base.html" %}
+
+{% block title %}{{ 'Edit' if template_id else 'New' }} Prompt Template - yourMoment{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+            <div>
+                <h1 class="mb-0">
+                    <i class="bi bi-pencil-square me-2"></i>
+                    {{ 'Edit' if template_id else 'Create' }} Prompt Template
+                </h1>
+                <p class="text-muted mb-0">
+                    {{ 'Update the structure and content of this prompt template' if template_id else 'Define reusable system and user prompts for AI generated comments' }}
+                </p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="/settings/prompt-templates" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-2"></i>Back to Templates
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Alert Messages -->
+<div id="alertContainer" class="mt-3"></div>
+
+<!-- Loading State (visible for edit mode before data loads) -->
+<div id="loadingState" class="text-center my-5" style="display: {{ 'block' if template_id else 'none' }};" aria-live="polite" aria-busy="true">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <p class="mt-2 text-muted">Loading prompt template...</p>
+</div>
+
+<div class="row mt-4" id="formContainer" style="display: {{ 'none' if template_id else 'flex' }};">
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-braces me-2"></i>Template Details</h5>
+            </div>
+            <div class="card-body">
+                <form id="promptTemplateForm">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Template Name <span class="text-danger">*</span></label>
+                        <input type="text" id="name" name="name" class="form-control" maxlength="100" required placeholder="e.g., Default Neutral Response">
+                        <div class="form-text"><span id="nameCount">0</span>/100 characters</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea id="description" name="description" class="form-control" rows="2" maxlength="500" placeholder="Summarise where this template should be used"></textarea>
+                        <div class="form-text"><span id="descriptionCount">0</span>/500 characters</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="systemPrompt" class="form-label">System Prompt <span class="text-danger">*</span></label>
+                        <textarea id="systemPrompt" name="system_prompt" class="form-control" rows="6" required placeholder="Define the assistant personality, goals, tone, and safety guardrails"></textarea>
+                        <div class="form-text">
+                            The system prompt sets overall behaviour for the AI. Minimum 10 characters.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <label for="userPromptTemplate" class="form-label mb-0">User Prompt Template <span class="text-danger">*</span></label>
+                            <div class="btn-group btn-group-sm" role="group" aria-label="Insert placeholder">
+                                <button type="button" class="btn btn-outline-secondary placeholder-btn" data-placeholder="{article_title}" aria-label="Insert article title placeholder">&lt;title&gt;</button>
+                                <button type="button" class="btn btn-outline-secondary placeholder-btn" data-placeholder="{article_author}" aria-label="Insert article author placeholder">&lt;author&gt;</button>
+                                <button type="button" class="btn btn-outline-secondary placeholder-btn" data-placeholder="{article_content}" aria-label="Insert article content placeholder">&lt;content&gt;</button>
+                                <button type="button" class="btn btn-outline-secondary placeholder-btn" data-placeholder="{article_raw_html}" aria-label="Insert article raw HTML placeholder">&lt;html&gt;</button>
+                            </div>
+                        </div>
+                        <textarea id="userPromptTemplate" name="user_prompt_template" class="form-control mt-2" rows="8" required placeholder="Compose the instruction the AI receives per article using placeholders as needed."></textarea>
+                        <div class="form-text">
+                            This template is rendered per article. Supported placeholders: <code>{article_title}</code>, <code>{article_author}</code>, <code>{article_content}</code>, <code>{article_raw_html}</code>.
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary" id="submitBtn">
+                            <i class="bi bi-check-circle me-2"></i>{{ 'Update Template' if template_id else 'Create Template' }}
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="previewBtn">
+                            <i class="bi bi-eye me-2"></i>Preview Render
+                        </button>
+                        <a href="/settings/prompt-templates" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card" id="previewCard" style="display: none;" role="region" aria-label="Template preview">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-chat-left-text me-2"></i>Rendered Preview</h5>
+                <button class="btn btn-sm btn-outline-secondary" id="closePreview" aria-label="Close preview">
+                    <i class="bi bi-x-lg" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="fw-semibold">System Prompt</div>
+                    <pre class="bg-light border rounded p-3 small" id="previewSystem" style="white-space: pre-wrap;">No content yet.</pre>
+                </div>
+                <div>
+                    <div class="fw-semibold">User Prompt</div>
+                    <pre class="bg-light border rounded p-3 small" id="previewUser" style="white-space: pre-wrap;">No content yet.</pre>
+                </div>
+                <div class="mt-3 text-muted small">
+                    Placeholder values shown below were substituted for preview purposes only.
+                </div>
+                <pre class="bg-body-secondary border rounded p-3 small mt-2" id="previewPlaceholders" style="white-space: pre-wrap;"></pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Template Guidance</h5>
+            </div>
+            <div class="card-body small">
+                <p class="mb-2">Prompt templates control how comments are generated:</p>
+                <ul>
+                    <li><strong>System Prompt:</strong> Defines behaviour, tone, and restrictions.</li>
+                    <li><strong>User Prompt:</strong> Provides article-specific context and instructions.</li>
+                    <li>Comments are automatically prefixed when posted to myMoment.</li>
+                </ul>
+                <hr>
+                <p class="mb-1">Supported placeholders:</p>
+                <ul class="mb-0">
+                    <li><code>{article_title}</code> <span class="text-danger">*</span> - headline of the article</li>
+                    <li><code>{article_author}</code> <span class="text-danger">*</span> - displayed author name</li>
+                    <li><code>{article_content}</code> <span class="text-danger">*</span> - full text content</li>
+                    <li><code>{article_raw_html}</code> - raw HTML content</li>
+                </ul>
+                <p class="small text-muted mt-2 mb-0"><span class="text-danger">*</span> = always available</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>Best Practices</h5>
+            </div>
+            <div class="card-body small">
+                <ul class="mb-0">
+                    <li>Keep instructions concise and explicit.</li>
+                    <li>Remind the AI to respect platform guidelines.</li>
+                    <li>Use placeholders instead of hard-coding article details.</li>
+                    <li>Encourage varied tone to avoid repetitive comments.</li>
+                    <li>Validate changes with the preview before saving.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const templateId = {% if template_id %}'{{ template_id | safe }}'{% else %}null{% endif %};
+const isEditMode = Boolean(templateId);
+
+function updateCounter(element, counterElement) {
+    const length = element.value.length;
+    counterElement.textContent = `${length}`;
+}
+
+document.addEventListener('DOMContentLoaded', async function() {
+    const form = document.getElementById('promptTemplateForm');
+    const nameInput = document.getElementById('name');
+    const descriptionInput = document.getElementById('description');
+    const systemPromptInput = document.getElementById('systemPrompt');
+    const userPromptInput = document.getElementById('userPromptTemplate');
+    const submitBtn = document.getElementById('submitBtn');
+    const previewBtn = document.getElementById('previewBtn');
+    const previewCard = document.getElementById('previewCard');
+    const previewSystem = document.getElementById('previewSystem');
+    const previewUser = document.getElementById('previewUser');
+    const previewPlaceholders = document.getElementById('previewPlaceholders');
+    const closePreview = document.getElementById('closePreview');
+    const alertContainer = document.getElementById('alertContainer');
+    const loadingState = document.getElementById('loadingState');
+    const formContainer = document.getElementById('formContainer');
+    const nameCount = document.getElementById('nameCount');
+    const descriptionCount = document.getElementById('descriptionCount');
+    const placeholderButtons = document.querySelectorAll('.placeholder-btn');
+    const defaultSubmitLabel = submitBtn.innerHTML;
+
+    const counters = [
+        [nameInput, nameCount],
+        [descriptionInput, descriptionCount]
+    ];
+
+    counters.forEach(([field, counter]) => {
+        field.addEventListener('input', () => updateCounter(field, counter));
+    });
+
+    placeholderButtons.forEach(button => {
+        button.addEventListener('click', () => insertPlaceholder(userPromptInput, button.dataset.placeholder));
+    });
+
+    if (isEditMode) {
+        await loadTemplate();
+    }
+
+    form.addEventListener('submit', async function(event) {
+        event.preventDefault();
+
+        const payload = buildPayload();
+        if (!payload) {
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Saving...';
+
+        try {
+            const response = await fetch(isEditMode ? `/api/v1/prompt-templates/${templateId}` : '/api/v1/prompt-templates/create', {
+                method: isEditMode ? 'PATCH' : 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const error = await safeParseJson(response);
+                const message = extractErrorMessage(error) || 'Unable to save prompt template.';
+                showAlert(message, 'danger');
+                resetSubmitButton();
+                return;
+            }
+
+            showAlert('Prompt template saved successfully.', 'success');
+            setTimeout(() => {
+                window.location.href = '/settings/prompt-templates';
+            }, 1000);
+        } catch (error) {
+            console.error('Error saving prompt template:', error);
+            showAlert('Unexpected error while saving. Please try again.', 'danger');
+            resetSubmitButton();
+        }
+    });
+
+    previewBtn.addEventListener('click', function() {
+        const payload = buildPayload(true);
+        if (!payload) {
+            return;
+        }
+
+        const placeholders = {
+            article_title: 'Ein Arbeitsnachmittag an der PHSG',
+            article_author: 'RoyalWildcat',
+            article_content: 'Wir sitzen zu viert in einem neu renovierten Sitzungszimmer an der PHSG in St. Gallen.',
+            article_raw_html: '<div class="article"><p>Wir sitzen zu viert in einem neu renovierten Sitzungszimmer an der PHSG in St. Gallen.</p></div>',
+            article_published_at: '2025-05-28',
+            mymoment_username: 'NonhumanNightingale'
+        };
+
+        const renderedUserPrompt = renderPlaceholders(payload.user_prompt_template, placeholders);
+
+        previewSystem.textContent = payload.system_prompt;
+        previewUser.textContent = renderedUserPrompt;
+        previewPlaceholders.textContent = JSON.stringify(placeholders, null, 2);
+        previewCard.style.display = 'block';
+        previewCard.scrollIntoView({ behavior: 'smooth' });
+    });
+
+    closePreview.addEventListener('click', () => {
+        previewCard.style.display = 'none';
+    });
+
+    function buildPayload(forPreview = false) {
+        const name = nameInput.value.trim();
+        const systemPrompt = systemPromptInput.value.trim();
+        const userPrompt = userPromptInput.value.trim();
+        const description = descriptionInput.value.trim();
+
+        if (!name || !systemPrompt || !userPrompt) {
+            if (!forPreview) {
+                showAlert('Name, system prompt, and user prompt are required.', 'warning');
+            }
+            return null;
+        }
+
+        // Always return complete payload - backend handles what changed
+        return {
+            name,
+            description: description || null,
+            system_prompt: systemPrompt,
+            user_prompt_template: userPrompt
+        };
+    }
+
+    async function loadTemplate() {
+        try {
+            const response = await fetch(`/api/v1/prompt-templates/${templateId}`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                if (response.status === 404) {
+                    showAlert('Prompt template not found or you do not have access.', 'danger');
+                } else {
+                    throw new Error(`Failed to fetch template: ${response.status}`);
+                }
+                loadingState.style.display = 'none';
+                return;
+            }
+
+            const template = await response.json();
+
+            nameInput.value = template.name || '';
+            descriptionInput.value = template.description || '';
+            systemPromptInput.value = template.system_prompt || '';
+            userPromptInput.value = template.user_prompt_template || '';
+
+            counters.forEach(([field, counter]) => updateCounter(field, counter));
+
+            if (template.category === 'SYSTEM') {
+                applyReadOnlyState();
+                showAlert('System templates are read-only. Create your own template to make changes.', 'warning');
+            }
+
+            loadingState.style.display = 'none';
+            formContainer.style.display = 'flex';
+        } catch (error) {
+            console.error('Error loading prompt template:', error);
+            showAlert('Unable to load prompt template. Please try again later.', 'danger');
+            loadingState.style.display = 'none';
+        }
+    }
+
+    function applyReadOnlyState() {
+        [nameInput, descriptionInput, systemPromptInput, userPromptInput].forEach(field => {
+            field.readOnly = true;
+        });
+        placeholderButtons.forEach(button => {
+            button.disabled = true;
+        });
+        submitBtn.disabled = true;
+        submitBtn.dataset.readonly = 'true';
+        submitBtn.innerHTML = '<i class="bi bi-lock me-2"></i>Read Only';
+    }
+
+    function resetSubmitButton() {
+        if (submitBtn.dataset.readonly === 'true') {
+            return;
+        }
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = defaultSubmitLabel;
+    }
+
+    function insertPlaceholder(textarea, placeholder) {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const currentValue = textarea.value;
+        textarea.value = currentValue.slice(0, start) + placeholder + currentValue.slice(end);
+        textarea.focus();
+        const caretPosition = start + placeholder.length;
+        textarea.setSelectionRange(caretPosition, caretPosition);
+    }
+
+    function renderPlaceholders(template, values) {
+        let rendered = template;
+        Object.entries(values).forEach(([key, value]) => {
+            const pattern = new RegExp(`\\{${key}\\}`, 'g');
+            rendered = rendered.replace(pattern, value);
+        });
+        return rendered;
+    }
+
+    async function safeParseJson(response) {
+        try {
+            return await response.json();
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function extractErrorMessage(error) {
+        if (!error) return null;
+        if (typeof error.detail === 'string') return error.detail;
+        if (error.detail && error.detail.message) return error.detail.message;
+        if (Array.isArray(error.detail)) {
+            return error.detail.map(item => item.msg || item.message).join('\n');
+        }
+        return error.message || null;
+    }
+
+    function showAlert(message, type) {
+        alertContainer.innerHTML = `
+            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        `;
+    }
+});
+</script>
+{% endblock %}

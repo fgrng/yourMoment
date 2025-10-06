@@ -1,0 +1,300 @@
+{% extends "simple_base.html" %}
+
+{% block title %}{{ 'Edit' if provider_id else 'New' }} LLM Provider - yourMoment{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+            <div>
+                <h1 class="mb-0">
+                    <i class="bi bi-plug me-2"></i>
+                    {{ 'Edit' if provider_id else 'Connect' }} LLM Provider
+                </h1>
+                <p class="text-muted mb-0">
+                    {{ 'Update the model configuration and API key' if provider_id else 'Add an API provider used for generating automated comments' }}
+                </p>
+            </div>
+            <div>
+                <a href="/settings/llm-providers" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-2"></i>Back to Providers
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="alertContainer" class="mt-3"></div>
+
+<div id="loadingState" class="text-center my-5" style="display: {{ 'block' if provider_id else 'none' }};">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <p class="mt-2 text-muted">Loading provider configuration...</p>
+</div>
+
+<div class="row mt-4" id="formContainer" style="display: {{ 'none' if provider_id else 'flex' }};">
+    <div class="col-lg-8">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Provider Configuration</h5>
+            </div>
+            <div class="card-body">
+                <form id="providerForm">
+                    <div class="mb-3">
+                        <label for="providerName" class="form-label">Provider <span class="text-danger">*</span></label>
+                        <select id="providerName" name="provider_name" class="form-select" {{ 'disabled' if provider_id else '' }} required>
+                            <option value="">Select provider</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="mistral">Mistral</option>
+                        </select>
+                        <div class="form-text">Choose the LLM platform this configuration uses. Provider type cannot be changed after creation.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="apiKey" class="form-label">API Key {% if not provider_id %}<span class="text-danger">*</span>{% endif %}</label>
+                        <div class="input-group">
+                            <input type="password" id="apiKey" name="api_key" class="form-control" {{ '' if provider_id else 'required' }} placeholder="Enter API key">
+                            <button class="btn btn-outline-secondary" type="button" id="toggleApiKey"><i class="bi bi-eye"></i></button>
+                        </div>
+                        <div class="form-text">{{ 'Leave blank to keep the current API key' if provider_id else 'Your API key is encrypted before storage. It will not be shown again after saving.' }}</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="modelName" class="form-label">Model Name <span class="text-danger">*</span></label>
+                        <input type="text" id="modelName" name="model_name" class="form-control" maxlength="100" required placeholder="e.g., gpt-4o-mini or mistral-large-latest">
+                        <div class="form-text">Specify the exact model identifier provided by the LLM vendor.</div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="maxTokens" class="form-label">Max Tokens</label>
+                            <input type="number" id="maxTokens" name="max_tokens" class="form-control" min="1" placeholder="Use vendor default" disabled>
+                            <div class="form-text">Optional token limit for responses.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="temperature" class="form-label">Temperature</label>
+                            <div class="input-group">
+                                <input type="number" id="temperature" name="temperature" class="form-control" min="0" max="1" step="0.05" placeholder="Use vendor default" disabled>
+                                <span class="input-group-text">0.0 - 1.0</span>
+                            </div>
+                            <div class="form-text">Optional temperature value. Lower values produce focused answers; higher values add creativity.</div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary" id="submitBtn">
+                            <i class="bi bi-check-circle me-2"></i>{{ 'Save Changes' if provider_id else 'Create Provider' }}
+                        </button>
+                        <a href="/settings/llm-providers" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Provider Tips</h5>
+            </div>
+            <div class="card-body small">
+                <ul class="mb-0">
+                    <li>Keep API keys scoped and rotate them regularly.</li>
+                    <li>Match models to your monitoring scenario (speed vs quality).</li>
+                    <li>Temperature of 0.2-0.4 is recommended for compliance-friendly comments.</li>
+                    <li>Leave optional fields blank to use provider defaults.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const providerId = {% if provider_id %}'{{ provider_id | safe }}'{% else %}null{% endif %};
+const isEditMode = Boolean(providerId);
+
+document.addEventListener('DOMContentLoaded', async function() {
+    // Import shared utilities
+    const { showAlert, fetchOptions, setButtonLoading, resetButton, submitForm, togglePasswordVisibility, safeParseJson, extractErrorMessage } = window.YM.utils;
+
+    const form = document.getElementById('providerForm');
+    const providerNameInput = document.getElementById('providerName');
+    const apiKeyInput = document.getElementById('apiKey');
+    const modelNameInput = document.getElementById('modelName');
+    const maxTokensInput = document.getElementById('maxTokens');
+    const temperatureInput = document.getElementById('temperature');
+    const submitBtn = document.getElementById('submitBtn');
+    const toggleApiKeyBtn = document.getElementById('toggleApiKey');
+    const toggleApiKeyIcon = toggleApiKeyBtn.querySelector('i');
+    const loadingState = document.getElementById('loadingState');
+    const formContainer = document.getElementById('formContainer');
+
+    toggleApiKeyBtn.addEventListener('click', () => {
+        togglePasswordVisibility(apiKeyInput, toggleApiKeyIcon);
+    });
+
+    if (isEditMode) {
+        await loadProvider();
+    }
+
+    form.addEventListener('submit', async function(event) {
+        event.preventDefault();
+
+        const payload = buildPayload();
+        if (!payload) {
+            return;
+        }
+
+        const originalHtml = setButtonLoading(submitBtn, 'Saving...');
+        const url = isEditMode ? `/api/v1/llm-providers/${providerId}` : '/api/v1/llm-providers/create';
+        const method = isEditMode ? 'PATCH' : 'POST';
+
+        const success = await submitForm(
+            url,
+            method,
+            payload,
+            () => {
+                showAlert('alertContainer', 'Provider configuration saved successfully.', 'success');
+                setTimeout(() => {
+                    window.location.href = '/settings/llm-providers';
+                }, 1000);
+            },
+            (message) => {
+                showAlert('alertContainer', message, 'danger');
+                resetButton(submitBtn, originalHtml);
+            }
+        );
+
+        if (!success) {
+            resetButton(submitBtn, originalHtml);
+        }
+    });
+
+    async function loadProvider() {
+        try {
+            const response = await fetch('/api/v1/llm-providers/index', fetchOptions('GET'));
+
+            if (!response.ok) {
+                throw new Error(`Failed to load provider: ${response.status}`);
+            }
+
+            const providers = await response.json();
+            const provider = providers.find(item => item.id === providerId);
+
+            if (!provider) {
+                showAlert('alertContainer', 'Provider configuration not found or inaccessible.', 'danger');
+                loadingState.style.display = 'none';
+                return;
+            }
+
+            providerNameInput.value = provider.provider_name || '';
+            modelNameInput.value = provider.model_name || '';
+            maxTokensInput.value = provider.max_tokens ?? '';
+            temperatureInput.value = provider.temperature ?? '';
+
+            form.dataset.originalModelName = modelNameInput.value;
+            form.dataset.originalMaxTokens = maxTokensInput.value;
+            form.dataset.originalTemperature = temperatureInput.value;
+
+            loadingState.style.display = 'none';
+            formContainer.style.display = 'flex';
+        } catch (error) {
+            console.error('Error loading provider configuration:', error);
+            showAlert('alertContainer', 'Unable to load provider configuration. Please try again later.', 'danger');
+            loadingState.style.display = 'none';
+        }
+    }
+
+    function buildPayload() {
+        const providerName = providerNameInput.value.trim();
+        const apiKey = apiKeyInput.value.trim();
+        const modelName = modelNameInput.value.trim();
+        const maxTokens = maxTokensInput.value.trim();
+        const temperature = temperatureInput.value.trim();
+
+        if (!providerName) {
+            showAlert('alertContainer', 'Select a provider before saving.', 'warning');
+            return null;
+        }
+
+        if (!isEditMode && !apiKey) {
+            showAlert('alertContainer', 'API key is required when creating a provider.', 'warning');
+            return null;
+        }
+
+        if (!modelName) {
+            showAlert('alertContainer', 'Model name is required.', 'warning');
+            return null;
+        }
+
+        if (!validateOptionalNumber(maxTokens, 1, null)) {
+            return null;
+        }
+        if (!validateOptionalNumber(temperature, 0, 1)) {
+            return null;
+        }
+
+        if (!isEditMode) {
+            const payload = {
+                provider_name: providerName,
+                model_name: modelName,
+                api_key: apiKey
+            };
+
+            if (maxTokens !== '') {
+                payload.max_tokens = Number(maxTokens);
+            }
+            if (temperature !== '') {
+                payload.temperature = Number(temperature);
+            }
+
+            return payload;
+        }
+
+        const diff = {};
+        if (apiKey) {
+            diff.api_key = apiKey;
+        }
+        if (modelName !== (form.dataset.originalModelName || '')) {
+            diff.model_name = modelName;
+        }
+        if (maxTokens !== (form.dataset.originalMaxTokens || '')) {
+            diff.max_tokens = maxTokens === '' ? null : Number(maxTokens);
+        }
+        if (temperature !== (form.dataset.originalTemperature || '')) {
+            diff.temperature = temperature === '' ? null : Number(temperature);
+        }
+
+        if (Object.keys(diff).length === 0) {
+            showAlert('alertContainer', 'No changes detected. Update a field before saving.', 'info');
+            return null;
+        }
+
+        return diff;
+    }
+
+    function validateOptionalNumber(value, min, max) {
+        if (value === '') {
+            return true;
+        }
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed)) {
+            showAlert('alertContainer', 'Numeric fields must contain valid numbers.', 'warning');
+            return false;
+        }
+        if (min !== null && parsed < min) {
+            showAlert('alertContainer', `Value must be greater than or equal to ${min}.`, 'warning');
+            return false;
+        }
+        if (max !== null && parsed > max) {
+            showAlert('alertContainer', `Value must be less than or equal to ${max}.`, 'warning');
+            return false;
+        }
+        return true;
+    }
+});
+</script>
+{% endblock %}

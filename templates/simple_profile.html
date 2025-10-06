@@ -1,0 +1,197 @@
+{% extends "simple_base.html" %}
+
+{% block title %}Profile - yourMoment{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1><i class="bi bi-person-circle me-2"></i>User Profile</h1>
+        <p class="text-muted">Manage your account information and settings</p>
+    </div>
+</div>
+
+<!-- User Information Card -->
+<div class="row mt-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-person me-2"></i>Account Information</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-sm-4 fw-bold">Email:</div>
+                    <div class="col-sm-8">{{ user.email }}</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-sm-4 fw-bold">Account Status:</div>
+                    <div class="col-sm-8">
+                        {% if user.is_active %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-sm-4 fw-bold">Email Verified:</div>
+                    <div class="col-sm-8">
+                        {% if user.is_verified %}
+                            <span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Verified</span>
+                        {% else %}
+                            <span class="badge bg-warning"><i class="bi bi-exclamation-circle-fill"></i> Not Verified</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-sm-4 fw-bold">User ID:</div>
+                    <div class="col-sm-8"><code>{{ user.id }}</code></div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-sm-4 fw-bold">Member Since:</div>
+                    <div class="col-sm-8">{{ user.created_at.strftime('%Y-%m-%d %H:%M') if user.created_at else 'N/A' }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions Sidebar -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-shield-lock me-2"></i>Security</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-secondary" disabled>
+                        <i class="bi bi-key me-2"></i>Change Password
+                    </button>
+                    <button class="btn btn-outline-danger" disabled>
+                        <i class="bi bi-trash me-2"></i>Delete Account
+                    </button>
+                </div>
+                <p class="text-muted small mt-2 mb-0">
+                    <i class="bi bi-info-circle"></i> Coming soon
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Card -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-bar-chart-fill me-2"></i>Account Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-3">
+                        <div class="stat-box">
+                            <h3 class="text-primary" id="processCount">-</h3>
+                            <p class="text-muted">Monitoring Processes</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-box">
+                            <h3 class="text-success" id="aiCommentCount">-</h3>
+                            <p class="text-muted">AI Comments</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-box">
+                            <h3 class="text-info" id="llmProviderCount">-</h3>
+                            <p class="text-muted">LLM Providers</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-box">
+                            <h3 class="text-warning" id="mymomentCredentialCount">-</h3>
+                            <p class="text-muted">myMoment Credentials</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function() {
+    // Load statistics from API
+    const processCountEl = document.getElementById('processCount');
+    const aiCommentCountEl = document.getElementById('aiCommentCount');
+    const providerCountEl = document.getElementById('llmProviderCount');
+    const credentialCountEl = document.getElementById('mymomentCredentialCount');
+
+    const fetchJson = async (url) => {
+        const response = await fetch(url, {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Request to ${url} failed with ${response.status}: ${errorText}`);
+        }
+        return response.json();
+    };
+
+    let credentials = [];
+
+    try {
+        const credentialData = await fetchJson('/api/v1/mymoment-credentials/index');
+        credentials = Array.isArray(credentialData) ? credentialData : [];
+        credentialCountEl.textContent = credentials.length;
+    } catch (error) {
+        console.error('Error fetching myMoment credentials:', error);
+        credentialCountEl.textContent = '0';
+    }
+
+    try {
+        const processData = await fetchJson('/api/v1/monitoring-processes/index?limit=100');
+        processCountEl.textContent = Array.isArray(processData) ? processData.length : 0;
+    } catch (error) {
+        console.error('Error fetching monitoring processes:', error);
+        processCountEl.textContent = '0';
+    }
+
+    try {
+        const providerData = await fetchJson('/api/v1/llm-providers/index');
+        providerCountEl.textContent = Array.isArray(providerData) ? providerData.length : 0;
+    } catch (error) {
+        console.error('Error fetching LLM providers:', error);
+        providerCountEl.textContent = '0';
+    }
+
+    try {
+        if (!credentials.length) {
+            aiCommentCountEl.textContent = '0';
+            return;
+        }
+
+        const commentData = await fetchJson('/api/v1/comments?limit=1');
+        if (commentData && typeof commentData.total === 'number') {
+            aiCommentCountEl.textContent = commentData.total;
+            return;
+        }
+        if (commentData && Array.isArray(commentData.items)) {
+            aiCommentCountEl.textContent = commentData.items.length;
+            return;
+        }
+        if (Array.isArray(commentData)) {
+            aiCommentCountEl.textContent = commentData.length;
+            return;
+        }
+        aiCommentCountEl.textContent = '0';
+    } catch (error) {
+        console.error('Error fetching AI comment statistics:', error);
+        aiCommentCountEl.textContent = '0';
+    }
+});
+</script>
+{% endblock %}

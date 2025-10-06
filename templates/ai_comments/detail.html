@@ -1,0 +1,345 @@
+{% extends "simple_base.html" %}
+
+{% block title %}AI Comment - yourMoment{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <a href="/ai-comments" class="btn btn-link ps-0">
+            <i class="bi bi-arrow-left"></i> Back to AI Comments
+        </a>
+        <h1 class="mt-2" id="commentTitle">Loading comment…</h1>
+        <p class="text-muted" id="commentSubtitle"></p>
+    </div>
+</div>
+
+<div id="alertContainer" class="mt-3"></div>
+
+<div id="loadingState" class="text-center my-5">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <p class="mt-2 text-muted">Loading comment details...</p>
+</div>
+
+<div id="emptyState" class="text-center my-5" style="display: none;">
+    <i class="bi bi-chat-left-text text-muted" style="font-size: 4rem;"></i>
+    <h3 class="mt-3">AI Comment Not Found</h3>
+    <p class="text-muted">We could not find an AI comment with this identifier.</p>
+</div>
+
+<div id="commentContent" style="display: none;">
+
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-journal-text me-2"></i>Article Snapshot</h5>
+            <a id="commentArticleLink" href="#" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm" style="display:none;">
+                View on myMoment
+            </a>
+        </div>
+        <div class="card-body">
+            <dl class="row mb-3">
+                <dt class="col-sm-3">Article Title</dt>
+                <dd class="col-sm-9" id="articleTitle">-</dd>
+
+                <dt class="col-sm-3">Article Author</dt>
+                <dd class="col-sm-9" id="articleAuthor">-</dd>
+
+                <dt class="col-sm-3">Scraped At</dt>
+                <dd class="col-sm-9" id="articleScrapedAt">-</dd>
+            </dl>
+
+            <div class="mb-3">
+                <strong>AI Comment</strong>
+                <p id="commentContentText" class="mb-0">-</p>
+            </div>
+
+            <div class="mb-3">
+                <strong>Article Content</strong>
+                <p class="text-muted" id="articleContent">-</p>
+            </div>
+
+            <div class="accordion" id="articleHtmlAccordion">
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="articleHtmlHeading">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#articleHtmlCollapse" aria-expanded="false" aria-controls="articleHtmlCollapse">
+                            View Raw Article HTML
+                        </button>
+                    </h2>
+                    <div id="articleHtmlCollapse" class="accordion-collapse collapse" aria-labelledby="articleHtmlHeading" data-bs-parent="#articleHtmlAccordion">
+                        <div class="accordion-body">
+                            <pre class="small text-muted" id="articleRawHtml">No raw HTML captured.</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Comment Overview</h5>
+        </div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-3">Status</dt>
+                <dd class="col-sm-9" id="commentStatus">-</dd>
+
+                <dt class="col-sm-3">Created</dt>
+                <dd class="col-sm-9" id="commentCreatedAt">-</dd>
+
+                <dt class="col-sm-3">Posted</dt>
+                <dd class="col-sm-9" id="commentPostedAt">-</dd>
+
+                <dt class="col-sm-3">Error</dt>
+                <dd class="col-sm-9" id="commentError">-</dd>
+            </dl>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-box-arrow-in-right me-2"></i>myMoment Login</h6>
+                </div>
+                <div class="card-body">
+                    <p class="mb-1 fw-semibold" id="commentLoginName">Loading…</p>
+                    <p class="text-muted small mb-0" id="commentLoginUsername">-</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-cpu me-2"></i>LLM Provider</h6>
+                </div>
+                <div class="card-body">
+                    <p class="mb-1 fw-semibold" id="commentProviderName">-</p>
+                    <p class="text-muted small mb-0" id="commentProviderModel">-</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-file-earmark-text me-2"></i>Prompt Template</h6>
+                </div>
+                <div class="card-body">
+                    <p class="mb-1 fw-semibold" id="commentPromptName">-</p>
+                    <p class="text-muted small mb-0" id="commentPromptDescription">-</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function() {
+    const commentId = {{ comment_id | tojson }};
+
+    const {
+        showAlert,
+        formatDate,
+        fetchOptions,
+        showContentState,
+        showEmptyState,
+        showLoadingState
+    } = window.YM.utils;
+
+    const loadingState = document.getElementById('loadingState');
+    const emptyState = document.getElementById('emptyState');
+    const commentContent = document.getElementById('commentContent');
+
+    const titleEl = document.getElementById('commentTitle');
+    const subtitleEl = document.getElementById('commentSubtitle');
+    const statusEl = document.getElementById('commentStatus');
+    const createdAtEl = document.getElementById('commentCreatedAt');
+    const postedAtEl = document.getElementById('commentPostedAt');
+    const errorEl = document.getElementById('commentError');
+    const articleLinkEl = document.getElementById('commentArticleLink');
+    const articleTitleEl = document.getElementById('articleTitle');
+    const articleAuthorEl = document.getElementById('articleAuthor');
+    const articleScrapedAtEl = document.getElementById('articleScrapedAt');
+    const articleContentEl = document.getElementById('articleContent');
+    const articleRawHtmlEl = document.getElementById('articleRawHtml');
+    const commentContentEl = document.getElementById('commentContentText');
+
+    const loginNameEl = document.getElementById('commentLoginName');
+    const loginUsernameEl = document.getElementById('commentLoginUsername');
+
+    const providerNameEl = document.getElementById('commentProviderName');
+    const providerModelEl = document.getElementById('commentProviderModel');
+
+    const promptNameEl = document.getElementById('commentPromptName');
+    const promptDescriptionEl = document.getElementById('commentPromptDescription');
+
+    const relatedDataCache = {
+        credentials: null,
+        providers: null,
+        templates: null
+    };
+
+    showLoadingState(loadingState, [emptyState, commentContent]);
+
+    try {
+        const response = await fetch(`/api/v1/comments/${encodeURIComponent(commentId)}`, fetchOptions('GET'));
+
+        if (!response.ok) {
+            throw new Error(`Failed to load AI comment: ${response.status}`);
+        }
+
+        const comment = await response.json();
+
+        await populateComment(comment);
+        showContentState(commentContent, [loadingState, emptyState]);
+    } catch (error) {
+        console.error('Error loading comment:', error);
+        showLoadingState(null, [loadingState, emptyState, commentContent]);
+        showAlert('alertContainer', 'Error loading AI comment. Please try again later.', 'danger');
+    }
+
+    async function populateComment(comment) {
+        titleEl.textContent = `AI Comment ${formatShortId(comment.id)}`;
+        subtitleEl.textContent = comment.article_title || 'Associated article unknown';
+        statusEl.textContent = comment.status ? comment.status.toUpperCase() : 'UNKNOWN';
+        createdAtEl.textContent = formatDate(comment.created_at, 'Unknown');
+        postedAtEl.textContent = comment.posted_at ? formatDate(comment.posted_at, 'Unknown') : 'Not posted yet';
+        errorEl.textContent = comment.error_message || '—';
+
+        loginNameEl.textContent = comment.mymoment_login_id ? 'Loading…' : 'Not posted yet';
+        loginUsernameEl.textContent = comment.mymoment_login_id ? '' : '—';
+
+        providerNameEl.textContent = comment.ai_provider_name || 'Unknown provider';
+        providerModelEl.textContent = comment.ai_model_name ? `Model: ${comment.ai_model_name}` : 'Model not recorded';
+
+        promptNameEl.textContent = comment.prompt_template_id ? 'Loading…' : 'Unknown template';
+        promptDescriptionEl.textContent = comment.prompt_template_id ? '' : '—';
+
+        if (comment.article_url) {
+            articleLinkEl.href = comment.article_url;
+            articleLinkEl.style.display = 'inline-flex';
+        } else {
+            articleLinkEl.style.display = 'none';
+        }
+
+        articleTitleEl.textContent = comment.article_title || 'Unknown article';
+        articleAuthorEl.textContent = comment.article_author || 'Unknown author';
+        articleScrapedAtEl.textContent = formatDate(comment.article_scraped_at, 'Unknown');
+        articleContentEl.textContent = comment.article_content || 'No article content captured.';
+        articleRawHtmlEl.textContent = comment.article_raw_html || 'No raw HTML captured.';
+        commentContentEl.textContent = comment.comment_content || 'No comment content recorded.';
+
+        await Promise.all([
+            loadCredentialDetails(comment.mymoment_login_id),
+            loadProviderDetails(comment.llm_provider_id, comment),
+            loadPromptTemplate(comment.prompt_template_id)
+        ]);
+    }
+
+    async function loadCredentialDetails(loginId) {
+        if (!loginId) {
+            return;
+        }
+
+        try {
+            if (!relatedDataCache.credentials) {
+                const response = await fetch('/api/v1/mymoment-credentials/index', fetchOptions('GET'));
+                if (!response.ok) {
+                    throw new Error(`Failed to load credentials index: ${response.status}`);
+                }
+                relatedDataCache.credentials = await response.json();
+            }
+
+            const credential = (relatedDataCache.credentials || []).find(
+                (item) => String(item.id).toLowerCase() === String(loginId).toLowerCase()
+            );
+
+            if (credential) {
+                loginNameEl.textContent = credential.name || 'Unnamed credential';
+                loginUsernameEl.textContent = credential.username ? `Username: ${credential.username}` : 'Username not available';
+            } else {
+                loginNameEl.textContent = 'Credential not found';
+                loginUsernameEl.textContent = '—';
+            }
+        } catch (error) {
+            console.error('Failed to load credential details:', error);
+            loginNameEl.textContent = 'Unable to load credential';
+            loginUsernameEl.textContent = '—';
+        }
+    }
+
+    async function loadProviderDetails(providerId, comment) {
+        if (!providerId) {
+            return;
+        }
+
+        try {
+            if (!relatedDataCache.providers) {
+                const response = await fetch('/api/v1/llm-providers/index', fetchOptions('GET'));
+                if (!response.ok) {
+                    throw new Error(`Failed to load provider index: ${response.status}`);
+                }
+                relatedDataCache.providers = await response.json();
+            }
+
+            const provider = (relatedDataCache.providers || []).find(
+                (item) => String(item.id).toLowerCase() === String(providerId).toLowerCase()
+            );
+
+            if (provider) {
+                providerNameEl.textContent = provider.provider_name || 'LLM Provider';
+                providerModelEl.textContent = provider.model_name ? `Model: ${provider.model_name}` : 'Model not configured';
+            } else {
+                providerNameEl.textContent = comment.ai_provider_name || 'Unknown provider';
+                providerModelEl.textContent = comment.ai_model_name ? `Model: ${comment.ai_model_name}` : 'Model not recorded';
+            }
+        } catch (error) {
+            console.error('Failed to load provider details:', error);
+            providerNameEl.textContent = comment.ai_provider_name || 'Unable to load provider';
+            providerModelEl.textContent = comment.ai_model_name ? `Model: ${comment.ai_model_name}` : 'Model not recorded';
+        }
+    }
+
+    async function loadPromptTemplate(templateId) {
+        if (!templateId) {
+            return;
+        }
+
+        try {
+            if (!relatedDataCache.templates) {
+                const response = await fetch('/api/v1/prompt-templates/index', fetchOptions('GET'));
+                if (!response.ok) {
+                    throw new Error(`Failed to load prompt templates index: ${response.status}`);
+                }
+                relatedDataCache.templates = await response.json();
+            }
+
+            const template = (relatedDataCache.templates || []).find(
+                (item) => String(item.id).toLowerCase() === String(templateId).toLowerCase()
+            );
+
+            if (template) {
+                promptNameEl.textContent = template.name || 'Prompt Template';
+                promptDescriptionEl.textContent = template.description || 'No description provided.';
+            } else {
+                promptNameEl.textContent = 'Prompt template not found';
+                promptDescriptionEl.textContent = '—';
+            }
+        } catch (error) {
+            console.error('Failed to load prompt template details:', error);
+            promptNameEl.textContent = 'Unable to load template';
+            promptDescriptionEl.textContent = '—';
+        }
+    }
+
+    function formatShortId(id) {
+        if (!id) return 'Unknown';
+        const text = String(id);
+        return text.length > 12 ? `${text.substring(0, 8)}…` : text;
+    }
+});
+</script>
+{% endblock %}
