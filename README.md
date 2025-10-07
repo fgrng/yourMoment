@@ -2,11 +2,19 @@
 
 AI-powered monitoring and comment automation platform for the myMoment writing community. Automates article discovery, generates context-aware LLM-generated comments, and manages multiple monitoring workflows.
 
-This software project was developed as [part of the DEEP myMoment research and development project](https://deep-consortium.ch/en/project/deep-mymoment) which itself is a member of the [DEEP research consortium](https://deep-consortium.ch/en/about) that focuses on foundations, challenges, and consequences of digital learning in Swiss primary schools. The development lead was located at [St.Gallen University of teacher education](https://www.phsg.ch/de/forschung-entwicklung/projekte/deep-digital-literacy-participation-writing-platform-mymoment).
+This software project was developed as [part of the DEEP myMoment research and development project](https://deep-consortium.ch/en/project/deep-mymoment) which itself is a member of the [DEEP research consortium](https://deep-consortium.ch/en/about) that explores how digital transformation can promote equitable and effective learning in Swiss primary education. The development lead was located at [St.Gallen University of teacher education](https://www.phsg.ch/de/forschung-entwicklung/projekte/deep-digital-literacy-participation-writing-platform-mymoment).
 
-[This is also my personal learning project for LLM-driven software engineering tools like Claude Code, spec-kit and alike.]
+(This is also my personal learning project for LLM-driven software engineering tools like Claude Code, spec-kit and alike.)
 
-## Overview
+## The context of myMoment
+
+myMoment is a digital writing platform that encourages creative and reflective writing among primary school students. Originally launched in 2005, it was developed to support open, community-based writing in a safe online environment. Over time, it has evolved through collaborations with teachers, the “Zentrum Lesen,” and imedias (PH FHNW), aiming to strengthen students’ writing skills, media literacy, and engagement through peer feedback and collaborative writing activities.
+
+The platform allows students to draft, publish, and share their texts within their class or across the broader myMoment community. Teachers moderate publication and feedback, helping to build a culture of writing as a social practice rather than an isolated task. Alongside this, myMoment includes teacher resources—tutorials, lesson ideas, and professional development materials to support meaningful classroom integration.
+
+In its current form, myMoment is being developed further as part of the DEEP myMoment research and development project. Within this framework, myMoment functions as both a learning tool and a research platform that investigates how digital writing environments can foster participation, creativity, and literacy development.
+
+# Overview of the yourMoment project
 
 yourMoment enables teachers and researchers to monitor myMoment articles and automatically generate LLM-powered comments using their preferred LLM providers (like OpenAI or Mistral). The platform handles authenticated scraping, comment generation with customizable prompts, and process orchestration through a simple web interface.
 
@@ -21,6 +29,8 @@ yourMoment enables teachers and researchers to monitor myMoment articles and aut
 - **Somewhat Production-ready** – Type-safe configuration, health checks and logging
 
 See `AGENTS.md` for the condensed architecture brief used by AI assistants.
+
+See also the detailed [documentation of the API layer](./README_API.md), the [business logic layer](./README_SERVICES.md) and the [layer of the Celery-based background tasks](./README_TASKS.md).
 
 ## Stack
 
@@ -257,4 +267,3 @@ Static assets and bundled prompt templates (files in `static/` and `templates/pr
 > "Includes assets and prompt templates from the yourMoment project (https://github.com/yourMoment/yourMoment) licensed under CC BY 4.0."
 
 For the full legal text of the license, visit the [CC BY 4.0 legal code](https://creativecommons.org/licenses/by/4.0/legalcode).
-
