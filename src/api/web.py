@@ -288,47 +288,14 @@ async def article_comments(request: Request, article_id: str, user: User = Depen
 @router.get("/ai-comments", response_class=HTMLResponse)
 async def ai_comments_index(
     request: Request,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    user: User = Depends(get_current_user)
 ):
-    """AI comments archive page."""
-    stmt = (
-        select(AIComment)
-        .where(
-            and_(
-                AIComment.user_id == user.id,
-                AIComment.is_active.is_(True)
-            )
-        )
-        .order_by(desc(AIComment.created_at))
-        .limit(50)
-    )
-
-    result = await session.execute(stmt)
-    comments = result.scalars().all()
-
-    comment_view = [
-        {
-            "id": str(comment.id),
-            "mymoment_article_id": comment.mymoment_article_id,
-            "article_title": comment.article_title,
-            "article_author": comment.article_author,
-            "comment_content": comment.comment_content,
-            "status": comment.status,
-            "created_at": comment.created_at,
-            "posted_at": comment.posted_at,
-            "ai_provider_name": comment.ai_provider_name,
-            "ai_model_name": comment.ai_model_name,
-        }
-        for comment in comments
-    ]
-
+    """AI comments archive page (client-side rendered)."""
     return templates.TemplateResponse("ai_comments/index.html", {
         "request": request,
         "user": user,
         "current_user": user,
-        "is_authenticated": True,
-        "ai_comments": comment_view,
+        "is_authenticated": True
     })
 
 
@@ -339,7 +306,7 @@ async def process_ai_comments(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    """AI comments for a specific monitoring process."""
+    """AI comments for a specific monitoring process (client-side rendered)."""
     # Validate UUID format
     try:
         process_uuid = uuid.UUID(process_id)
@@ -360,67 +327,11 @@ async def process_ai_comments(
     if not process:
         raise HTTPException(status_code=404, detail="Process not found")
 
-    # Fetch AI comments for this process
-    stmt = (
-        select(AIComment)
-        .where(
-            and_(
-                AIComment.monitoring_process_id == process_uuid,
-                AIComment.user_id == user.id,
-                AIComment.is_active.is_(True)
-            )
-        )
-        .order_by(desc(AIComment.created_at))
-        .limit(50)
-    )
-
-    result = await session.execute(stmt)
-    comments = result.scalars().all()
-
-    comment_view = [
-        {
-            "id": str(comment.id),
-            "mymoment_article_id": comment.mymoment_article_id,
-            "article_title": comment.article_title,
-            "article_author": comment.article_author,
-            "comment_content": comment.comment_content,
-            "status": comment.status,
-            "created_at": comment.created_at,
-            "posted_at": comment.posted_at,
-            "ai_provider_name": comment.ai_provider_name,
-            "ai_model_name": comment.ai_model_name,
-        }
-        for comment in comments
-    ]
-
-    # Count comments by status for this process
-    generated_count = sum(1 for c in comments if c.status == 'generated')
-    posted_count = sum(1 for c in comments if c.status == 'posted')
-
-    # Create monitoring process view for template
-    monitoring_process_view = {
-        "id": str(process.id),
-        "name": process.name,
-        "description": process.description,
-        "status": process.status,
-        "generate_only": process.generate_only,
-        "articles_discovered": process.articles_discovered,
-        "comments_generated": process.comments_generated,
-        "comments_posted": process.comments_posted,
-        "generated_pending": generated_count,
-        "posted_total": posted_count,
-        "started_at": process.started_at,
-        "stopped_at": process.stopped_at,
-        "created_at": process.created_at,
-    }
-
     return templates.TemplateResponse("ai_comments/index.html", {
         "request": request,
         "user": user,
         "current_user": user,
-        "is_authenticated": True,
-        "ai_comments": comment_view,
-        "monitoring_process": monitoring_process_view,
+        "is_authenticated": True
     })
 
 

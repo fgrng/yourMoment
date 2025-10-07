@@ -25,7 +25,6 @@
 </div>
 
 <!-- Alert Messages -->
-<div id="alertContainer" class="mt-3"></div>
 
 <!-- Loading State (visible for edit mode before data loads) -->
 <div id="loadingState" class="text-center my-5" style="display: {{ 'block' if template_id else 'none' }};" aria-live="polite" aria-busy="true">
@@ -181,7 +180,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     const previewUser = document.getElementById('previewUser');
     const previewPlaceholders = document.getElementById('previewPlaceholders');
     const closePreview = document.getElementById('closePreview');
-    const alertContainer = document.getElementById('alertContainer');
     const loadingState = document.getElementById('loadingState');
     const formContainer = document.getElementById('formContainer');
     const nameCount = document.getElementById('nameCount');
@@ -397,12 +395,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     function showAlert(message, type) {
-        alertContainer.innerHTML = `
-            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-        `;
+        window.showAlert(message, type);
     }
 });
 </script>

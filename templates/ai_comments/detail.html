@@ -13,7 +13,6 @@
     </div>
 </div>
 
-<div id="alertContainer" class="mt-3"></div>
 
 <div id="loadingState" class="text-center my-5">
     <div class="spinner-border text-primary" role="status">
@@ -141,12 +140,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     const commentId = {{ comment_id | tojson }};
 
     const {
-        showAlert,
         formatDate,
         fetchOptions,
         showContentState,
         showEmptyState,
-        showLoadingState
+        showLoadingState,
+        escapeHtml
     } = window.YM.utils;
 
     const loadingState = document.getElementById('loadingState');
@@ -198,7 +197,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     } catch (error) {
         console.error('Error loading comment:', error);
         showLoadingState(null, [loadingState, emptyState, commentContent]);
-        showAlert('alertContainer', 'Error loading AI comment. Please try again later.', 'danger');
+        window.showAlert('Error loading AI comment. Please try again later.', 'danger');
     }
 
     async function populateComment(comment) {

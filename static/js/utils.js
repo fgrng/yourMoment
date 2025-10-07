@@ -158,36 +158,6 @@ export function fetchOptions(method = 'GET', body = null) {
 // ============================================================================
 
 /**
- * Display an alert message in a Bootstrap alert container
- * @param {HTMLElement|string} container - Alert container element or ID
- * @param {string} message - Message to display
- * @param {string} type - Bootstrap alert type (success, danger, warning, info)
- */
-export function showAlert(container, message, type) {
-    const element = typeof container === 'string'
-        ? document.getElementById(container)
-        : container;
-
-    if (!element) {
-        console.error('Alert container not found:', container);
-        return;
-    }
-
-    // Clear alert if no message
-    if (!message) {
-        element.innerHTML = '';
-        return;
-    }
-
-    element.innerHTML = `
-        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
-            ${escapeHtml(message)}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    `;
-}
-
-/**
  * Toggle password input visibility
  * @param {HTMLInputElement} input - Password input element
  * @param {HTMLElement} icon - Icon element to toggle
@@ -222,17 +192,6 @@ export function setButtonLoading(button, loadingText = 'Saving...') {
 export function resetButton(button, originalHtml) {
     button.disabled = false;
     button.innerHTML = originalHtml;
-}
-
-/**
- * Update character counter display
- * @param {HTMLInputElement|HTMLTextAreaElement} input - Input element
- * @param {HTMLElement} counter - Counter display element
- */
-export function updateCharCounter(input, counter) {
-    const length = input.value.length;
-    const maxLength = input.maxLength;
-    counter.textContent = maxLength > 0 ? `${length}/${maxLength}` : length;
 }
 
 // ============================================================================
@@ -358,16 +317,3 @@ export function showEmptyState(emptyElement, otherElements = []) {
     });
 }
 
-// ============================================================================
-// Debug Helpers
-// ============================================================================
-
-/**
- * Conditional console logging based on debug flag
- * @param {...any} args - Arguments to log
- */
-export function debugLog(...args) {
-    if (window.DEBUG_MODE) {
-        console.log('[DEBUG]', ...args);
-    }
-}

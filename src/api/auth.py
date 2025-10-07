@@ -67,27 +67,30 @@ async def get_current_user(
 
         if not token:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
+                # status_code=status.HTTP_401_UNAUTHORIZED,
+                status_code=status.HTTP_307_TEMPORARY_REDIRECT,
                 detail="No authentication token provided",
-                headers={"WWW-Authenticate": "Bearer"}
+                headers={"WWW-Authenticate": "Bearer", "Location": "/login"}
             )
 
         # Validate token and get user
         user = await auth_service.validate_token(token)
         if not user:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
+                # status_code=status.HTTP_401_UNAUTHORIZED,
+                status_code=status.HTTP_307_TEMPORARY_REDIRECT,
                 detail="Invalid or expired token",
-                headers={"WWW-Authenticate": "Bearer"}
+                headers={"WWW-Authenticate": "Bearer", "Location": "/login"}
             )
         return user
     except HTTPException:
         raise
     except Exception:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            # status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_307_TEMPORARY_REDIRECT,
             detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer", "Location": "/login"}
         )
 
 async def get_optional_user(

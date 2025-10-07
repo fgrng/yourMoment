@@ -19,7 +19,6 @@
     </div>
 </div>
 
-<div id="alertContainer" class="mt-3"></div>
 
 <div id="loadingState" class="text-center my-5" style="display: {{ 'block' if process_id else 'none' }};">
     <div class="spinner-border text-primary" role="status">
@@ -198,7 +197,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     const tabFilterHelp = document.getElementById('tabFilterHelp');
     const searchFilter = document.getElementById('searchFilter');
     const submitBtn = document.getElementById('submitBtn');
-    const alertContainer = document.getElementById('alertContainer');
     const loadingState = document.getElementById('loadingState');
     const formContainer = document.getElementById('formContainer');
     const defaultSubmitLabel = submitBtn.innerHTML;
@@ -489,12 +487,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     function showAlert(message, type) {
-        alertContainer.innerHTML = `
-            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-        `;
+        window.showAlert(message, type);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 

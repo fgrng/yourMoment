@@ -3,328 +3,72 @@
 {% block title %}AI Comments - yourMoment{% endblock %}
 
 {% block content %}
-    <div class="row">
-        <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <div>
-                <h1 class="mb-1"><i class="bi bi-chat-dots me-2"></i>AI Comments</h1>
-                <p class="text-muted mb-0">Review AI generated comments and their article snapshots.</p>
-            </div>
+<div class="row">
+    <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h1 class="mb-1"><i class="bi bi-chat-dots me-2"></i>AI Comments</h1>
+            <p class="text-muted mb-0">Review AI generated comments and their article snapshots.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button id="refreshBtn" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-repeat me-2"></i>Refresh
+            </button>
         </div>
     </div>
+</div>
 
-    <div id="alertContainer" class="mt-3"></div>
+<!-- Monitoring Process Details (if viewing process-specific comments) -->
+<div id="processDetailsCard" style="display: none;"></div>
 
-    {% if monitoring_process %}
-        <!-- Monitoring Process Details Card -->
-        <div class="card mt-4 border-primary">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">
-                    <i class="bi bi-gear-fill me-2"></i>
-                    Monitoring Process: {{ monitoring_process.name }}
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-8">
-                        {% if monitoring_process.description %}
-                            <p class="text-muted mb-3">{{ monitoring_process.description }}</p>
-                        {% endif %}
+<!-- Filters -->
+<div class="row mt-4">
+    <div class="col-md-3 mb-3">
+        <label for="statusFilter" class="form-label">Status</label>
+        <select id="statusFilter" class="form-select">
+            <option value="ALL" selected>All statuses</option>
+            <option value="generated">Generated</option>
+            <option value="posted">Posted</option>
+            <option value="failed">Failed</option>
+        </select>
+    </div>
+    <div class="col-md-6 mb-3">
+        <label for="searchInput" class="form-label">Search</label>
+        <input type="search" id="searchInput" class="form-control" placeholder="Search by title or author">
+    </div>
+    <div class="col-md-3 mb-3">
+        <label for="limitSelect" class="form-label">Items per page</label>
+        <select id="limitSelect" class="form-select">
+            <option value="20">20</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+        </select>
+    </div>
+</div>
 
-                        <div class="row g-3 mb-3">
-                            <div class="col-6 col-md-3">
-                                <div class="text-muted small">Status</div>
-                                <div class="fw-bold">
-                                    <span class="badge {{ 'bg-success' if monitoring_process.status == 'running' else 'bg-secondary' if monitoring_process.status == 'stopped' else 'bg-info' }}">
-                                        {{ monitoring_process.status|upper }}
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="text-muted small">Mode</div>
-                                <div class="fw-bold">
-                                    {% if monitoring_process.generate_only %}
-                                        <span class="badge bg-warning text-dark">Generate Only</span>
-                                    {% else %}
-                                        <span class="badge bg-primary">Generate & Post</span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="text-muted small">Articles Found</div>
-                                <div class="fw-bold">{{ monitoring_process.articles_discovered }}</div>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="text-muted small">Comments Generated</div>
-                                <div class="fw-bold">{{ monitoring_process.comments_generated }}</div>
-                            </div>
-                        </div>
+<div id="loadingState" class="text-center my-5">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <p class="mt-2 text-muted">Loading AI comments...</p>
+</div>
 
-                        <div class="row g-3">
-                            <div class="col-6 col-md-3">
-                                <div class="text-muted small">Pending Posts</div>
-                                <div class="fw-bold text-warning">{{ monitoring_process.generated_pending }}</div>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="text-muted small">Posted Total</div>
-                                <div class="fw-bold text-success">{{ monitoring_process.posted_total }}</div>
-                            </div>
-                            <div class="col-12 col-md-6">
-                                <div class="text-muted small">Last Activity</div>
-                                <div class="small">
-                                    {% if monitoring_process.stopped_at %}
-                                        Stopped: {{ monitoring_process.stopped_at.strftime('%Y-%m-%d %H:%M') }}
-                                    {% elif monitoring_process.started_at %}
-                                        Started: {{ monitoring_process.started_at.strftime('%Y-%m-%d %H:%M') }}
-                                    {% else %}
-                                        Created: {{ monitoring_process.created_at.strftime('%Y-%m-%d %H:%M') }}
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+<div id="emptyState" class="text-center my-5" style="display: none;">
+    <i class="bi bi-chat-left-text text-muted" style="font-size: 4rem;"></i>
+    <h3 class="mt-3">No AI Comments Yet</h3>
+    <p class="text-muted">Once monitoring processes generate comments, they will appear here.</p>
+</div>
 
-                    <div class="col-md-4 border-start">
-                        <h6 class="mb-3">Actions</h6>
-
-                        <div class="d-grid gap-2">
-                            <button
-                                class="btn btn-success"
-                                id="postCommentsBtn"
-                                data-process-id="{{ monitoring_process.id }}"
-                                {% if monitoring_process.generated_pending == 0 %}disabled{% endif %}>
-                                <i class="bi bi-send-fill me-2"></i>
-                                Post All Generated Comments
-                                {% if monitoring_process.generated_pending > 0 %}
-                                    <span class="badge bg-white text-success ms-1">{{ monitoring_process.generated_pending }}</span>
-                                {% endif %}
-                            </button>
-
-                            <a href="/processes/{{ monitoring_process.id }}/edit" class="btn btn-outline-primary">
-                                <i class="bi bi-pencil me-2"></i>Edit Process
-                            </a>
-
-                            <a href="/processes" class="btn btn-outline-secondary">
-                                <i class="bi bi-arrow-left me-2"></i>Back to Processes
-                            </a>
-                        </div>
-
-                        {% if monitoring_process.generated_pending == 0 %}
-                            <div class="alert alert-info mt-3 small mb-0">
-                                <i class="bi bi-info-circle me-1"></i>
-                                No pending comments to post
-                            </div>
-                        {% else %}
-                            <div class="alert alert-warning mt-3 small mb-0">
-                                <i class="bi bi-exclamation-triangle me-1"></i>
-                                {{ monitoring_process.generated_pending }} comment(s) ready to post
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-    {% endif %}
-
-    {% if ai_comments %}
-        <div class="row g-4 mt-4">
-            {% for comment in ai_comments %}
-                <div class="col-md-6 col-lg-4">
-                    <div class="card h-100">
-                        <div class="card-header d-flex justify-content-between align-items-start">
-                            <div>
-                                <h5 class="mb-1 text-truncate" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ comment.article_title or 'Unknown article' }}">
-                                    <i class="bi bi-journal-text me-2"></i>
-                                    {{ (comment.article_title[:25] + '…') if comment.article_title and comment.article_title|length > 25 else (comment.article_title or 'Unknown article') }}
-                                </h5>
-                                <span class="badge {{ 'bg-success' if comment.status == 'posted' else 'bg-info text-dark' if comment.status == 'generated' else 'bg-danger' if comment.status == 'failed' else 'bg-secondary' }}">
-                                    {{ comment.status|upper }}
-                                </span>
-                            </div>
-                            <small class="text-muted text-end">
-                                {{ comment.created_at.strftime('%Y-%m-%d %H:%M') if comment.created_at else '' }}
-                            </small>
-                        </div>
-                        <div class="card-body">
-                            <p class="small text-muted mb-2">Author: {{ comment.article_author or 'Unknown' }}</p>
-                            <div class="mb-2">
-                                <strong>Comment preview:</strong>
-                                <p class="small text-muted mb-0">
-                                    {% if comment.comment_content %}
-                                        {{ comment.comment_content[:160] }}{% if comment.comment_content|length > 160 %}…{% endif %}
-                                    {% else %}
-                                        <span class="fst-italic">No comment content captured.</span>
-                                    {% endif %}
-                                </p>
-                            </div>
-                            <div class="small text-muted">
-                                Model: {{ comment.ai_provider_name or 'n/a' }} {{ comment.ai_model_name or '' }}
-                            </div>
-                            <div class="small text-muted">
-                                Posted at: {{ comment.posted_at.strftime('%Y-%m-%d %H:%M') if comment.posted_at else 'Not posted yet' }}
-                            </div>
-                        </div>
-                        <div class="card-footer bg-transparent">
-                            <div class="d-flex flex-wrap gap-2">
-                                <a href="/ai-comments/{{ comment.id }}" class="btn btn-outline-primary btn-sm">
-                                    <i class="bi bi-eye"></i> View Details
-                                </a>
-                                <button
-                                    class="btn btn-success btn-sm post-comment-btn"
-                                    data-comment-id="{{ comment.id }}"
-                                    {% if comment.status == 'posted' %}disabled{% endif %}>
-                                    <i class="bi bi-send"></i> Post to myMoment
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            {% endfor %}
-        </div>
-    {% else %}
-        <div class="text-center my-5">
-            <i class="bi bi-chat-left-text text-muted" style="font-size: 4rem;"></i>
-            <h3 class="mt-3">No AI Comments Yet</h3>
-            <p class="text-muted">Once monitoring processes generate comments, they will appear here.</p>
-        </div>
-    {% endif %}
+<div id="commentsList" class="row g-4 mt-4" style="display: none;"></div>
 {% endblock %}
 
 {% block extra_js %}
-    <script>
-     document.addEventListener('DOMContentLoaded', function() {
-         // Show alert message
-         function showAlert(message, type = 'info') {
-             const alertContainer = document.getElementById('alertContainer');
-             const alertDiv = document.createElement('div');
-             alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-             alertDiv.role = 'alert';
-             alertDiv.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-             `;
-             alertContainer.appendChild(alertDiv);
+<script type="module">
+    import { initCommentsPage } from '{{ url_for("static", path="/js/comments.js") }}';
 
-             // Auto-dismiss after 5 seconds
-             setTimeout(() => {
-                 alertDiv.classList.remove('show');
-                 setTimeout(() => alertDiv.remove(), 150);
-             }, 5000);
-         }
+    // Extract process_id from URL path if present
+    const pathMatch = window.location.pathname.match(/\/processes\/([a-f0-9-]+)\/ai-comments/);
+    const processId = pathMatch ? pathMatch[1] : null;
 
-         // Handle "Post All Generated Comments" button click
-         const postCommentsBtn = document.getElementById('postCommentsBtn');
-         if (postCommentsBtn) {
-             postCommentsBtn.addEventListener('click', async function() {
-                 const processId = this.getAttribute('data-process-id');
-                 const originalText = this.innerHTML;
-
-                 // Confirm action
-                 if (!confirm('Start posting all generated comments for this monitoring process?')) {
-                     return;
-                 }
-
-                 // Disable button and show loading state
-                 this.disabled = true;
-                 this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Starting task...';
-
-                 try {
-                     const response = await fetch(`/api/v1/monitoring-processes/${processId}/post-comments`, {
-                         method: 'POST',
-                         credentials: 'same-origin',
-                         headers: {
-                             'Content-Type': 'application/json'
-                         }
-                     });
-
-                     if (!response.ok) {
-                         const error = await response.json();
-                         throw new Error(error.detail || 'Failed to start comment posting task');
-                     }
-
-                     const data = await response.json();
-
-                     showAlert(`Comment posting task started successfully! Task ID: ${data.task_id}. The comments will be posted in the background. Refresh this page to see updates.`, 'success');
-
-                     // Update button state
-                     this.innerHTML = '<i class="bi bi-check-circle me-2"></i>Task Started';
-
-                     // Suggest page refresh after a delay
-                     setTimeout(() => {
-                         if (confirm('Comment posting is in progress. Refresh the page to see updates?')) {
-                             window.location.reload();
-                         }
-                     }, 3000);
-
-                 } catch (error) {
-                     console.error('Error starting comment posting task:', error);
-                     showAlert(`Failed to start comment posting: ${error.message}`, 'danger');
-
-                     // Re-enable button on error
-                     this.disabled = false;
-                     this.innerHTML = originalText;
-                 }
-             });
-         }
-
-         // Handle individual post button clicks
-         document.querySelectorAll('.post-comment-btn').forEach(button => {
-             button.addEventListener('click', async function() {
-                 const commentId = this.getAttribute('data-comment-id');
-                 const originalText = this.innerHTML;
-
-                 // Disable button and show loading state
-                 this.disabled = true;
-                 this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Posting...';
-
-                 try {
-                     const response = await fetch(`/api/v1/comments/${commentId}/post`, {
-                         method: 'POST',
-                         credentials: 'same-origin',
-                         headers: {
-                             'Content-Type': 'application/json'
-                         }
-                     });
-
-                     if (!response.ok) {
-                         const error = await response.json();
-                         throw new Error(error.detail || 'Failed to post comment');
-                     }
-
-                     const data = await response.json();
-
-                     // Update UI to reflect posted status
-                     this.innerHTML = '<i class="bi bi-check-circle"></i> Posted';
-                     this.classList.remove('btn-success');
-                     this.classList.add('btn-secondary');
-
-                     // Update status badge in card header
-                     const card = this.closest('.card');
-                     const statusBadge = card.querySelector('.badge');
-                     if (statusBadge) {
-                         statusBadge.textContent = 'POSTED';
-                         statusBadge.className = 'badge bg-success';
-                     }
-
-                     // Update posted date
-                     const postedDateElement = card.querySelector('.small.text-muted:last-of-type');
-                     if (postedDateElement && data.posted_at) {
-                         const postedDate = new Date(data.posted_at);
-                         const formattedDate = postedDate.toISOString().slice(0, 16).replace('T', ' ');
-                         postedDateElement.textContent = `Posted at: ${formattedDate}`;
-                     }
-
-                     showAlert('Comment successfully posted to myMoment!', 'success');
-
-                 } catch (error) {
-                     console.error('Error posting comment:', error);
-                     showAlert(`Failed to post comment: ${error.message}`, 'danger');
-
-                     // Re-enable button on error
-                     this.disabled = false;
-                     this.innerHTML = originalText;
-                 }
-             });
-         });
-     });
-    </script>
+    initCommentsPage(processId);
+</script>
 {% endblock %}

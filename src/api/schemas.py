@@ -380,7 +380,7 @@ class AICommentResponse(BaseModel):
     # Article snapshot fields
     article_title: str = Field(..., description="Article title at comment time")
     article_author: str = Field(..., description="Article author at comment time")
-    article_content: str = Field(..., description="Article content at comment time")
+    article_content: Optional[str] = Field(..., description="Article content at comment time")
     article_raw_html: Optional[str] = Field(None, description="Raw HTML content")
     article_url: str = Field(..., description="myMoment article URL")
     article_category: Optional[int] = Field(None, description="myMoment category ID")
@@ -388,7 +388,7 @@ class AICommentResponse(BaseModel):
     article_scraped_at: datetime = Field(..., description="When article snapshot was captured")
 
     # AI comment fields
-    comment_content: str = Field(..., description="AI-generated comment content")
+    comment_content: Optional[str] = Field(..., description="AI-generated comment content")
     status: str = Field(..., description="Comment status: generated, posted, failed, deleted")
     ai_model_name: Optional[str] = Field(None, description="LLM model used")
     ai_provider_name: Optional[str] = Field(None, description="LLM provider used")
