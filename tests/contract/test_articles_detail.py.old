@@ -1,0 +1,315 @@
+"""
+Contract tests for GET /articles/{article_id} endpoint.
+
+Tests request/response schemas and path parameter handling according to API specification.
+These tests MUST FAIL initially as no implementation exists yet.
+"""
+
+import pytest
+from httpx import AsyncClient, ASGITransport
+from fastapi import FastAPI
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_get_article_detail_success():
+    """Test successful GET /articles/{article_id} request returns article details."""
+    app = FastAPI()  # Empty app - no routes implemented yet
+
+    test_article_id = "550e8400-e29b-41d4-a716-446655440000"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        headers = {"Authorization": "Bearer valid-jwt-token"}
+        response = await client.get(f"/api/v1/articles/{test_article_id}", headers=headers)
+
+        # This should fail because endpoint is not implemented
+        assert response.status_code == 200
+
+        # Response should be ArticleDetailResponse object
+        data = response.json()
+        assert isinstance(data, dict)
+
+        # Validate basic ArticleResponse fields
+        assert "id" in data
+        assert "mymoment_article_id" in data
+        assert "title" in data
+        assert "author" in data
+        assert "category" in data
+        assert "published_at" in data
+        assert "edited_at" in data
+        assert "scraped_at" in data
+        assert "mymoment_url" in data
+        assert "ai_comments_count" in data
+        assert "accessible_by_login_ids" in data
+
+        # Validate additional ArticleDetailResponse fields
+        assert "content" in data
+        assert "raw_html" in data
+        assert "comment_ids" in data
+
+        # Validate field types
+        assert isinstance(data["id"], str)
+        assert isinstance(data["mymoment_article_id"], str)
+        assert isinstance(data["title"], str)
+        assert isinstance(data["author"], str)
+        assert isinstance(data["category"], int)  # Category is numeric
+        assert isinstance(data["ai_comments_count"], int)
+        assert isinstance(data["accessible_by_login_ids"], list)
+        assert isinstance(data["content"], str)
+        assert isinstance(data["raw_html"], str)
+        assert isinstance(data["comment_ids"], list)
+
+        # Validate that returned article_id matches requested id
+        assert data["id"] == test_article_id
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_get_article_detail_not_found():
+    """Test GET /articles/{article_id} with non-existent article returns 404."""
+    app = FastAPI()  # Empty app - no routes implemented yet
+
+    non_existent_id = "00000000-0000-0000-0000-000000000000"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        headers = {"Authorization": "Bearer valid-jwt-token"}
+        response = await client.get(f"/api/v1/articles/{non_existent_id}", headers=headers)
+
+        assert response.status_code == 404
+
+        error_data = response.json()
+        assert "error" in error_data
+        assert "message" in error_data
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_get_article_detail_invalid_uuid():
+    """Test GET /articles/{article_id} with invalid UUID format returns 400."""
+    app = FastAPI()  # Empty app - no routes implemented yet
+
+    invalid_article_id = "not-a-valid-uuid"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        headers = {"Authorization": "Bearer valid-jwt-token"}
+        response = await client.get(f"/api/v1/articles/{invalid_article_id}", headers=headers)
+
+        assert response.status_code == 400
+
+        error_data = response.json()
+        assert "error" in error_data
+        assert "message" in error_data
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_get_article_detail_unauthorized():
+    """Test GET /articles/{article_id} without authentication returns 401."""
+    app = FastAPI()  # Empty app - no routes implemented yet
+
+    test_article_id = "550e8400-e29b-41d4-a716-446655440000"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Request without Authorization header
+        response = await client.get(f"/api/v1/articles/{test_article_id}")
+
+        assert response.status_code == 401
+
+        error_data = response.json()
+        assert "error" in error_data
+        assert "message" in error_data
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_get_article_detail_access_control():
+    """Test GET /articles/{article_id} respects user access control."""
+    app = FastAPI()  # Empty app - no routes implemented yet
+
+    # Article that user doesn't have access to
+    restricted_article_id = "550e8400-e29b-41d4-a716-446655440001"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        headers = {"Authorization": "Bearer valid-jwt-token"}
+        response = await client.get(f"/api/v1/articles/{restricted_article_id}", headers=headers)
+
+        # Should return 404 for articles user cannot access (not 403 to avoid information disclosure)
+        assert response.status_code == 404
+
+        error_data = response.json()
+        assert "error" in error_data
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_get_article_detail_response_schema():
+    """Test GET /articles/{article_id} response matches ArticleDetailResponse schema exactly."""
+    app = FastAPI()  # Empty app - no routes implemented yet
+
+    test_article_id = "550e8400-e29b-41d4-a716-446655440000"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        headers = {"Authorization": "Bearer valid-jwt-token"}
+        response = await client.get(f"/api/v1/articles/{test_article_id}", headers=headers)
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/json"
+
+        data = response.json()
+        assert isinstance(data, dict)
+
+        # Required fields from ArticleResponse (base schema)
+        base_fields = [
+            "id", "mymoment_article_id", "title", "author", "category",
+            "published_at", "edited_at", "scraped_at", "mymoment_url",
+            "ai_comments_count", "accessible_by_login_ids"
+        ]
+
+        for field in base_fields:
+            assert field in data, f"Missing required base field: {field}"
+
+        # Additional fields from ArticleDetailResponse
+        detail_fields = ["content", "raw_html", "comment_ids"]
+        for field in detail_fields:
+            assert field in data, f"Missing required detail field: {field}"
+
+        # Field type validation
+        assert isinstance(data["id"], str)
+        assert isinstance(data["mymoment_article_id"], str)
+        assert isinstance(data["title"], str)
+        assert isinstance(data["author"], str)
+        assert isinstance(data["category"], int)
+        assert isinstance(data["ai_comments_count"], int)
+        assert isinstance(data["accessible_by_login_ids"], list)
+        assert isinstance(data["content"], str)
+        assert isinstance(data["raw_html"], str)
+        assert isinstance(data["comment_ids"], list)
+
+        # UUID format validation
+        import uuid
+        uuid.UUID(data["id"])
+
+        # URL format validation
+        assert data["mymoment_url"].startswith(("http://", "https://"))
+
+        # ISO datetime format validation
+        from datetime import datetime
+        for date_field in ["published_at", "edited_at", "scraped_at"]:
+            datetime.fromisoformat(data[date_field].replace('Z', '+00:00'))
+
+        # accessible_by_login_ids should contain valid UUIDs
+        for login_id in data["accessible_by_login_ids"]:
+            uuid.UUID(login_id)
+
+        # comment_ids should contain valid UUIDs
+        for comment_id in data["comment_ids"]:
+            uuid.UUID(comment_id)
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_get_article_detail_content_fields():
+    """Test GET /articles/{article_id} returns proper content and raw_html fields."""
+    app = FastAPI()  # Empty app - no routes implemented yet
+
+    test_article_id = "550e8400-e29b-41d4-a716-446655440000"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        headers = {"Authorization": "Bearer valid-jwt-token"}
+        response = await client.get(f"/api/v1/articles/{test_article_id}", headers=headers)
+
+        assert response.status_code == 200
+
+        data = response.json()
+
+        # Content should be non-empty string (article content captured at AI comment time)
+        assert isinstance(data["content"], str)
+        assert len(data["content"]) > 0, "Article content should not be empty"
+
+        # Raw HTML should be non-empty string (original HTML for reference)
+        assert isinstance(data["raw_html"], str)
+        assert len(data["raw_html"]) > 0, "Article raw HTML should not be empty"
+
+        # Comment IDs should be list of UUIDs
+        assert isinstance(data["comment_ids"], list)
+        for comment_id in data["comment_ids"]:
+            import uuid
+            uuid.UUID(comment_id)  # Should not raise exception
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_get_article_detail_path_parameter_validation():
+    """Test GET /articles/{article_id} path parameter validation."""
+    app = FastAPI()  # Empty app - no routes implemented yet
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        headers = {"Authorization": "Bearer valid-jwt-token"}
+
+        # Test various invalid path parameters
+        invalid_ids = [
+            "",  # Empty string
+            "123",  # Not UUID format
+            "invalid-uuid-format",  # Invalid UUID
+            "550e8400-e29b-41d4-a716",  # Incomplete UUID
+            "550e8400-e29b-41d4-a716-446655440000-extra"  # UUID with extra chars
+        ]
+
+        for invalid_id in invalid_ids:
+            if invalid_id == "":
+                # Empty path will likely match different route pattern
+                continue
+
+            response = await client.get(f"/api/v1/articles/{invalid_id}", headers=headers)
+            assert response.status_code == 400, f"Should return 400 for invalid ID: {invalid_id}"
+
+            error_data = response.json()
+            assert "error" in error_data
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_get_article_detail_missing_path_parameter():
+    """Test GET /articles/ (missing article_id) returns 404."""
+    app = FastAPI()  # Empty app - no routes implemented yet
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        headers = {"Authorization": "Bearer valid-jwt-token"}
+        response = await client.get("/api/v1/articles/", headers=headers)
+
+        # Missing path parameter should result in 404 (no matching route)
+        assert response.status_code == 404
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_get_article_detail_comments_relationship():
+    """Test GET /articles/{article_id} comment_ids field points to valid comments."""
+    app = FastAPI()  # Empty app - no routes implemented yet
+
+    test_article_id = "550e8400-e29b-41d4-a716-446655440000"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        headers = {"Authorization": "Bearer valid-jwt-token"}
+        response = await client.get(f"/api/v1/articles/{test_article_id}", headers=headers)
+
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "comment_ids" in data
+        assert isinstance(data["comment_ids"], list)
+
+        # Each comment ID should be a valid UUID that can be used to fetch comment details
+        # (via /articles/{article_id}/comments endpoint)
+        for comment_id in data["comment_ids"]:
+            import uuid
+            uuid.UUID(comment_id)  # Validate UUID format
+
+            # Verify comment_ids can be used with comments endpoint
+            # (This tests the relationship between article detail and comments)
+            comments_response = await client.get(
+                f"/api/v1/articles/{test_article_id}/comments",
+                headers=headers
+            )
+            # Comments endpoint should exist and return data that includes these comment IDs
+            assert comments_response.status_code == 200
