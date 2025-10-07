@@ -1,4 +1,4 @@
-import { showAlert, fetchOptions, deleteResource } from './utils.js';
+import { fetchOptions, deleteResource } from './utils.js';
 
 export function initCredentialsPage() {
     const credentialButtons = document.querySelectorAll('[data-credential-id]');
@@ -27,20 +27,60 @@ export function initCredentialsPage() {
 }
 
 async function handleCredentialTest(credentialId) {
+    // Find the button that triggered this test
+    const button = document.querySelector(`button[data-credential-id="${credentialId}"][data-action="test-credential"]`);
+    const originalContent = button ? button.innerHTML : null;
+
     try {
-        showAlert('alertContainer', '🔄 Testing credential against myMoment platform...', 'info');
+        // Show loading state on button
+        if (button) {
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testing...';
+        }
+
+        window.showAlert('🔄 Testing credential against myMoment platform...', 'info', false);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
         const response = await fetch(`/api/v1/mymoment-credentials/${credentialId}/test`, fetchOptions('POST'));
 
         if (response.ok) {
             const result = await response.json();
-            showAlert('alertContainer', `✅ Credential test successful! Authenticated as ${result.username} on ${result.platform}.`, 'success');
+            window.showAlert(`✅ Credential test successful! Authenticated as ${result.username} on ${result.platform}.`, 'success');
+
+            // Temporarily show success state on button
+            if (button) {
+                button.innerHTML = '<i class="bi bi-check-circle-fill"></i> Success';
+                button.classList.remove('btn-outline-info');
+                button.classList.add('btn-success');
+
+                // Reset button after 2 seconds
+                setTimeout(() => {
+                    button.innerHTML = originalContent;
+                    button.classList.remove('btn-success');
+                    button.classList.add('btn-outline-info');
+                    button.disabled = false;
+                }, 2000);
+            }
         } else {
             const error = await response.json();
             const message = error?.detail || 'Authentication failed';
-            showAlert('alertContainer', `❌ Credential test failed: ${message}`, 'danger');
+            window.showAlert(`❌ Credential test failed: ${message}`, 'danger');
+
+            // Reset button on error
+            if (button) {
+                button.innerHTML = originalContent;
+                button.disabled = false;
+            }
         }
     } catch (error) {
-        showAlert('alertContainer', '❌ Error testing credential. Please try again.', 'danger');
+        console.error('Error testing credential:', error);
+        window.showAlert('❌ Error testing credential. Please check your network and try again.', 'danger');
+
+        // Reset button on error
+        if (button) {
+            button.innerHTML = originalContent;
+            button.disabled = false;
+        }
     }
 }
 
@@ -49,7 +89,7 @@ async function handleCredentialDelete(credentialId) {
         `/api/v1/mymoment-credentials/${credentialId}`,
         'myMoment credential',
         () => {
-            showAlert('alertContainer', 'Credential deleted successfully!', 'success');
+            window.showAlert('Credential deleted successfully!', 'success');
             setTimeout(() => window.location.reload(), 1200);
         },
         'Delete this myMoment credential? This action cannot be undone.'
@@ -79,13 +119,13 @@ export function initPromptTemplatesPage() {
                 `/api/v1/prompt-templates/${templateId}`,
                 'prompt template',
                 () => {
-                    showAlert('alertContainer', 'Prompt template deleted successfully.', 'success');
+                    window.showAlert('Prompt template deleted successfully.', 'success');
                     setTimeout(() => window.location.reload(), 1200);
                 },
                 'Delete this prompt template? This action cannot be undone.'
             );
         } catch (error) {
-            showAlert('alertContainer', `Error deleting template: ${error.message}`, 'danger');
+            window.showAlert(`Error deleting template: ${error.message}`, 'danger');
         }
     });
 }

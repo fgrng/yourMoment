@@ -46,6 +46,9 @@
 
     <!-- Main Content -->
     <main class="{% block main_class %}container mt-4{% endblock %}">
+        <!-- Unified Alert Container -->
+        <div id="globalAlertContainer" class="mb-3"></div>
+
         {% block content %}{% endblock %}
     </main>
 
@@ -69,15 +72,53 @@
     <!-- Shared utilities (ES6 modules) -->
     <script type="module">
         import * as utils from '{{ url_for("static", path="/js/utils.js") }}';
-        import * as components from '{{ url_for("static", path="/js/components.js") }}';
         import * as pages from '{{ url_for("static", path="/js/pages.js") }}';
+        import * as monitoring from '{{ url_for("static", path="/js/monitoring.js") }}';
+        import * as comments from '{{ url_for("static", path="/js/comments.js") }}';
+        import * as providers from '{{ url_for("static", path="/js/providers.js") }}';
 
         window.YM = window.YM || {};
         window.YM.utils = utils;
-        window.YM.components = components;
         window.YM.pages = pages;
+        window.YM.monitoring = monitoring;
+        window.YM.comments = comments;
+        window.YM.providers = providers;
 
         pages.initLogoutHandler();
+
+        // Unified alert helper function
+        window.showAlert = function(message, type = 'info', autoHide = false) {
+            const container = document.getElementById('globalAlertContainer');
+            if (!container) {
+                console.warn('Global alert container not found');
+                return;
+            }
+
+            if (!message) {
+                container.innerHTML = '';
+                return;
+            }
+
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            alertDiv.role = 'alert';
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+
+            // Clear existing alerts
+            container.innerHTML = '';
+            container.appendChild(alertDiv);
+
+            // Only auto-hide if explicitly requested (e.g., for loading indicators)
+            if (autoHide) {
+                setTimeout(() => {
+                    alertDiv.classList.remove('show');
+                    setTimeout(() => alertDiv.remove(), 150);
+                }, 5000);
+            }
+        };
     </script>
 
     {% block extra_js %}{% endblock %}

@@ -443,18 +443,49 @@ async def test_credentials(
         # Clean up on authentication failure
         await scraper_service.cleanup_session(credentials_id)
         logger.warning(
-            "myMoment authentication failed for credentials %s: %s",
+            "Authentication failed during credential test for credentials %s: %s",
             credentials_id,
             e
         )
         raise http_error(
-            status.HTTP_400_BAD_REQUEST,
+            status.HTTP_401_UNAUTHORIZED,
             "mymoment_credentials_authentication_failed",
-            "Authentication with the myMoment platform failed."
+            "Authentication failed. Please verify your username and password are correct."
+        )
+
+    except SessionError as e:
+        # Clean up on session error
+        await scraper_service.cleanup_session(credentials_id)
+        error_message = str(e)
+
+        # Check if it's an authentication failure wrapped in SessionError
+        if "Authentication failed" in error_message or "Login failed" in error_message:
+            logger.warning(
+                "Authentication failed (via SessionError) during credential test for credentials %s: %s",
+                credentials_id,
+                e
+            )
+            raise http_error(
+                status.HTTP_401_UNAUTHORIZED,
+                "mymoment_credentials_authentication_failed",
+                "Authentication failed. Please verify your username and password are correct."
+            )
+
+        # Generic session error
+        logger.error(
+            "Session initialization error during credential test for credentials %s: %s",
+            credentials_id,
+            e,
+            exc_info=True
+        )
+        raise http_error(
+            status.HTTP_400_BAD_REQUEST,
+            "mymoment_credentials_session_error",
+            f"Unable to initialize a session with the myMoment platform: {error_message}"
         )
 
     except ScrapingError as e:
-        # Clean up on scraping error
+        # Clean up on scraping error (catch-all for other ScrapingError subclasses)
         await scraper_service.cleanup_session(credentials_id)
         logger.error(
             "Scraping error during credential test for credentials %s: %s",
@@ -466,21 +497,6 @@ async def test_credentials(
             status.HTTP_400_BAD_REQUEST,
             "mymoment_credentials_scraping_error",
             "Unable to complete scraping validation for the provided credentials."
-        )
-
-    except SessionError as e:
-        # Clean up on session error
-        await scraper_service.cleanup_session(credentials_id)
-        logger.error(
-            "Session initialization error during credential test for credentials %s: %s",
-            credentials_id,
-            e,
-            exc_info=True
-        )
-        raise http_error(
-            status.HTTP_400_BAD_REQUEST,
-            "mymoment_credentials_session_error",
-            "Unable to initialize a session with the myMoment platform."
         )
 
     except Exception as e:
