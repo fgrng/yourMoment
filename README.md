@@ -1,20 +1,24 @@
 # yourMoment
 
-AI-powered monitoring and automation platform for the myMoment writing community. Automates article discovery, generates context-aware AI comments, and manages multiple monitoring workflows with enterprise-grade security and scalability.
+AI-powered monitoring and comment automation platform for the myMoment writing community. Automates article discovery, generates context-aware LLM-generated comments, and manages multiple monitoring workflows.
+
+This software project was developed as [part of the DEEP myMoment research and development project](https://deep-consortium.ch/en/project/deep-mymoment) which itself is a member of the [DEEP research consortium](https://deep-consortium.ch/en/about) that focuses on foundations, challenges, and consequences of digital learning in Swiss primary schools. The development lead was located at [St.Gallen University of teacher education](https://www.phsg.ch/de/forschung-entwicklung/projekte/deep-digital-literacy-participation-writing-platform-mymoment).
+
+[This is also my personal learning project for LLM-driven software engineering tools like Claude Code, spec-kit and alike.]
 
 ## Overview
 
-yourMoment enables users to monitor myMoment articles and automatically generate AI-powered comments using their preferred LLM providers. The platform handles authenticated scraping, comment generation with customizable prompts, and process orchestration through an intuitive web interface.
+yourMoment enables teachers and researchers to monitor myMoment articles and automatically generate LLM-powered comments using their preferred LLM providers (like OpenAI or Mistral). The platform handles authenticated scraping, comment generation with customizable prompts, and process orchestration through a simple web interface.
 
 ## Key Features
 
 - **Multi-user architecture** – Isolated workflows with per-user LLM configurations, credentials, and templates
-- **Enterprise security** – JWT authentication, Fernet encryption for sensitive data, audit logging, and configurable password policies
-- **LLM provider flexibility** – Support for OpenAI, Mistral, and extensible provider system with JSON mode optimization
+- **Basic security** – JWT authentication, Fernet encryption for sensitive data and configurable password policies
+- **LLM provider flexibility** – Support for OpenAI, Mistral. Other providers will be available in the future.
 - **Customizable templates** – System and user-defined prompt templates with validation and required AI disclosure prefix
-- **Automated monitoring** – Background processes with configurable duration limits, multi-credential fan-out, and graceful shutdown
-- **Article management** – Comprehensive article browsing with category/tag filtering and visibility tracking
-- **Production-ready** – Type-safe configuration, health checks, structured logging, and horizontal scalability
+- **Automated monitoring** – Background processes with configurable duration limits, multi-credential fan-out, and (hopefully) graceful shutdown
+- **Article management** – Comprehensive article browsing with category (leaning tasks in myMoment) and tag (classroom in myMoment) filtering
+- **Somewhat Production-ready** – Type-safe configuration, health checks and logging
 
 See `AGENTS.md` for the condensed architecture brief used by AI assistants.
 
@@ -25,7 +29,7 @@ See `AGENTS.md` for the condensed architecture brief used by AI assistants.
 | API & services | FastAPI, SQLAlchemy (async), Alembic |
 | Background jobs | Celery 5 + Redis broker/result store |
 | Scraping | aiohttp, BeautifulSoup4 |
-| LLM integration | instructor library (provider-agnostic) |
+| LLM integration | instructor library |
 | UI | Jinja2 templates, Bootstrap 5, vanilla JS (fetch) |
 | Storage | SQLite by default (PostgreSQL/MySQL compatible) |
 
@@ -39,7 +43,7 @@ See `AGENTS.md` for the condensed architecture brief used by AI assistants.
 ### Installation
 
 ```bash
-# Clone and setup virtual environment
+# Clone and setup virtual environment (recommeded)
 git clone <repo>
 cd yourMoment
 python -m venv .venv
@@ -66,7 +70,7 @@ Access the application at `http://localhost:8000` (UI) and `http://localhost:800
 - Email: `test@yourmoment.dev`
 - Password: `Valid!Password123`
 
-**Note:** The seed command is environment-aware. In production (`ENVIRONMENT=production`), it only creates system templates and prompts you to use `python cli.py user create` for secure user creation.
+**Note:** The seed command is environment-aware. In production (`ENVIRONMENT=production`), it only creates system templates and prompts you to use `python cli.py user create` for secure user creation. This is mandatory since user creation with email validation is not implemted in yourMoment right now.
 
 ### Background Workers (Optional)
 
@@ -149,6 +153,13 @@ See `.env.example` for complete configuration reference.
 
 ### Test Suites
 
+The test suite 
+
+**Unit Tests** – Isolated component testing:
+```bash
+pytest tests/unit -q
+```
+
 **Contract Tests** – API endpoint validation with full app bootstrap:
 ```bash
 pytest tests/contract -q
@@ -159,10 +170,11 @@ pytest tests/contract -q
 pytest tests/integration -q
 ```
 
-**Unit Tests** – Isolated component testing:
+**Performance Tests** – External endpoints testing (myMoment platform, LLM poviders):
 ```bash
-pytest tests/unit -q
+pytest tests/performance -q
 ```
+
 
 ### Test Configuration
 
@@ -210,7 +222,7 @@ python cli.py celery clear              # Clear queues
 - [ ] Review password policy settings (min length, complexity requirements)
 - [ ] Enable audit logging and configure log retention
 - [ ] Use HTTPS/TLS for all external connections
-- [ ] Secure Redis instance with authentication if exposed
+- [ ] Secure Redis instance with authentication (if exposed)
 - [ ] Set appropriate `SESSION_TIMEOUT_MINUTES` for your use case
 
 ### Production Deployment
@@ -226,29 +238,7 @@ python cli.py worker --concurrency 4
 python cli.py scheduler
 ```
 
-See [CLI.md](./CLI.md) for systemd service examples and Docker Compose configuration.
-
-### Scalability
-
-- **Target load**: 100 concurrent users, ~10 processes each
-- **Database**: SQLite suitable for moderate loads; migrate to PostgreSQL for high concurrency
-- **Workers**: Scale Celery workers horizontally as needed
-- **Rate limiting**: Configured per process to respect myMoment platform limits
-- **Session management**: Automatic cleanup with configurable intervals
-
-### Monitoring
-
-- **Logs**: Structured logging via Loguru with rotation (see `LOG_FILE_*` settings)
-- **Health checks**: Built-in process health monitoring (`python cli.py celery health`)
-- **Metrics**: Process execution time, comment generation success rate, session lifecycle
-- **Alerts**: Configure Sentry integration for error tracking (optional)
-
-### Operational Notes
-
-- Monitoring processes enforce strict `max_duration_minutes` limits with immediate shutdown
-- Article filtering supports category (numeric) and tag (slug) filters
-- All sensitive data (credentials, API keys) encrypted at rest with Fernet
-- Session cleanup runs automatically based on `SESSION_CLEANUP_INTERVAL_MINUTES`
+See [CLI.md](./CLI.md) for systemd service examples configuration.
 
 ## Architecture
 
@@ -256,4 +246,15 @@ See `AGENTS.md` for detailed codebase architecture and development guidelines.
 
 ## License
 
-[Specify your license here]
+### Application Code
+
+Application code is released under the permissive [MIT License](./LICENSE), enabling unrestricted use, modification, and distribution.
+
+### Static Assets and bundled Prompt Templates
+
+Static assets and bundled prompt templates (files in `static/` and `templates/prompt_templates/`) are provided under the [Creative Commons Attribution 4.0 International License (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/). When reusing these assets or templates, you must provide appropriate credit, include a link to the license, and indicate if changes were made. A suggested attribution statement is:
+
+> "Includes assets and prompt templates from the yourMoment project (https://github.com/yourMoment/yourMoment) licensed under CC BY 4.0."
+
+For the full legal text of the license, visit the [CC BY 4.0 legal code](https://creativecommons.org/licenses/by/4.0/legalcode).
+
