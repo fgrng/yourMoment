@@ -1,0 +1,21 @@
+# Produktionsanforderungen einschließen
+-r requirements.txt
+
+# Testen
+pytest>=8.4.2,<9.0.0
+pytest-asyncio>=1.2.0,<2.0.0
+pytest-cov>=7.0.0,<8.0.0
+httpx>=0.28.1,<0.30.0
+pytest-mock>=3.15.1,<4.0.0
+
+# Code-Qualität
+black>=25.9.0,<26.0.0
+isort>=6.0.1,<7.0.0
+flake8>=7.3.0,<8.0.0
+mypy>=1.18.2,<2.0.0
+pre-commit>=4.3.0,<5.0.0
+
+# Entwicklungstools
+ipython>=9.3.0,<10.0.0
+ipdb>=0.13.13,<0.14.0
+watchfiles>=1.1.0,<2.0.0
