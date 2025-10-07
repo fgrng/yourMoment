@@ -42,7 +42,7 @@ async function loadProviders() {
         const response = await fetch('/api/v1/llm-providers/index', fetchOptions('GET'));
 
         if (!response.ok) {
-            throw new Error(`Failed to load providers: ${response.status}`);
+            throw new Error(`Anbieter konnten nicht geladen werden (HTTP ${response.status})`);
         }
 
         providers = await response.json();
@@ -57,7 +57,7 @@ async function loadProviders() {
     } catch (error) {
         console.error('Error loading providers:', error);
         showLoadingState(null, [loadingState, emptyState, providersList]);
-        window.showAlert('Unable to load LLM providers. Please try again.', 'danger');
+        window.showAlert('LLM-Anbieter konnten nicht geladen werden. Bitte versuche es erneut.', 'danger');
     }
 }
 
@@ -84,11 +84,11 @@ function renderProviders(items) {
         providersList.style.display = 'none';
         emptyState.style.display = providers.length ? 'block' : 'none';
         if (providers.length) {
-            emptyState.querySelector('h3').textContent = 'No providers match your filter';
-            emptyState.querySelector('p').textContent = 'Adjust your filters or search terms to see other providers.';
+            emptyState.querySelector('h3').textContent = 'Keine Anbieter entsprechen deinen Filtern';
+            emptyState.querySelector('p').textContent = 'Passe Filter oder Suchbegriffe an, um andere Anbieter zu sehen.';
         } else {
-            emptyState.querySelector('h3').textContent = 'No LLM Providers yet';
-            emptyState.querySelector('p').textContent = 'Add your first provider to enable automated comment generation.';
+            emptyState.querySelector('h3').textContent = 'Noch keine LLM-Anbieter';
+            emptyState.querySelector('p').textContent = 'Füge deinen ersten Anbieter hinzu, um automatische Kommentare zu aktivieren.';
         }
         return;
     }
@@ -101,11 +101,11 @@ function renderProviders(items) {
         col.className = 'col-md-6 col-lg-4 mb-4';
 
         const providerLabel = formatProviderLabel(provider.provider_name);
-        const model = provider.model_name ? escapeHtml(provider.model_name) : '<span class="text-muted">Model not set</span>';
-        const tokens = provider.max_tokens ? `${provider.max_tokens} tokens` : 'Default tokens';
+        const model = provider.model_name ? escapeHtml(provider.model_name) : '<span class="text-muted">Kein Modell festgelegt</span>';
+        const tokens = provider.max_tokens ? `${provider.max_tokens} Token` : 'Standard-Token';
         const temperature = provider.temperature !== null && provider.temperature !== undefined
             ? provider.temperature.toFixed(2)
-            : 'Default';
+            : 'Standard';
 
         col.innerHTML = `
             <div class="card h-100">
@@ -113,33 +113,33 @@ function renderProviders(items) {
                     <div>
                         <h5 class="mb-1">${providerLabel}</h5>
                         <span class="badge ${provider.is_active ? 'bg-success' : 'bg-secondary'}">
-                            ${provider.is_active ? 'Active' : 'Inactive'}
+                            ${provider.is_active ? 'Aktiv' : 'Inaktiv'}
                         </span>
                     </div>
                     <small class="text-muted text-end">${formatDate(provider.created_at)}</small>
                 </div>
                 <div class="card-body">
                     <div class="mb-2">
-                        <strong>Model:</strong>
+                        <strong>Modell:</strong>
                         <div>${model}</div>
                     </div>
                     <div class="mb-2">
-                        <strong>Max tokens:</strong>
+                        <strong>Maximale Token:</strong>
                         <div>${tokens}</div>
                     </div>
                     <div class="mb-2">
-                        <strong>Temperature:</strong>
+                        <strong>Temperatur:</strong>
                         <div>${temperature}</div>
                     </div>
-                    <div class="small text-muted">API keys are encrypted and never displayed after saving.</div>
+                    <div class="small text-muted">API-Schlüssel werden verschlüsselt und nach dem Speichern nicht angezeigt.</div>
                 </div>
                 <div class="card-footer bg-transparent">
                     <div class="d-flex gap-2">
                         <a class="btn btn-outline-primary btn-sm flex-grow-1" href="/settings/llm-providers/${provider.id}/edit">
-                            <i class="bi bi-pencil"></i> Edit
+                            <i class="bi bi-pencil"></i> Bearbeiten
                         </a>
                         <button class="btn btn-outline-danger btn-sm" type="button" onclick="window.YM.providers.deleteProvider('${provider.id}')">
-                            <i class="bi bi-trash"></i> Delete
+                            <i class="bi bi-trash"></i> Löschen
                         </button>
                     </div>
                 </div>
@@ -154,13 +154,13 @@ export async function deleteProvider(providerId) {
     try {
         await deleteResource(
             `/api/v1/llm-providers/${providerId}`,
-            'provider configuration',
+            'Anbieterkonfiguration',
             () => {
-                window.showAlert('Provider configuration deleted successfully.', 'success');
+                window.showAlert('Anbieterkonfiguration erfolgreich gelöscht.', 'success');
                 setTimeout(loadProviders, 800);
             }
         );
     } catch (error) {
-        window.showAlert(`Error deleting provider: ${error.message}`, 'danger');
+        window.showAlert(`Fehler beim Löschen des Anbieters: ${error.message}`, 'danger');
     }
 }

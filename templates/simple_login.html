@@ -1,6 +1,6 @@
 {% extends "simple_base.html" %}
 
-{% block title %}Login - yourMoment{% endblock %}
+{% block title %}Anmeldung - yourMoment{% endblock %}
 
 {% block content %}
     <div class="ym-logo-container">
@@ -9,8 +9,8 @@
 
     <div class="auth-form">
         <div class="text-center mb-4">
-            <h2>Sign In</h2>
-            <p class="text-muted">Welcome back to yourMoment</p>
+            <h2>Anmelden</h2>
+            <p class="text-muted">Willkommen zurück bei yourMoment</p>
         </div>
 
         {% if error_message %}
@@ -21,7 +21,7 @@
 
         <form id="loginForm" action="/login" method="post">
             <div class="mb-3">
-                <label for="email" class="form-label">Email Address</label>
+                <label for="email" class="form-label">E-Mail-Adresse</label>
                 <input
                     type="email"
                     class="form-control"
@@ -34,7 +34,7 @@
             </div>
 
             <div class="mb-3">
-                <label for="password" class="form-label">Password</label>
+                <label for="password" class="form-label">Passwort</label>
                 <input
                     type="password"
                     class="form-control"
@@ -48,12 +48,12 @@
 
             <button type="submit" class="btn btn-primary w-100 mb-3">
                 <i class="bi bi-box-arrow-in-right me-2"></i>
-                Sign In
+                Anmelden
             </button>
         </form>
 
         <div class="text-center">
-            <p>Don't have an account? <a href="/register">Create Account</a></p>
+            <p>Noch kein Konto? <a href="/register">Konto erstellen</a></p>
         </div>
     </div>
 {% endblock %}
