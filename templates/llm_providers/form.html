@@ -8,16 +8,16 @@
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
             <div>
                 <h1 class="mb-0">
-                    <i class="bi bi-plug me-2"></i>
-                    {% if provider_id %}LLM-Anbieter bearbeiten{% else %}LLM-Anbieter verbinden{% endif %}
+                    <i class="bi bi-robot me-2"></i>
+                    {% if provider_id %}LLM-Anbieter bearbeiten{% else %}LLM-Anbieter konfigurieren{% endif %}
                 </h1>
                 <p class="text-muted mb-0">
-                    {% if provider_id %}Aktualisiere die Modellkonfiguration und den API-Schlüssel{% else %}Füge einen API-Anbieter für die automatische Kommentierung hinzu{% endif %}
+                    {% if provider_id %}Aktualisiere die Konfiguration und den API-Schlüssel des LLM-Anbieters{% else %}Füge einen LLM-Anbieter für die automatische KI-Kommentierung hinzu{% endif %}
                 </p>
             </div>
             <div>
                 <a href="/settings/llm-providers" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-left me-2"></i>Zurück zu den Anbietern
+                    <i class="bi bi-arrow-left me-2"></i>Zurück zu den LLM-Anbietern
                 </a>
             </div>
         </div>
@@ -28,21 +28,21 @@
     <div class="spinner-border text-primary" role="status">
         <span class="visually-hidden">Wird geladen …</span>
     </div>
-    <p class="mt-2 text-muted">Anbieterkonfiguration wird geladen …</p>
+    <p class="mt-2 text-muted">Konfiguration des LLM-Anbieters wird geladen …</p>
 </div>
 
 <div class="row mt-4" id="formContainer" style="display: {{ 'none' if provider_id else 'flex' }};">
     <div class="col-lg-8">
         <div class="card mb-3">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Anbieterkonfiguration</h5>
+                <h5 class="mb-0"><i class="bi bi-plug me-2"></i>Konfiguration des LLM-Anbieters</h5>
             </div>
             <div class="card-body">
                 <form id="providerForm">
                     <div class="mb-3">
-                        <label for="providerName" class="form-label">Anbieter <span class="text-danger">*</span></label>
+                        <label for="providerName" class="form-label">LLM-Anbieter <span class="text-danger">*</span></label>
                         <select id="providerName" name="provider_name" class="form-select" {{ 'disabled' if provider_id else '' }} required>
-                            <option value="">Anbieter auswählen</option>
+                            <option value="">Unterstützte LLM-Anbieter auswählen</option>
                             <option value="openai">OpenAI</option>
                             <option value="mistral">Mistral</option>
                         </select>
@@ -67,13 +67,13 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label for="maxTokens" class="form-label">Maximale Token</label>
-                            <input type="number" id="maxTokens" name="max_tokens" class="form-control" min="1" placeholder="Anbietervorgabe verwenden" disabled>
+                            <input type="number" id="maxTokens" name="max_tokens" class="form-control" min="1" placeholder="Voreinstellung des LLM-Anbieters verwenden" disabled>
                             <div class="form-text">Optionales Token-Limit für Antworten.</div>
                         </div>
                         <div class="col-md-6">
                             <label for="temperature" class="form-label">Temperatur</label>
                             <div class="input-group">
-                                <input type="number" id="temperature" name="temperature" class="form-control" min="0" max="1" step="0.05" placeholder="Anbietervorgabe verwenden" disabled>
+                                <input type="number" id="temperature" name="temperature" class="form-control" min="0" max="1" step="0.05" placeholder="Voreinstellung des LLM-Anbieters verwenden" disabled>
                                 <span class="input-group-text">0.0 - 1.0</span>
                             </div>
                             <div class="form-text">Optionaler Temperaturwert. Niedrige Werte erzeugen fokussierte Antworten, höhere Werte sorgen für mehr Kreativität.</div>
@@ -82,7 +82,7 @@
 
                     <div class="d-flex gap-2 mt-4">
                         <button type="submit" class="btn btn-primary" id="submitBtn">
-                            <i class="bi bi-check-circle me-2"></i>{% if provider_id %}Änderungen speichern{% else %}Anbieter erstellen{% endif %}
+                            <i class="bi bi-check-circle me-2"></i>{% if provider_id %}Änderungen speichern{% else %}LLM-Anbieter anlegen{% endif %}
                         </button>
                         <a href="/settings/llm-providers" class="btn btn-outline-secondary">Abbrechen</a>
                     </div>
@@ -94,14 +94,15 @@
     <div class="col-lg-4">
         <div class="card mb-3">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Anbieter-Tipps</h5>
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Brauchst du Hilfe?</h5>
             </div>
             <div class="card-body small">
+                <p>Hisweise zur <strong>Konfiguration von LLM-Anbietern</strong>:</p>
                 <ul class="mb-0">
-                    <li>Halte API-Schlüssel eng gefasst und rotiere sie regelmäßig.</li>
-                    <li>Wähle Modelle passend zu deinem Szenario (Geschwindigkeit vs. Qualität).</li>
-                    <li>Eine Temperatur von 0,2–0,4 sorgt für regelkonforme Kommentare.</li>
-                    <li>Lass optionale Felder leer, um Anbietervorgaben zu nutzen.</li>
+                    <li>Halte API-Schlüssel geheim und rotiere sie regelmäßig.</li>
+                    <li>Wähle Modelle passend zu deinem Szenario (Kosten vs. Qualität).</li>
+                    <li>Eine geringe Temperatur sorgt für regelkonformere Kommentare.</li>
+                    <li>Lass optionale Felder leer, um Voreinstellungen der LLM-Anbieter zu nutzen.</li>
                 </ul>
             </div>
         </div>
@@ -155,7 +156,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             method,
             payload,
             () => {
-                window.showAlert('Anbieterkonfiguration wurde erfolgreich gespeichert.', 'success');
+                window.showAlert('Konfiguration des LLM-Anbieters wurde erfolgreich gespeichert.', 'success');
                 setTimeout(() => {
                     window.location.href = '/settings/llm-providers';
                 }, 1000);
@@ -183,7 +184,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             const provider = providers.find(item => item.id === providerId);
 
             if (!provider) {
-                window.showAlert('Anbieterkonfiguration nicht gefunden oder kein Zugriff.', 'danger');
+                window.showAlert('Konfiguration des LLM-Anbieters nicht gefunden oder kein Zugriff.', 'danger');
                 loadingState.style.display = 'none';
                 return;
             }
@@ -201,7 +202,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             formContainer.style.display = 'flex';
         } catch (error) {
             console.error('Error loading provider configuration:', error);
-            window.showAlert('Anbieterkonfiguration konnte nicht geladen werden. Bitte später erneut versuchen.', 'danger');
+            window.showAlert('Konfiguration des LLM-Anbieters konnte nicht geladen werden. Bitte später erneut versuchen.', 'danger');
             loadingState.style.display = 'none';
         }
     }
@@ -214,12 +215,12 @@ document.addEventListener('DOMContentLoaded', async function() {
         const temperature = temperatureInput.value.trim();
 
         if (!providerName) {
-            window.showAlert('Bitte wähle vor dem Speichern einen Anbieter aus.', 'warning');
+            window.showAlert('Bitte wähle vor dem Speichern einen LLM-Anbieter aus.', 'warning');
             return null;
         }
 
         if (!isEditMode && !apiKey) {
-            window.showAlert('Beim Anlegen eines Anbieters ist ein API-Schlüssel erforderlich.', 'warning');
+            window.showAlert('Beim Anlegen eines LLM-Anbieters ist ein API-Schlüssel erforderlich.', 'warning');
             return null;
         }
 

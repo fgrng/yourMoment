@@ -7,7 +7,11 @@
     <div class="col-12">
         <h1>Willkommen im yourMoment-Dashboard</h1>
         {% if user %}
-        <p class="lead">Hallo, {{ user.email }}!</p>
+        <p class="lead">
+            Hallo,
+            <span class="lead badge text-bg-light">{{ user.email }}</span>
+            !
+        </p>
         {% endif %}
     </div>
 </div>
@@ -16,11 +20,11 @@
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
-                <h5><i class="bi bi-gear-fill me-2"></i>Überwachungsprozesse</h5>
+                <h5><i class="bi bi-activity me-2"></i>Automatische Erstellung von KI-Kommentaren</h5>
             </div>
             <div class="card-body">
-                <p>Erstelle und verwalte deine Artikelüberwachungsprozesse.</p>
-                <a href="/processes" class="btn btn-primary">Prozesse anzeigen</a>
+                <p>Erstelle und verwalte Überwachungsprozesse für KI-Kommenare auf myMoment</p>
+                <a href="/processes" class="btn btn-primary">Prozesse verwalten</a>
                 <a href="/processes/new" class="btn btn-outline-primary">Neuen Prozess anlegen</a>
             </div>
         </div>
@@ -48,6 +52,7 @@
             <div class="card-body">
                 <p>Verwalte deine KI-Anbieter und API-Schlüssel.</p>
                 <a href="/settings/llm-providers" class="btn btn-primary">Anbieter verwalten</a>
+                <a href="/settings/llm-providers/new" class="btn btn-outline-primary">Neuen Anbieter anlegen</a>
             </div>
         </div>
     </div>
@@ -60,6 +65,7 @@
             <div class="card-body">
                 <p>Verwalte die Zugangsdaten, mit denen du myMoment aufrufst.</p>
                 <a href="/settings/mymoment-credentials" class="btn btn-primary">Zugangsdaten verwalten</a>
+                <a href="/settings/mymoment-credentials/new" class="btn btn-outline-primary">Neue Zugangsdaten anlegen</a>
             </div>
         </div>
     </div>
@@ -69,11 +75,12 @@
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
-                <h5><i class="bi bi-file-text me-2"></i>Prompt-Vorlagen</h5>
+                <h5><i class="bi bi-braces-asterisk me-2"></i>Prompt-Vorlagen</h5>
             </div>
             <div class="card-body">
                 <p>Verwalte deine Prompt-Vorlagen.</p>
                 <a href="/settings/prompt-templates" class="btn btn-primary">Prompt-Vorlagen verwalten</a>
+                <a href="/settings/prompt-templates/new" class="btn btn-outline-primary">Neue Prompt-Vorlage anlegen</a>
             </div>
         </div>
     </div>
@@ -81,18 +88,33 @@
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
+                <h5><i class="bi bi-file-text me-2"></i>Backup-Prozesse</h5>
+            </div>
+            <div class="card-body">
+                <p>Verwalte Backup-Prozesse für Texte spezifischer myMoment-Zugangsdaten</p>
+                <a href="#" class="btn btn-primary disabled">Backup-Prozesse verwalten</a>
+                <a href="#" class="btn btn-outline-primary disabled">Neuen Backup-Prozesse anlegen</a>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
                 <h5><i class="bi bi-info-circle me-2"></i>Schnellstart</h5>
             </div>
             <div class="card-body">
                 <ol>
-                    <li>Konfiguriere deinen LLM-Anbieter (OpenAI, Mistral, HuggingFace)</li>
-                    <li>Füge deine myMoment-Zugangsdaten hinzu</li>
-                    <li>Erstelle einen Überwachungsprozess</li>
+                    <li>Erstelle deine Prompt-Vorlage für Erstellung von Kommentaren</li>
+                    <li>Füge myMoment-Zugangsdaten von Dummy-Accouns hinzu</li>
+                    <li>Konfiguriere deinen LLM-Anbieter (OpenAI, Mistral, …)</li>
+                    <li>Konfiguriere einen Überwachungsprozess</li>
                     <li>Starte die Überwachung und lasse die KI automatisch kommentieren!</li>
                 </ol>
                 <p class="text-muted">
                     <strong>Hinweis:</strong> Alle KI-Kommentare erhalten automatisch den Präfix
-                    "[Dieser Kommentar stammt von einem KI-ChatBot.]" wie vorgeschrieben.
+                    "[Dieser Kommentar stammt von einem KI-ChatBot.]".
                 </p>
             </div>
         </div>

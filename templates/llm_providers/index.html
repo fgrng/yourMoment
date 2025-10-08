@@ -7,12 +7,12 @@
     <div class="col-12">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
             <div>
-                <h1 class="mb-0"><i class="bi bi-sliders me-2"></i>LLM-Anbieter</h1>
+                <h1 class="mb-0"><i class="bi bi-robot me-2"></i>LLM-Anbieter</h1>
                 <p class="text-muted mb-0">Verwalte API-Zugangsdaten und Modelle für die KI-Kommentierung</p>
             </div>
             <div>
                 <a href="/settings/llm-providers/new" class="btn btn-primary">
-                    <i class="bi bi-plus-circle me-2"></i>Anbieter hinzufügen
+                    <i class="bi bi-plus-circle me-2"></i>LLM-Anbieter anlegen
                 </a>
             </div>
         </div>
@@ -23,7 +23,7 @@
     <div class="col-md-4 mb-3">
         <label for="providerFilter" class="form-label">Anbieter</label>
         <select id="providerFilter" class="form-select">
-            <option value="ALL" selected>Alle Anbieter</option>
+            <option value="ALL" selected>Alle LLM-Anbieter</option>
             <option value="openai">OpenAI</option>
             <option value="mistral">Mistral</option>
         </select>
@@ -37,7 +37,7 @@
     <div class="col-md-4 mb-3">
         <label class="form-label">Kurzhilfe</label>
         <div class="border rounded bg-light p-3 small">
-            <p class="mb-2"><strong>Tipp:</strong> Verwende getrennte API-Schlüssel für Produktion und Test.</p>
+            <p class="mb-2"><strong>Tipp:</strong> Verwende getrennte API-Schlüssel für Test- und Produkivumgebung.</p>
             <p class="mb-0">Halte deine Schlüssel geheim – sie werden vor der Speicherung verschlüsselt.</p>
         </div>
     </div>
@@ -53,9 +53,9 @@
 <div id="emptyState" class="text-center my-5" style="display: none;">
     <i class="bi bi-cloud-upload text-muted" style="font-size: 4rem;"></i>
     <h3 class="mt-3">Noch keine LLM-Anbieter</h3>
-    <p class="text-muted">Füge deinen ersten Anbieter hinzu, um automatische Kommentare zu aktivieren.</p>
+    <p class="text-muted">Füge deinen ersten LLM-Anbieter hinzu, um automatische KI-Kommentare zu aktivieren.</p>
     <a href="/settings/llm-providers/new" class="btn btn-primary mt-3">
-        <i class="bi bi-plus-circle me-2"></i>Anbieter hinzufügen
+        <i class="bi bi-plus-circle me-2"></i>LLM-Anbieter anlegen
     </a>
 </div>
 

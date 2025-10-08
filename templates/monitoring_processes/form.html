@@ -38,7 +38,7 @@
                     <div class="mb-3">
                         <label for="name" class="form-label">Prozessname <span class="text-danger">*</span></label>
                         <input type="text" id="name" name="name" class="form-control" maxlength="100" required placeholder="z. B. Tech-Artikel-Überwachung">
-                        <div class="form-text">Ein eindeutiger Name für diesen Überwachungsprozess</div>
+                        <div class="form-text">Ein eindeutiger Name für diesen Überwachungsprozess (nur für dich sichtbar)</div>
                     </div>
 
                     <div class="mb-3">
@@ -56,9 +56,9 @@
                         <div class="col-md-6">
                             <label for="llmProvider" class="form-label">LLM-Anbieter <span class="text-danger">*</span></label>
                             <select id="llmProvider" name="llm_provider_id" class="form-select" required>
-                                <option value="">Anbieter auswählen</option>
+                                <option value="">LLM-Anbieter auswählen</option>
                             </select>
-                            <div class="form-text">KI-Anbieter, der die Kommentare erzeugt</div>
+                            <div class="form-text">LLM-Anbieter, mit dem die KI-Kommentare erzeugt werden</div>
                         </div>
                     </div>
 
@@ -66,17 +66,17 @@
                         <div class="col-md-6">
                             <label for="promptTemplates" class="form-label">Prompt-Vorlagen <span class="text-danger">*</span></label>
                             <select id="promptTemplates" name="prompt_template_ids" class="form-select" size="6" required></select>
-                            <div class="form-text">Prompt-Vorlage, die zur Kommentarerstellung verwendet wird</div>
+                            <div class="form-text">Prompt-Vorlage(n) für die Erstellung der KI-Kommentare</div>
                         </div>
                         <div class="col-md-6">
                             <label for="loginIds" class="form-label">myMoment-Zugangsdaten <span class="text-danger">*</span></label>
                             <select id="loginIds" name="mymoment_login_ids" class="form-select" size="6" required></select>
-                            <div class="form-text">myMoment-Zugangsdaten, die zum Posten der Kommentare genutzt werden</div>
+                            <div class="form-text">myMoment-Zugangsdaten, die zum Posten der KI-Kommentare auf myMoment genutzt werden</div>
                         </div>
                     </div>
 
                     <div class="mt-3">
-                        <label class="form-label">Ziel-Filter</label>
+                        <label class="form-label">Filter für myMoment Artikel</label>
                         <div class="row g-2">
                             <div class="col-md-4">
                                 <label for="tabFilter" class="form-label small">
@@ -86,9 +86,9 @@
                                     </span>
                                 </label>
                                 <select id="tabFilter" class="form-select" disabled>
-                                    <option value="">Wähle zuerst Zugangsdaten aus</option>
+                                    <option value="">Wähle Zugangsdaten aus</option>
                                 </select>
-                                <div class="form-text" id="tabFilterHelp">Wähle myMoment-Zugangsdaten, um verfügbare Tabs zu laden</div>
+                                <div class="form-text" id="tabFilterHelp">Wähle myMoment-Zugangsdaten, um verfügbare Klasse zu laden</div>
                             </div>
                             <div class="col-md-4">
                                 <label for="categoryFilter" class="form-label small">Kategorie</label>
@@ -109,30 +109,28 @@
                             </div>
                             <div class="col-md-4">
                                 <label for="searchFilter" class="form-label small">Suchbegriff</label>
-                                <input type="text" id="searchFilter" class="form-control" placeholder="Stichwörter">
+                                <input type="text" id="searchFilter" class="form-control" placeholder="Stichwörter" disabled>
+                                <div class="form-text">Optionale Filter, um Artikel mit bestimmten Titeln auf myMoment anzusteuern (derzeit nicht verfügbar)</div>
                             </div>
                         </div>
-                        <div class="form-text">Optionale Filter, um bestimmte Artikel auf myMoment anzusteuern</div>
                     </div>
+
+                    <hr>
 
                     <div class="mb-3">
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="generateOnlyCheckbox" checked>
                             <label class="form-check-label" for="generateOnlyCheckbox">
-                                <strong>Nur Kommentare erzeugen (nicht auf myMoment posten)</strong>
+                                <strong>KI-Kommentare nur erzeugen und noch nicht auf myMoment posten</strong>
                             </label>
                             <div class="form-text">
-                                Wenn aktiviert, werden Kommentare erzeugt und gespeichert, aber NICHT auf myMoment veröffentlicht.
-                                Deaktiviere die Option, um erzeugte Kommentare automatisch auf myMoment-Artikeln zu posten.
+                                Wenn aktiviert, werden KI-Kommentare erzeugt und gespeichert, aber NICHT auf myMoment veröffentlicht.
+                                Deaktiviere die Option, um erzeugte Kommentare automatisch unter myMoment-Artikeln zu posten.
                             </div>
                         </div>
                     </div>
 
-                    <div class="alert alert-info mt-4" role="alert">
-                        <i class="bi bi-lightbulb me-2"></i>
-                        <strong>Wichtig:</strong> Alle KI-Kommentare enthalten automatisch den deutschen Präfix:
-                        <code>[Dieser Kommentar stammt von einem KI-ChatBot.]</code>
-                    </div>
+                    <hr>
 
                     <div class="d-flex gap-2 mt-3">
                         <button type="submit" class="btn btn-primary" id="submitBtn">
@@ -148,29 +146,24 @@
     <div class="col-lg-4">
         <div class="card mb-3">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>So funktioniert es</h5>
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Brauchst du Hilfe?</h5>
             </div>
             <div class="card-body small">
+                <p> So funktioniert ein <strong>Überwachungsprozess</strong>:
                 <ol class="mb-0">
-                    <li>Der Prozess überwacht myMoment auf neue Artikel, die deinen Filtern entsprechen</li>
-                    <li>Für jeden neuen Artikel wird zufällig eine Prompt-Vorlage ausgewählt</li>
-                    <li>Dein LLM-Anbieter erzeugt daraus einen KI-Kommentar</li>
-                    <li>Die Kommentare werden mit allen ausgewählten myMoment-Zugangsdaten gepostet</li>
-                    <li>Der Prozess stoppt automatisch, sobald die Maximaldauer erreicht ist</li>
+                    <li>Der Prozess überwacht myMoment auf neue Artikel, die deinen Filtern entsprechen.</li>
+                    <li>Für jeden neuen Artikel wird pro Prompt-Vorlage und pro myMoment-Zugang eine Anfrage an deinen LLM-Anbieter vorbereitet.</li>
+                    <li>Dein LLM-Anbieter erzeugt daraus einen KI-Kommentar.</li>
+                    <li>Die Kommentare werden mit den ausgewählten myMoment-Zugangsdaten auf myMoment gepostet.</li>
+                    <li>Der Prozess stoppt automatisch, sobald die Maximaldauer erreicht ist.</li>
                 </ol>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>Sicherheit & Compliance</h5>
-            </div>
-            <div class="card-body small">
+                <hr>
+                <p>Hinweise zu <strong>Sicherheit und Compliance</strong></p>
                 <ul class="mb-0">
-                    <li>Alle Zugangsdaten werden verschlüsselt gespeichert</li>
-                    <li>KI-Kommentare enthalten den vorgeschriebenen deutschen Hinweis</li>
-                    <li>Die Laufzeit ist strikt auf die Maximaldauer begrenzt</li>
-                    <li>Du kannst Prozesse jederzeit über die Übersicht starten oder stoppen</li>
+                    <li>Alle Zugangsdaten werden verschlüsselt gespeichert.</li>
+                    <li>Die Laufzeit ist strikt auf die Maximaldauer begrenzt.</li>
+                    <li>Du kannst Prozesse jederzeit manuell starten oder stoppen</li>
+                    <li> Alle KI-Kommentare erhalten automatisch den Präfix "[Dieser Kommentar stammt von einem KI-ChatBot.]".</li>
                 </ul>
             </div>
         </div>

@@ -493,31 +493,37 @@ async def prompt_templates_index(
         "is_authenticated": True,
         "user_templates": context_user_templates,
         "system_templates": context_system_templates,
-        "placeholders": placeholders,
+        "placeholders": placeholders
     })
 
 
 @router.get("/settings/prompt-templates/new", response_class=HTMLResponse)
 async def prompt_templates_new(request: Request, user: User = Depends(get_current_user)):
     """Create prompt template page."""
+    placeholders = list(SUPPORTED_PLACEHOLDERS.values())
+
     return templates.TemplateResponse("prompt_templates/form.html", {
         "request": request,
         "user": user,
         "current_user": user,
         "is_authenticated": True,
-        "template_id": None
+        "template_id": None,
+        "placeholders": placeholders
     })
 
 
 @router.get("/settings/prompt-templates/{template_id}/edit", response_class=HTMLResponse)
 async def prompt_templates_edit(request: Request, template_id: str, user: User = Depends(get_current_user)):
     """Edit prompt template page."""
+    placeholders = list(SUPPORTED_PLACEHOLDERS.values())
+
     return templates.TemplateResponse("prompt_templates/form.html", {
         "request": request,
         "user": user,
         "current_user": user,
         "is_authenticated": True,
-        "template_id": template_id
+        "template_id": template_id,
+        "placeholders": placeholders
     })
 
 # Error pages

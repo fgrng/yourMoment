@@ -1,6 +1,6 @@
 {% extends "simple_base.html" %}
 
-{% block title %}{% if credential_id %}myMoment-Zugang bearbeiten{% else %}myMoment-Zugang hinzufügen{% endif %} - yourMoment{% endblock %}
+{% block title %}{% if credential_id %}myMoment-Zugang bearbeiten{% else %}myMoment-Zugangsdaten anlegen{% endif %} - yourMoment{% endblock %}
 
 {% block content %}
 <div class="row">
@@ -9,10 +9,10 @@
             <div>
                 <h1>
                     <i class="bi bi-person-circle me-2"></i>
-                    {% if credential_id %}myMoment-Zugang bearbeiten{% else %}myMoment-Zugang hinzufügen{% endif %}
+                    {% if credential_id %}myMoment-Zugangsdaten bearbeiten{% else %}myMoment-Zugangsdaten anlegen{% endif %}
                 </h1>
                 <p class="text-muted">
-                    {% if credential_id %}Aktualisiere deine myMoment-Zugangsdaten{% else %}Hinterlege deine myMoment-Zugangsdaten für automatisierte Kommentare{% endif %}
+                    {% if credential_id %}Aktualisiere deine myMoment-Zugangsdaten{% else %}Hinterlege deine myMoment-Zugangsdaten für automatisierte KI-Kommentare{% endif %}
                 </p>
             </div>
             <div>
@@ -31,7 +31,7 @@
     <div class="spinner-border text-primary" role="status">
         <span class="visually-hidden">Wird geladen …</span>
     </div>
-    <p class="mt-2 text-muted">Kontodetails werden geladen …</p>
+    <p class="mt-2 text-muted">myMoment-Zugangsdaten werden geladen …</p>
 </div>
 
 <!-- Form -->
@@ -39,23 +39,23 @@
     <div class="col-lg-8">
         <div class="card">
             <div class="card-header">
-                <h5><i class="bi bi-person-badge me-2"></i>Kontoinformationen</h5>
+                <h5><i class="bi bi-person-badge me-2"></i>myMoment-Zugangsdaten</h5>
             </div>
             <div class="card-body">
                 <form id="credentialForm">
                     <!-- Name Field -->
                     <div class="mb-3">
                         <label for="name" class="form-label">
-                            Kontoname <span class="text-danger">*</span>
+                            Name <span class="text-danger">*</span>
                         </label>
                         <input type="text"
                                class="form-control"
                                id="name"
                                name="name"
-                               placeholder="z. B. Mein Hauptkonto"
+                               placeholder="z. B. Dummykonto für meine Klasse"
                                required>
                         <div class="form-text">
-                            Ein leicht erkennbarer Name für diesen Zugang
+                            Ein leicht erkennbarer Name für diesen Zugang (nur für dich sichtbar)
                         </div>
                     </div>
 
@@ -68,10 +68,10 @@
                                class="form-control"
                                id="username"
                                name="username"
-                               placeholder="ArtificialArmadillo"
+                               placeholder="z. B. GracefulUnicorn"
                                required>
                         <div class="form-text">
-                            Dein Benutzername für myMoment
+                            Dein Benutzername für das myMoment-Konto
                         </div>
                     </div>
 
@@ -92,7 +92,7 @@
                             </button>
                         </div>
                         <div class="form-text">
-                            {{ 'Leer lassen, um das bestehende Passwort zu behalten' if credential_id else 'Dein myMoment-Passwort (wird vor der Speicherung verschlüsselt)' }}
+                            {{ 'Leer lassen, um das bestehende Passwort zu behalten' if credential_id else 'Dein Passwort für das myMoment-Konto' }}
                         </div>
                     </div>
 
@@ -106,7 +106,7 @@
                         <label class="form-check-label" for="is_active">
                             <strong>Aktiv</strong>
                             <div class="form-text">
-                                Nur aktive Zugangsdaten können in Überwachungsprozessen verwendet werden
+                                Nur aktive myMoment-Zugangsdaten können für automatisierte KI-Kommenare verwendet werden
                             </div>
                         </label>
                     </div>
@@ -114,17 +114,17 @@
                     <!-- Security Notice -->
                     <div class="alert alert-info">
                         <i class="bi bi-shield-lock me-2"></i>
-                        <strong>Sicherheit:</strong> Dein Passwort wird vor der Speicherung mit einem Industriestandard verschlüsselt.
+                        <strong>Sicherheit:</strong> Dein Passwort wird vor der Speicherung verschlüsselt.
                     </div>
 
                     <!-- Form Actions -->
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary" id="submitBtn">
                             <i class="bi bi-check-circle me-2"></i>
-                            {{ 'Konto aktualisieren' if credential_id else 'Konto hinzufügen' }}
+                            {{ 'myMoment-Zugangsdaten aktualisieren' if credential_id else 'myMoment-Zugangsdaten anlegen' }}
                         </button>
                         <button type="button" class="btn btn-outline-secondary" id="testBtn">
-                            <i class="bi bi-check-circle me-2"></i>Verbindung testen
+                            <i class="bi bi-check-circle me-2"></i>myMoment-Zugangsdaten testen
                         </button>
                 <a href="/settings/mymoment-credentials" class="btn btn-outline-secondary">
                             Abbrechen
@@ -139,37 +139,23 @@
     <div class="col-lg-4">
         <div class="card">
             <div class="card-header">
-                <h5><i class="bi bi-info-circle me-2"></i>Über myMoment-Zugangsdaten</h5>
+                <h5><i class="bi bi-info-circle me-2"></i>Brauchst du Hilfe?</h5>
             </div>
-            <div class="card-body">
-                <p>myMoment-Zugangsdaten werden genutzt, um:</p>
+            <div class="card-body small">
+                <p><strong>myMoment-Zugangsdaten</strong> werden genutzt, um:</p>
                 <ul>
                     <li>Artikel auf der myMoment-Plattform zu überwachen</li>
                     <li>KI-generierte Kommentare automatisch zu posten</li>
-                    <li>Nachzuvollziehen, auf welche Artikel jedes Konto Zugriff hat</li>
                 </ul>
                 <hr>
-                <p><strong>Mehrere Konten:</strong></p>
+                <p>Hinweise zu <strong>mehreren Konten</strong>:</p>
                 <ul>
-                    <li>Du kannst mehrere myMoment-Zugänge hinzufügen</li>
-                    <li>Jeder Überwachungsprozess kann mehrere Zugangsdaten nutzen</li>
-                    <li>Pro Zugang wird ein Kommentar zu neuen Artikeln veröffentlicht</li>
+                    <li>Du kannst mehrere myMoment-Zugangsdaten in yourMoment verwalten.</li>
+                    <li>Bei der Automatisierung von KI-Kommentaren können mehrere myMoment-Zugangsdaten verwendet werden, um mehrere Kommentare gleichzeitig zu erstellen.</li>
                 </ul>
                 <hr>
-                <p class="mb-0"><strong>Sicherheit:</strong></p>
-                <p class="text-muted small">
-                    Deine Zugangsdaten werden vor der Speicherung mit Fernet verschlüsselt. Nur du kannst sie nutzen.
-                </p>
-            </div>
-        </div>
-
-        <div class="card mt-3">
-            <div class="card-header">
-                <h5><i class="bi bi-question-circle me-2"></i>Brauchst du Hilfe?</h5>
-            </div>
-            <div class="card-body">
-                <p class="small">Falls du noch keine myMoment-Zugangsdaten hast:</p>
-                <ol class="small">
+                <p>Falls du <strong>noch keine myMoment-Zugangsdaten</strong> hast:</p>
+                <ol>
                     <li>Besuche die myMoment-Plattform</li>
                     <li>Erstelle ein Konto</li>
                     <li>Kehre hierher zurück und hinterlege deine Zugangsdaten</li>

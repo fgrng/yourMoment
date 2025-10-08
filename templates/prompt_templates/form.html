@@ -8,23 +8,21 @@
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
             <div>
                 <h1 class="mb-0">
-                    <i class="bi bi-pencil-square me-2"></i>
-                    {% if template_id %}Prompt-Vorlage bearbeiten{% else %}Prompt-Vorlage erstellen{% endif %}
+                    <i class="bi bi-braces-asterisk me-2"></i>
+                    {% if template_id %}Prompt-Vorlage bearbeiten{% else %}Prompt-Vorlage anlegen{% endif %}
                 </h1>
                 <p class="text-muted mb-0">
-                    {% if template_id %}Passe Aufbau und Inhalt dieser Prompt-Vorlage an{% else %}Definiere wiederverwendbare System- und Benutzerprompts für KI-Kommentare{% endif %}
+                    {% if template_id %}Passe Aufbau und Inhalt dieser Prompt-Vorlage an{% else %}Lege eine wiederverwendbare Prompt-Vorlage für KI-generierte Kommentare an{% endif %}
                 </p>
             </div>
             <div class="d-flex gap-2">
                 <a href="/settings/prompt-templates" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-left me-2"></i>Zurück zu den Vorlagen
+                    <i class="bi bi-arrow-left me-2"></i>Zurück zu den Prompt-Vorlagen
                 </a>
             </div>
         </div>
     </div>
 </div>
-
-<!-- Alert Messages -->
 
 <!-- Loading State (visible for edit mode before data loads) -->
 <div id="loadingState" class="text-center my-5" style="display: {{ 'block' if template_id else 'none' }};" aria-live="polite" aria-busy="true">
@@ -45,20 +43,18 @@
                     <div class="mb-3">
                         <label for="name" class="form-label">Name der Vorlage <span class="text-danger">*</span></label>
                         <input type="text" id="name" name="name" class="form-control" maxlength="100" required placeholder="z. B. Standardneutrale Antwort">
-                        <div class="form-text"><span id="nameCount">0</span>/100 Zeichen</div>
                     </div>
 
                     <div class="mb-3">
                         <label for="description" class="form-label">Beschreibung</label>
                         <textarea id="description" name="description" class="form-control" rows="2" maxlength="500" placeholder="Beschreibe kurz, wann diese Vorlage genutzt wird"></textarea>
-                        <div class="form-text"><span id="descriptionCount">0</span>/500 Zeichen</div>
                     </div>
 
                     <div class="mb-3">
                         <label for="systemPrompt" class="form-label">System-Prompt <span class="text-danger">*</span></label>
                         <textarea id="systemPrompt" name="system_prompt" class="form-control" rows="6" required placeholder="Definiere Persönlichkeit, Ziele, Tonalität und Sicherheitsleitlinien"></textarea>
                         <div class="form-text">
-                            Der System-Prompt legt das generelle Verhalten der KI fest. Mindestens 10 Zeichen.
+                            Der System-Prompt legt das generelle Verhalten der KI fest.
                         </div>
                     </div>
 
@@ -74,15 +70,15 @@
                         </div>
                         <textarea id="userPromptTemplate" name="user_prompt_template" class="form-control mt-2" rows="8" required placeholder="Formuliere die Anweisung, die die KI pro Artikel erhält, inklusive Platzhaltern."></textarea>
                         <div class="form-text">
-                            Diese Vorlage wird pro Artikel ausgefüllt. Unterstützte Platzhalter: <code>{article_title}</code>, <code>{article_author}</code>, <code>{article_content}</code>, <code>{article_raw_html}</code>.
+                            Diese Vorlage wird pro Artikel von myMoment ausgefüllt. Unterstützte Platzhalter: <code>{article_title}</code>, <code>{article_author}</code>, <code>{article_content}</code>, <code>{article_raw_html}</code>.
                         </div>
                     </div>
 
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary" id="submitBtn">
-                            <i class="bi bi-check-circle me-2"></i>{% if template_id %}Vorlage aktualisieren{% else %}Vorlage erstellen{% endif %}
+                            <i class="bi bi-check-circle me-2"></i>{% if template_id %}Prompt-Vorlage aktualisieren{% else %}Prompt-Vorlage anlegen{% endif %}
                         </button>
-                        <button type="button" class="btn btn-outline-secondary" id="previewBtn">
+                        <button type="button" class="btn btn-outline-secondary" id="previewBtn" >
                             <i class="bi bi-eye me-2"></i>Vorschau anzeigen
                         </button>
                         <a href="/settings/prompt-templates" class="btn btn-outline-secondary">Abbrechen</a>
@@ -93,7 +89,7 @@
 
         <div class="card" id="previewCard" style="display: none;" role="region" aria-label="Vorlagenvorschau">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-chat-left-text me-2"></i>Gerenderte Vorschau</h5>
+                <h5 class="mb-0"><i class="bi bi-chat-left-text me-2"></i>Generierte Vorschau</h5>
                 <button class="btn btn-sm btn-outline-secondary" id="closePreview" aria-label="Vorschau schließen">
                     <i class="bi bi-x-lg" aria-hidden="true"></i>
                 </button>
@@ -118,33 +114,31 @@
     <div class="col-lg-4">
         <div class="card mb-3">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Hinweise zur Vorlage</h5>
+                <h5><i class="bi bi-info-circle me-2"></i>Brauchst du Hilfe?</h5>
             </div>
             <div class="card-body small">
-                <p class="mb-2">Prompt-Vorlagen steuern, wie Kommentare erzeugt werden:</p>
+                <p class="mb-2"><strong>Prompt-Vorlagen</strong> steuern, wie KI-Kommentare erzeugt werden:</p>
                 <ul>
-                    <li><strong>System-Prompt:</strong> Legt Verhalten, Tonalität und Einschränkungen fest.</li>
+                    <li><strong>System-Prompt:</strong> Legt Rolle, allgemeines Verhalten, Tonalität und Einschränkungen fest.</li>
                     <li><strong>Benutzer-Prompt:</strong> Liefert artikelbezogenen Kontext und Anweisungen.</li>
-                    <li>Kommentare erhalten beim Posten auf myMoment automatisch den vorgeschriebenen Hinweis.</li>
+                    <li> Alle KI-Kommentare erhalten automatisch den Präfix "[Dieser Kommentar stammt von einem KI-ChatBot.]".</li>
                 </ul>
                 <hr>
-                <p class="mb-1">Unterstützte Platzhalter:</p>
+                <p class="mb-1">Unterstützte <strong>Platzhalter</strong>:</p>
                 <ul class="mb-0">
-                    <li><code>{article_title}</code> <span class="text-danger">*</span> – Überschrift des Artikels</li>
-                    <li><code>{article_author}</code> <span class="text-danger">*</span> – angezeigter Autorenname</li>
-                    <li><code>{article_content}</code> <span class="text-danger">*</span> – vollständiger Artikeltext</li>
-                    <li><code>{article_raw_html}</code> – Roh-HTML-Inhalt</li>
+                    {% for placeholder in placeholders %}
+                    <li>
+                        <code>{{ '{' }}{{ placeholder.name }}{{ '}' }}</code>
+                        {% if placeholder.is_required %}
+                        <span class="badge bg-warning text-dark ms-2">Erforderlich</span>
+                        {% endif %}
+                        – {{ placeholder.description }}
+                    </li>
+                    {% endfor %}
                 </ul>
-                <p class="small text-muted mt-2 mb-0"><span class="text-danger">*</span> = stets verfügbar</p>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>Best Practices</h5>
-            </div>
-            <div class="card-body small">
-                <ul class="mb-0">
+                <hr>
+                <p>Hinweise zu <strong>Best Practices</strong>:</p>
+                <ul>
                     <li>Halte Anweisungen präzise und eindeutig.</li>
                     <li>Erinnere die KI an die Einhaltung der Plattformrichtlinien.</li>
                     <li>Nutze Platzhalter anstatt Artikeldetails fest einzubauen.</li>
@@ -162,11 +156,6 @@
 const templateId = {% if template_id %}'{{ template_id | safe }}'{% else %}null{% endif %};
 const isEditMode = Boolean(templateId);
 
-function updateCounter(element, counterElement) {
-    const length = element.value.length;
-    counterElement.textContent = `${length}`;
-}
-
 document.addEventListener('DOMContentLoaded', async function() {
     const form = document.getElementById('promptTemplateForm');
     const nameInput = document.getElementById('name');
@@ -182,19 +171,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     const closePreview = document.getElementById('closePreview');
     const loadingState = document.getElementById('loadingState');
     const formContainer = document.getElementById('formContainer');
-    const nameCount = document.getElementById('nameCount');
-    const descriptionCount = document.getElementById('descriptionCount');
     const placeholderButtons = document.querySelectorAll('.placeholder-btn');
     const defaultSubmitLabel = submitBtn.innerHTML;
-
-    const counters = [
-        [nameInput, nameCount],
-        [descriptionInput, descriptionCount]
-    ];
-
-    counters.forEach(([field, counter]) => {
-        field.addEventListener('input', () => updateCounter(field, counter));
-    });
 
     placeholderButtons.forEach(button => {
         button.addEventListener('click', () => insertPlaceholder(userPromptInput, button.dataset.placeholder));
@@ -246,17 +224,16 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     previewBtn.addEventListener('click', function() {
         const payload = buildPayload(true);
+        console.log(payload)
         if (!payload) {
             return;
         }
 
         const placeholders = {
             article_title: 'Ein Arbeitsnachmittag an der PHSG',
-            article_author: 'RoyalWildcat',
-            article_content: 'Wir sitzen zu viert in einem neu renovierten Sitzungszimmer an der PHSG in St. Gallen.',
+            article_author: 'GracefulUnicorn',
+            article_content: 'Wir sitzen zu viert in einem neu renovierten Sitzungszimmer an der PHSG in St.Gallen.',
             article_raw_html: '<div class="article"><p>Wir sitzen zu viert in einem neu renovierten Sitzungszimmer an der PHSG in St. Gallen.</p></div>',
-            article_published_at: '2025-05-28',
-            mymoment_username: 'NonhumanNightingale'
         };
 
         const renderedUserPrompt = renderPlaceholders(payload.user_prompt_template, placeholders);
@@ -278,10 +255,15 @@ document.addEventListener('DOMContentLoaded', async function() {
         const userPrompt = userPromptInput.value.trim();
         const description = descriptionInput.value.trim();
 
+        if (forPreview) {
+            return {
+                system_prompt: systemPrompt,
+                user_prompt_template: userPrompt
+            };
+        }
+
         if (!name || !systemPrompt || !userPrompt) {
-            if (!forPreview) {
-                showAlert('Name, System-Prompt und Benutzer-Prompt sind erforderlich.', 'warning');
-            }
+            showAlert('Name, System-Prompt und Benutzer-Prompt sind erforderlich.', 'warning');
             return null;
         }
 
@@ -294,7 +276,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         };
     }
 
-    async function loadTemplate() {
+     async function loadTemplate() {
         try {
             const response = await fetch(`/api/v1/prompt-templates/${templateId}`, {
                 method: 'GET',
@@ -320,8 +302,6 @@ document.addEventListener('DOMContentLoaded', async function() {
             descriptionInput.value = template.description || '';
             systemPromptInput.value = template.system_prompt || '';
             userPromptInput.value = template.user_prompt_template || '';
-
-            counters.forEach(([field, counter]) => updateCounter(field, counter));
 
             if (template.category === 'SYSTEM') {
                 applyReadOnlyState();

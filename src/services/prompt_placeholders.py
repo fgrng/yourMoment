@@ -17,30 +17,30 @@ SUPPORTED_PLACEHOLDERS: Dict[str, PlaceholderInfo] = {
     "article_title": PlaceholderInfo(
         name="article_title",
         is_required=False,
-        description="Title of the myMoment article",
+        description="Titel des Artikels von myMoment",
         example_value="Ein Arbeitsnachmittag an der PHSG",
     ),
     "article_content": PlaceholderInfo(
         name="article_content",
         is_required=False,
-        description="Full text content of the article",
+        description="Vollständiger Inhalt des Artikels von myMoment",
         example_value=(
-            "Wir sitzen zu viert in einem neu renovierten Sitzungszimmer an der PHSG in St. Gallen. "
-            "Ich bin zum ersten Mal an diesem Standort der PHSG.\nNächste Woche steht Brainstorming zu "
-            "Schreibaufgaben an, mal schauen, was da Gescheites dabei rauskommt."
+            "Wir sitzen zu in einem neu renovierten Sitzungszimmer an der PHSG in St.Gallen. "
+            "Ich bin zum ersten Mal an diesem Standort. Nächste Woche steht Brainstorming zu "
+            "neuen Schreibaufgaben an. Mal schauen, was da Gescheites dabei rauskommt."
         ),
     ),
     "article_author": PlaceholderInfo(
         name="article_author",
         is_required=False,
-        description="Author username of the article",
-        example_value="RoyalWildcat",
+        description="Name de Autor:in (Pseudonym) von myMoment",
+        example_value="GracefulUnicorn",
     ),
     "article_raw_html": PlaceholderInfo(
         name="article_raw_html",
         is_required=False,
-        description="Raw HTML content of the article (for advanced processing)",
-        example_value="<div class=\"article\"><p>Wir sitzen zu viert in einem neu renovierten Sitzungszimmer an der PHSG in St. Gallen.</p></div>",
+        description="Vollstänige Darstellung des Artikels im HTML-Format (für weitergehende Verarbeitung)",
+        example_value="<div class=\"article\"><p>Wir sitzen zu viert in einem neu renovierten Sitzungszimmer an der PHSG in St.Gallen.</p></div>",
     ),
 }
 
