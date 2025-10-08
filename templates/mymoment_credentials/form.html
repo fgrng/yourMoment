@@ -1,6 +1,6 @@
 {% extends "simple_base.html" %}
 
-{% block title %}{{ 'Edit' if credential_id else 'Add' }} myMoment Credential - yourMoment{% endblock %}
+{% block title %}{% if credential_id %}myMoment-Zugang bearbeiten{% else %}myMoment-Zugangsdaten anlegen{% endif %} - yourMoment{% endblock %}
 
 {% block content %}
 <div class="row">
@@ -9,15 +9,15 @@
             <div>
                 <h1>
                     <i class="bi bi-person-circle me-2"></i>
-                    {{ 'Edit' if credential_id else 'Add' }} myMoment Credential
+                    {% if credential_id %}myMoment-Zugangsdaten bearbeiten{% else %}myMoment-Zugangsdaten anlegen{% endif %}
                 </h1>
                 <p class="text-muted">
-                    {{ 'Update your myMoment credentials' if credential_id else 'Add your myMoment credentials for automated commenting' }}
+                    {% if credential_id %}Aktualisiere deine myMoment-Zugangsdaten{% else %}Hinterlege deine myMoment-Zugangsdaten für automatisierte KI-Kommentare{% endif %}
                 </p>
             </div>
             <div>
                 <a href="/settings/mymoment-credentials" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-left me-2"></i>Back to Credentials
+                    <i class="bi bi-arrow-left me-2"></i>Zurück zu den Zugangsdaten
                 </a>
             </div>
         </div>
@@ -29,9 +29,9 @@
 <!-- Loading State (for edit mode) -->
 <div id="loadingState" class="text-center my-5" style="display: {{ 'block' if credential_id else 'none' }};">
     <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">Loading...</span>
+        <span class="visually-hidden">Wird geladen …</span>
     </div>
-    <p class="mt-2 text-muted">Loading account details...</p>
+    <p class="mt-2 text-muted">myMoment-Zugangsdaten werden geladen …</p>
 </div>
 
 <!-- Form -->
@@ -39,60 +39,60 @@
     <div class="col-lg-8">
         <div class="card">
             <div class="card-header">
-                <h5><i class="bi bi-person-badge me-2"></i>Account Information</h5>
+                <h5><i class="bi bi-person-badge me-2"></i>myMoment-Zugangsdaten</h5>
             </div>
             <div class="card-body">
                 <form id="credentialForm">
                     <!-- Name Field -->
                     <div class="mb-3">
                         <label for="name" class="form-label">
-                            Account Name <span class="text-danger">*</span>
+                            Name <span class="text-danger">*</span>
                         </label>
                         <input type="text"
                                class="form-control"
                                id="name"
                                name="name"
-                               placeholder="e.g., My Primary Account"
+                               placeholder="z. B. Dummykonto für meine Klasse"
                                required>
                         <div class="form-text">
-                            A friendly name to identify this account
+                            Ein leicht erkennbarer Name für diesen Zugang (nur für dich sichtbar)
                         </div>
                     </div>
 
                     <!-- Username Field -->
                     <div class="mb-3">
                         <label for="username" class="form-label">
-                            myMoment Username <span class="text-danger">*</span>
+                            myMoment-Benutzername <span class="text-danger">*</span>
                         </label>
                         <input type="username"
                                class="form-control"
                                id="username"
                                name="username"
-                               placeholder="ArtificialArmadillo"
+                               placeholder="z. B. GracefulUnicorn"
                                required>
                         <div class="form-text">
-                            Your myMoment credential username
+                            Dein Benutzername für das myMoment-Konto
                         </div>
                     </div>
 
                     <!-- Password Field -->
                     <div class="mb-3">
                         <label for="password" class="form-label">
-                            myMoment Password <span class="text-danger">*</span>
+                            myMoment-Passwort <span class="text-danger">*</span>
                         </label>
                         <div class="input-group">
                             <input type="password"
                                    class="form-control"
                                    id="password"
                                    name="password"
-                                   placeholder="{{ 'Leave empty to keep current password' if credential_id else 'Enter your password' }}"
+                                   placeholder="{{ 'Leer lassen, um das aktuelle Passwort zu behalten' if credential_id else 'Passwort eingeben' }}"
                                    {{ '' if credential_id else 'required' }}>
                             <button class="btn btn-outline-secondary" type="button" id="togglePassword">
                                 <i class="bi bi-eye" id="togglePasswordIcon"></i>
                             </button>
                         </div>
                         <div class="form-text">
-                            {{ 'Leave empty to keep the existing password' if credential_id else 'Your myMoment credential password (encrypted before storage)' }}
+                            {{ 'Leer lassen, um das bestehende Passwort zu behalten' if credential_id else 'Dein Passwort für das myMoment-Konto' }}
                         </div>
                     </div>
 
@@ -104,9 +104,9 @@
                                name="is_active"
                                checked>
                         <label class="form-check-label" for="is_active">
-                            <strong>Active</strong>
+                            <strong>Aktiv</strong>
                             <div class="form-text">
-                                Only active credentials can be used in monitoring processes
+                                Nur aktive myMoment-Zugangsdaten können für automatisierte KI-Kommenare verwendet werden
                             </div>
                         </label>
                     </div>
@@ -114,20 +114,20 @@
                     <!-- Security Notice -->
                     <div class="alert alert-info">
                         <i class="bi bi-shield-lock me-2"></i>
-                        <strong>Security:</strong> Your password will be encrypted using industry-standard encryption before being stored in the database.
+                        <strong>Sicherheit:</strong> Dein Passwort wird vor der Speicherung verschlüsselt.
                     </div>
 
                     <!-- Form Actions -->
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary" id="submitBtn">
                             <i class="bi bi-check-circle me-2"></i>
-                            {{ 'Update Account' if credential_id else 'Add Account' }}
+                            {{ 'myMoment-Zugangsdaten aktualisieren' if credential_id else 'myMoment-Zugangsdaten anlegen' }}
                         </button>
                         <button type="button" class="btn btn-outline-secondary" id="testBtn">
-                            <i class="bi bi-check-circle me-2"></i>Test Connection
+                            <i class="bi bi-check-circle me-2"></i>myMoment-Zugangsdaten testen
                         </button>
                 <a href="/settings/mymoment-credentials" class="btn btn-outline-secondary">
-                            Cancel
+                            Abbrechen
                         </a>
                     </div>
                 </form>
@@ -139,40 +139,26 @@
     <div class="col-lg-4">
         <div class="card">
             <div class="card-header">
-                <h5><i class="bi bi-info-circle me-2"></i>About myMoment Credentials</h5>
+                <h5><i class="bi bi-info-circle me-2"></i>Brauchst du Hilfe?</h5>
             </div>
-            <div class="card-body">
-                <p>myMoment credentials are used to:</p>
+            <div class="card-body small">
+                <p><strong>myMoment-Zugangsdaten</strong> werden genutzt, um:</p>
                 <ul>
-                    <li>Monitor articles on myMoment platform</li>
-                    <li>Automatically post AI-generated comments</li>
-                    <li>Track which articles each account has access to</li>
+                    <li>Artikel auf der myMoment-Plattform zu überwachen</li>
+                    <li>KI-generierte Kommentare automatisch zu posten</li>
                 </ul>
                 <hr>
-                <p><strong>Multiple Accounts:</strong></p>
+                <p>Hinweise zu <strong>mehreren Konten</strong>:</p>
                 <ul>
-                    <li>You can add multiple myMoment credentials</li>
-                    <li>Each monitoring process can use multiple credentials</li>
-                    <li>One comment per credential will be posted to new articles</li>
+                    <li>Du kannst mehrere myMoment-Zugangsdaten in yourMoment verwalten.</li>
+                    <li>Bei der Automatisierung von KI-Kommentaren können mehrere myMoment-Zugangsdaten verwendet werden, um mehrere Kommentare gleichzeitig zu erstellen.</li>
                 </ul>
                 <hr>
-                <p class="mb-0"><strong>Security:</strong></p>
-                <p class="text-muted small">
-                    Your credentials are encrypted using Fernet encryption before being stored. Only you can use them.
-                </p>
-            </div>
-        </div>
-
-        <div class="card mt-3">
-            <div class="card-header">
-                <h5><i class="bi bi-question-circle me-2"></i>Need Help?</h5>
-            </div>
-            <div class="card-body">
-                <p class="small">If you don't have myMoment credentials yet:</p>
-                <ol class="small">
-                    <li>Visit the myMoment platform</li>
-                    <li>Create an account</li>
-                    <li>Return here to add your credentials</li>
+                <p>Falls du <strong>noch keine myMoment-Zugangsdaten</strong> hast:</p>
+                <ol>
+                    <li>Besuche die myMoment-Plattform</li>
+                    <li>Erstelle ein Konto</li>
+                    <li>Kehre hierher zurück und hinterlege deine Zugangsdaten</li>
                 </ol>
             </div>
         </div>
@@ -218,7 +204,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         } catch (error) {
             console.error('Error loading credential:', error);
             loadingState.style.display = 'none';
-            window.showAlert(`Error loading account details: ${error.message}`, 'danger');
+            window.showAlert(`Fehler beim Laden der Kontodaten: ${error.message}`, 'danger');
         }
     } else {
         loadingState.style.display = 'none';
@@ -244,11 +230,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (password) {
             formData.password = password;
         } else if (!isEditMode) {
-            window.showAlert('Password is required for new credentials', 'danger');
+            window.showAlert('Für neue Zugangsdaten ist ein Passwort erforderlich.', 'danger');
             return;
         }
 
-        const originalHtml = setButtonLoading(submitBtn, 'Saving...');
+        const originalHtml = setButtonLoading(submitBtn, 'Speichern …');
 
         const url = isEditMode
             ? `/api/v1/mymoment-credentials/${credentialId}`
@@ -261,7 +247,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             formData,
             () => {
                 window.showAlert(
-                    isEditMode ? 'Account updated successfully!' : 'Account added successfully!',
+                    isEditMode ? 'Konto erfolgreich aktualisiert!' : 'Konto erfolgreich hinzugefügt!',
                     'success'
                 );
                 setTimeout(() => {
@@ -269,7 +255,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 }, 1500);
             },
             (message) => {
-                window.showAlert(`Error: ${message}`, 'danger');
+                window.showAlert(`Fehler: ${message}`, 'danger');
                 resetButton(submitBtn, originalHtml);
             }
         );
@@ -283,20 +269,20 @@ document.addEventListener('DOMContentLoaded', async function() {
     testBtn.addEventListener('click', async function() {
         if (isEditMode) {
             // In edit mode, test the existing saved credentials
-            const originalHtml = setButtonLoading(testBtn, 'Testing connection...');
+            const originalHtml = setButtonLoading(testBtn, 'Verbindung wird getestet…');
 
             // Show loading alert (auto-hide enabled)
-            window.showAlert('🔄 Testing credential against myMoment platform...', 'info', false);
+            window.showAlert('🔄 Zugang wird gegen die myMoment-Plattform getestet …', 'info', false);
 
             try {
                 const response = await fetch(`/api/v1/mymoment-credentials/${credentialId}/test`, fetchOptions('POST'));
 
                 if (response.ok) {
                     const result = await response.json();
-                    window.showAlert(`✅ Connection test successful! Authenticated as ${result.username} on ${result.platform}.`, 'success');
+                    window.showAlert(`✅ Verbindungstest erfolgreich! Angemeldet als ${result.username} auf ${result.platform}.`, 'success');
 
                     // Update button to show success
-                    testBtn.innerHTML = '<i class="bi bi-check-circle-fill"></i> Success';
+                    testBtn.innerHTML = '<i class="bi bi-check-circle-fill"></i> Erfolgreich';
                     testBtn.classList.remove('btn-outline-warning');
                     testBtn.classList.add('btn-success');
 
@@ -308,18 +294,18 @@ document.addEventListener('DOMContentLoaded', async function() {
                     }, 2000);
                 } else {
                     const error = await safeParseJson(response);
-                    const errorMsg = extractErrorMessage(error) || 'Authentication failed';
-                    window.showAlert(`❌ Connection test failed: ${errorMsg}`, 'danger');
+                    const errorMsg = extractErrorMessage(error) || 'Authentifizierung fehlgeschlagen';
+                    window.showAlert(`❌ Verbindungstest fehlgeschlagen: ${errorMsg}`, 'danger');
                     resetButton(testBtn, originalHtml);
                 }
             } catch (error) {
                 console.error('Error testing connection:', error);
-                window.showAlert('❌ Error testing connection. Please check your network and try again.', 'danger');
+                window.showAlert('❌ Fehler beim Testen der Verbindung. Bitte Netzwerk prüfen und erneut versuchen.', 'danger');
                 resetButton(testBtn, originalHtml);
             }
         } else {
             // In create mode, credentials must be saved first before testing
-            window.showAlert('⚠️ Please save the credentials first, then you can test the connection from the edit page.', 'warning');
+            window.showAlert('⚠️ Bitte speichere die Zugangsdaten zuerst, dann kannst du die Verbindung auf der Bearbeitungsseite testen.', 'warning');
         }
 
         window.scrollTo({ top: 0, behavior: 'smooth' });

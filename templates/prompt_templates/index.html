@@ -1,17 +1,17 @@
 {% extends "simple_base.html" %}
 
-{% block title %}Prompt Templates - yourMoment{% endblock %}
+{% block title %}Prompt-Vorlagen - yourMoment{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-12 d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
         <div>
-            <h1 class="mb-1"><i class="bi bi-braces-asterisk me-2"></i>Prompt Templates</h1>
-            <p class="text-muted mb-0">Curate reusable prompts for AI-generated comments</p>
+            <h1 class="mb-1"><i class="bi bi-braces-asterisk me-2"></i>Prompt-Vorlagen</h1>
+            <p class="text-muted mb-0">Verwalte wiederverwendbare Prompt-Vorlagen für KI-generierte Kommentare</p>
         </div>
         <div class="d-flex gap-2">
             <a href="/settings/prompt-templates/new" class="btn btn-primary">
-                <i class="bi bi-plus-circle me-2"></i>New Prompt Template
+                <i class="bi bi-plus-circle me-2"></i>Neue Prompt-Vorlage anlegen
             </a>
         </div>
     </div>
@@ -22,7 +22,7 @@
     <div class="col-lg-8">
         <section class="mb-4">
             <div class="d-flex align-items-center justify-content-between mb-3">
-                <h2 class="h5 mb-0">My Templates</h2>
+                <h2 class="h5 mb-0">Meine Vorlagen</h2>
                 {% if user_templates %}
                 <span class="badge bg-primary">{{ user_templates|length }}</span>
                 {% endif %}
@@ -31,12 +31,12 @@
             <div class="row g-3">
                 {% for template in user_templates %}
                 <div class="col-md-6">
-                    <div class="card h-100">
+                    <div class="card h-100>
                         <div class="card-header d-flex justify-content-between align-items-start gap-2">
                             <div>
                                 <h5 class="mb-1 text-truncate" title="{{ template.name }}">{{ template.name }}</h5>
                                 <div class="badge {{ 'bg-success' if template.is_active else 'bg-secondary' }}">
-                                    {{ 'Active' if template.is_active else 'Inactive' }}
+                                    {{ 'Aktiv' if template.is_active else 'Inaktiv' }}
                                 </div>
                             </div>
                             <small class="text-muted text-end">
@@ -47,27 +47,27 @@
                             {% if template.description %}
                                 <p class="small text-muted">{{ template.description }}</p>
                             {% else %}
-                                <p class="small text-muted fst-italic">No description provided.</p>
+                                <p class="small text-muted fst-italic">Keine Beschreibung vorhanden.</p>
                             {% endif %}
                             <div class="mb-3">
-                                <div class="fw-semibold mb-1">System Prompt</div>
+                                <div class="fw-semibold mb-1">System-Prompt</div>
                                 <pre class="bg-light rounded border p-2 small" style="max-height: 140px; overflow:auto; white-space: pre-wrap;">{{ template.system_prompt }}</pre>
                             </div>
                             <div>
-                                <div class="fw-semibold mb-1">User Prompt Template</div>
+                                <div class="fw-semibold mb-1">Prompt-Vorlage für Benutzer</div>
                                 <pre class="bg-light rounded border p-2 small" style="max-height: 140px; overflow:auto; white-space: pre-wrap;">{{ template.user_prompt_template }}</pre>
                             </div>
                         </div>
                         <div class="card-footer bg-transparent">
                             <div class="d-flex gap-2">
                                 <a href="/settings/prompt-templates/{{ template.id }}/edit" class="btn btn-outline-primary btn-sm flex-fill">
-                                    <i class="bi bi-pencil"></i> Edit
+                                    <i class="bi bi-pencil"></i> Bearbeiten
                                 </a>
                                 <button type="button"
                                         class="btn btn-outline-danger btn-sm flex-fill"
                                         data-template-id="{{ template.id }}"
                                         data-action="delete-template">
-                                    <i class="bi bi-trash"></i> Delete
+                                    <i class="bi bi-trash"></i> Löschen
                                 </button>
                             </div>
                         </div>
@@ -77,14 +77,14 @@
             </div>
             {% else %}
             <div class="alert alert-info">
-                You haven't created any prompt templates yet. Use the button above to add your first template.
+                Du hast noch keine Prompt-Vorlagen erstellt. Nutze die Schaltfläche oben, um deine erste Vorlage hinzuzufügen.
             </div>
             {% endif %}
         </section>
 
         <section>
             <div class="d-flex align-items-center justify-content-between mb-3">
-                <h2 class="h5 mb-0">System Templates</h2>
+                <h2 class="h5 mb-0">Systemvorlagen</h2>
                 {% if system_templates %}
                 <span class="badge bg-secondary">{{ system_templates|length }}</span>
                 {% endif %}
@@ -107,19 +107,19 @@
                             {% if template.description %}
                                 <p class="small text-muted">{{ template.description }}</p>
                             {% else %}
-                                <p class="small text-muted fst-italic">No description provided.</p>
+                                <p class="small text-muted fst-italic">Keine Beschreibung vorhanden.</p>
                             {% endif %}
                             <div class="mb-3">
-                                <div class="fw-semibold mb-1">System Prompt</div>
+                                <div class="fw-semibold mb-1">System-Prompt</div>
                                 <pre class="bg-light rounded border p-2 small" style="max-height: 140px; overflow:auto; white-space: pre-wrap;">{{ template.system_prompt }}</pre>
                             </div>
                             <div>
-                                <div class="fw-semibold mb-1">User Prompt Template</div>
+                                <div class="fw-semibold mb-1">Prompt-Vorlage für Benutzer</div>
                                 <pre class="bg-light rounded border p-2 small" style="max-height: 140px; overflow:auto; white-space: pre-wrap;">{{ template.user_prompt_template }}</pre>
                             </div>
                         </div>
                         <div class="card-footer bg-transparent text-muted small">
-                            System templates are read-only and maintained by yourMoment.
+                            Systemvorlagen sind schreibgeschützt und werden vom yourMoment-Team gepflegt.
                         </div>
                     </div>
                 </div>
@@ -127,18 +127,18 @@
             </div>
             {% else %}
             <div class="alert alert-secondary">
-                System templates are not available at the moment.
+                Derzeit sind keine Systemvorlagen verfügbar.
             </div>
             {% endif %}
         </section>
     </div>
     <div class="col-lg-4">
-        <div class="card h-100">
+        <div class="card">
             <div class="card-header">
-                <h2 class="h5 mb-0">Supported Placeholders</h2>
+                <h2 class="h5 mb-0">Unterstützte Platzhalter</h2>
             </div>
             <div class="card-body">
-                <p class="small text-muted">Use these placeholders inside your user prompt template to inject article data.</p>
+                <p class="small text-muted">Nutze diese Platzhalter in deiner Prompt-Vorlage, um Artikeldaten aus myMoment einzusetzen.</p>
                 <ul class="list-group list-group-flush">
                     {% for placeholder in placeholders %}
                     <li class="list-group-item">
@@ -146,12 +146,12 @@
                             <div>
                                 <code>{{ '{' }}{{ placeholder.name }}{{ '}' }}</code>
                                 {% if placeholder.is_required %}
-                                <span class="badge bg-warning text-dark ms-2">Required</span>
+                                <span class="badge bg-warning text-dark ms-2">Erforderlich</span>
                                 {% endif %}
                                 <div class="small text-muted mt-1">{{ placeholder.description }}</div>
                             </div>
                         </div>
-                        <div class="small mt-2"><strong>Example:</strong> {{ placeholder.example_value }}</div>
+                        <div class="small mt-2"><strong>Beispiel:</strong> {{ placeholder.example_value }}</div>
                     </li>
                     {% endfor %}
                 </ul>

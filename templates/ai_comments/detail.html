@@ -1,14 +1,14 @@
 {% extends "simple_base.html" %}
 
-{% block title %}AI Comment - yourMoment{% endblock %}
+{% block title %}KI-Kommentar - yourMoment{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-12">
         <a href="/ai-comments" class="btn btn-link ps-0">
-            <i class="bi bi-arrow-left"></i> Back to AI Comments
+            <i class="bi bi-arrow-left"></i> Zurück zu den KI-Kommentaren
         </a>
-        <h1 class="mt-2" id="commentTitle">Loading comment…</h1>
+        <h1 class="mt-2" id="commentTitle">Kommentar wird geladen …</h1>
         <p class="text-muted" id="commentSubtitle"></p>
     </div>
 </div>
@@ -16,45 +16,45 @@
 
 <div id="loadingState" class="text-center my-5">
     <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">Loading...</span>
+        <span class="visually-hidden">Wird geladen …</span>
     </div>
-    <p class="mt-2 text-muted">Loading comment details...</p>
+    <p class="mt-2 text-muted">Kommentardetails werden geladen …</p>
 </div>
 
 <div id="emptyState" class="text-center my-5" style="display: none;">
     <i class="bi bi-chat-left-text text-muted" style="font-size: 4rem;"></i>
-    <h3 class="mt-3">AI Comment Not Found</h3>
-    <p class="text-muted">We could not find an AI comment with this identifier.</p>
+    <h3 class="mt-3">KI-Kommentar nicht gefunden</h3>
+    <p class="text-muted">Wir konnten keinen KI-Kommentar mit dieser Kennung finden.</p>
 </div>
 
 <div id="commentContent" style="display: none;">
 
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="bi bi-journal-text me-2"></i>Article Snapshot</h5>
+            <h5 class="mb-0"><i class="bi bi-journal-text me-2"></i>Artikel-Snapshot</h5>
             <a id="commentArticleLink" href="#" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm" style="display:none;">
-                View on myMoment
+                Auf myMoment anzeigen
             </a>
         </div>
         <div class="card-body">
             <dl class="row mb-3">
-                <dt class="col-sm-3">Article Title</dt>
+                <dt class="col-sm-3">Artikeltitel</dt>
                 <dd class="col-sm-9" id="articleTitle">-</dd>
 
-                <dt class="col-sm-3">Article Author</dt>
+                <dt class="col-sm-3">Artikelautor*in</dt>
                 <dd class="col-sm-9" id="articleAuthor">-</dd>
 
-                <dt class="col-sm-3">Scraped At</dt>
+                <dt class="col-sm-3">Gescrapet am</dt>
                 <dd class="col-sm-9" id="articleScrapedAt">-</dd>
             </dl>
 
             <div class="mb-3">
-                <strong>AI Comment</strong>
+                <strong>KI-Kommentar</strong>
                 <p id="commentContentText" class="mb-0">-</p>
             </div>
 
             <div class="mb-3">
-                <strong>Article Content</strong>
+                <strong>Artikelinhalt</strong>
                 <p class="text-muted" id="articleContent">-</p>
             </div>
 
@@ -62,12 +62,12 @@
                 <div class="accordion-item">
                     <h2 class="accordion-header" id="articleHtmlHeading">
                         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#articleHtmlCollapse" aria-expanded="false" aria-controls="articleHtmlCollapse">
-                            View Raw Article HTML
+                            Rohes Artikel-HTML anzeigen
                         </button>
                     </h2>
                     <div id="articleHtmlCollapse" class="accordion-collapse collapse" aria-labelledby="articleHtmlHeading" data-bs-parent="#articleHtmlAccordion">
                         <div class="accordion-body">
-                            <pre class="small text-muted" id="articleRawHtml">No raw HTML captured.</pre>
+                            <pre class="small text-muted" id="articleRawHtml">Kein Roh-HTML erfasst.</pre>
                         </div>
                     </div>
                 </div>
@@ -77,20 +77,20 @@
 
     <div class="card mb-4">
         <div class="card-header">
-            <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Comment Overview</h5>
+            <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Kommentarübersicht</h5>
         </div>
         <div class="card-body">
             <dl class="row mb-0">
                 <dt class="col-sm-3">Status</dt>
                 <dd class="col-sm-9" id="commentStatus">-</dd>
 
-                <dt class="col-sm-3">Created</dt>
+                <dt class="col-sm-3">Erstellt</dt>
                 <dd class="col-sm-9" id="commentCreatedAt">-</dd>
 
-                <dt class="col-sm-3">Posted</dt>
+                <dt class="col-sm-3">Veröffentlicht</dt>
                 <dd class="col-sm-9" id="commentPostedAt">-</dd>
 
-                <dt class="col-sm-3">Error</dt>
+                <dt class="col-sm-3">Fehler</dt>
                 <dd class="col-sm-9" id="commentError">-</dd>
             </dl>
         </div>
@@ -100,10 +100,10 @@
         <div class="col-md-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h6 class="mb-0"><i class="bi bi-box-arrow-in-right me-2"></i>myMoment Login</h6>
+                    <h6 class="mb-0"><i class="bi bi-box-arrow-in-right me-2"></i>myMoment-Zugang</h6>
                 </div>
                 <div class="card-body">
-                    <p class="mb-1 fw-semibold" id="commentLoginName">Loading…</p>
+                    <p class="mb-1 fw-semibold" id="commentLoginName">Wird geladen …</p>
                     <p class="text-muted small mb-0" id="commentLoginUsername">-</p>
                 </div>
             </div>
@@ -111,7 +111,7 @@
         <div class="col-md-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h6 class="mb-0"><i class="bi bi-cpu me-2"></i>LLM Provider</h6>
+                    <h6 class="mb-0"><i class="bi bi-cpu me-2"></i>LLM-Anbieter</h6>
                 </div>
                 <div class="card-body">
                     <p class="mb-1 fw-semibold" id="commentProviderName">-</p>
@@ -122,7 +122,7 @@
         <div class="col-md-4">
             <div class="card h-100">
                 <div class="card-header">
-                    <h6 class="mb-0"><i class="bi bi-file-earmark-text me-2"></i>Prompt Template</h6>
+                    <h6 class="mb-0"><i class="bi bi-file-earmark-text me-2"></i>Prompt-Vorlage</h6>
                 </div>
                 <div class="card-body">
                     <p class="mb-1 fw-semibold" id="commentPromptName">-</p>
@@ -187,7 +187,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         const response = await fetch(`/api/v1/comments/${encodeURIComponent(commentId)}`, fetchOptions('GET'));
 
         if (!response.ok) {
-            throw new Error(`Failed to load AI comment: ${response.status}`);
+            throw new Error(`KI-Kommentar konnte nicht geladen werden (HTTP ${response.status})`);
         }
 
         const comment = await response.json();
@@ -197,24 +197,24 @@ document.addEventListener('DOMContentLoaded', async function() {
     } catch (error) {
         console.error('Error loading comment:', error);
         showLoadingState(null, [loadingState, emptyState, commentContent]);
-        window.showAlert('Error loading AI comment. Please try again later.', 'danger');
+        window.showAlert('Fehler beim Laden des KI-Kommentars. Bitte später erneut versuchen.', 'danger');
     }
 
     async function populateComment(comment) {
-        titleEl.textContent = `AI Comment ${formatShortId(comment.id)}`;
-        subtitleEl.textContent = comment.article_title || 'Associated article unknown';
-        statusEl.textContent = comment.status ? comment.status.toUpperCase() : 'UNKNOWN';
-        createdAtEl.textContent = formatDate(comment.created_at, 'Unknown');
-        postedAtEl.textContent = comment.posted_at ? formatDate(comment.posted_at, 'Unknown') : 'Not posted yet';
+        titleEl.textContent = `KI-Kommentar ${formatShortId(comment.id)}`;
+        subtitleEl.textContent = comment.article_title || 'Zugehöriger Artikel unbekannt';
+        statusEl.textContent = comment.status ? comment.status.toUpperCase() : 'UNBEKANNT';
+        createdAtEl.textContent = formatDate(comment.created_at, 'Unbekannt');
+        postedAtEl.textContent = comment.posted_at ? formatDate(comment.posted_at, 'Unbekannt') : 'Noch nicht veröffentlicht';
         errorEl.textContent = comment.error_message || '—';
 
-        loginNameEl.textContent = comment.mymoment_login_id ? 'Loading…' : 'Not posted yet';
+        loginNameEl.textContent = comment.mymoment_login_id ? 'Wird geladen …' : 'Noch nicht veröffentlicht';
         loginUsernameEl.textContent = comment.mymoment_login_id ? '' : '—';
 
-        providerNameEl.textContent = comment.ai_provider_name || 'Unknown provider';
-        providerModelEl.textContent = comment.ai_model_name ? `Model: ${comment.ai_model_name}` : 'Model not recorded';
+        providerNameEl.textContent = comment.ai_provider_name || 'Unbekannter Anbieter';
+        providerModelEl.textContent = comment.ai_model_name ? `Modell: ${comment.ai_model_name}` : 'Kein Modell erfasst';
 
-        promptNameEl.textContent = comment.prompt_template_id ? 'Loading…' : 'Unknown template';
+        promptNameEl.textContent = comment.prompt_template_id ? 'Wird geladen …' : 'Unbekannte Vorlage';
         promptDescriptionEl.textContent = comment.prompt_template_id ? '' : '—';
 
         if (comment.article_url) {
@@ -224,12 +224,12 @@ document.addEventListener('DOMContentLoaded', async function() {
             articleLinkEl.style.display = 'none';
         }
 
-        articleTitleEl.textContent = comment.article_title || 'Unknown article';
-        articleAuthorEl.textContent = comment.article_author || 'Unknown author';
-        articleScrapedAtEl.textContent = formatDate(comment.article_scraped_at, 'Unknown');
-        articleContentEl.textContent = comment.article_content || 'No article content captured.';
-        articleRawHtmlEl.textContent = comment.article_raw_html || 'No raw HTML captured.';
-        commentContentEl.textContent = comment.comment_content || 'No comment content recorded.';
+        articleTitleEl.textContent = comment.article_title || 'Unbekannter Artikel';
+        articleAuthorEl.textContent = comment.article_author || 'Unbekannte*r Autor*in';
+        articleScrapedAtEl.textContent = formatDate(comment.article_scraped_at, 'Unbekannt');
+        articleContentEl.textContent = comment.article_content || 'Kein Artikelinhalt erfasst.';
+        articleRawHtmlEl.textContent = comment.article_raw_html || 'Kein Roh-HTML erfasst.';
+        commentContentEl.textContent = comment.comment_content || 'Kein Kommentarinhalt gespeichert.';
 
         await Promise.all([
             loadCredentialDetails(comment.mymoment_login_id),
@@ -247,7 +247,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (!relatedDataCache.credentials) {
                 const response = await fetch('/api/v1/mymoment-credentials/index', fetchOptions('GET'));
                 if (!response.ok) {
-                    throw new Error(`Failed to load credentials index: ${response.status}`);
+                    throw new Error(`Zugangsdatenübersicht konnte nicht geladen werden (HTTP ${response.status})`);
                 }
                 relatedDataCache.credentials = await response.json();
             }
@@ -257,15 +257,15 @@ document.addEventListener('DOMContentLoaded', async function() {
             );
 
             if (credential) {
-                loginNameEl.textContent = credential.name || 'Unnamed credential';
-                loginUsernameEl.textContent = credential.username ? `Username: ${credential.username}` : 'Username not available';
+                loginNameEl.textContent = credential.name || 'Unbenannte Zugangsdaten';
+                loginUsernameEl.textContent = credential.username ? `Benutzername: ${credential.username}` : 'Benutzername nicht verfügbar';
             } else {
-                loginNameEl.textContent = 'Credential not found';
+                loginNameEl.textContent = 'Zugangsdaten nicht gefunden';
                 loginUsernameEl.textContent = '—';
             }
         } catch (error) {
             console.error('Failed to load credential details:', error);
-            loginNameEl.textContent = 'Unable to load credential';
+            loginNameEl.textContent = 'Zugangsdaten konnten nicht geladen werden';
             loginUsernameEl.textContent = '—';
         }
     }
@@ -279,7 +279,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (!relatedDataCache.providers) {
                 const response = await fetch('/api/v1/llm-providers/index', fetchOptions('GET'));
                 if (!response.ok) {
-                    throw new Error(`Failed to load provider index: ${response.status}`);
+                    throw new Error(`Anbieterverzeichnis konnte nicht geladen werden (HTTP ${response.status})`);
                 }
                 relatedDataCache.providers = await response.json();
             }
@@ -289,16 +289,16 @@ document.addEventListener('DOMContentLoaded', async function() {
             );
 
             if (provider) {
-                providerNameEl.textContent = provider.provider_name || 'LLM Provider';
-                providerModelEl.textContent = provider.model_name ? `Model: ${provider.model_name}` : 'Model not configured';
+                providerNameEl.textContent = provider.provider_name || 'LLM-Anbieter';
+                providerModelEl.textContent = provider.model_name ? `Modell: ${provider.model_name}` : 'Kein Modell konfiguriert';
             } else {
-                providerNameEl.textContent = comment.ai_provider_name || 'Unknown provider';
-                providerModelEl.textContent = comment.ai_model_name ? `Model: ${comment.ai_model_name}` : 'Model not recorded';
+                providerNameEl.textContent = comment.ai_provider_name || 'Unbekannter Anbieter';
+                providerModelEl.textContent = comment.ai_model_name ? `Modell: ${comment.ai_model_name}` : 'Kein Modell erfasst';
             }
         } catch (error) {
             console.error('Failed to load provider details:', error);
-            providerNameEl.textContent = comment.ai_provider_name || 'Unable to load provider';
-            providerModelEl.textContent = comment.ai_model_name ? `Model: ${comment.ai_model_name}` : 'Model not recorded';
+            providerNameEl.textContent = comment.ai_provider_name || 'Anbieter konnte nicht geladen werden';
+            providerModelEl.textContent = comment.ai_model_name ? `Modell: ${comment.ai_model_name}` : 'Kein Modell erfasst';
         }
     }
 
@@ -311,7 +311,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (!relatedDataCache.templates) {
                 const response = await fetch('/api/v1/prompt-templates/index', fetchOptions('GET'));
                 if (!response.ok) {
-                    throw new Error(`Failed to load prompt templates index: ${response.status}`);
+                    throw new Error(`Prompt-Vorlagen konnten nicht geladen werden (HTTP ${response.status})`);
                 }
                 relatedDataCache.templates = await response.json();
             }
@@ -321,21 +321,21 @@ document.addEventListener('DOMContentLoaded', async function() {
             );
 
             if (template) {
-                promptNameEl.textContent = template.name || 'Prompt Template';
-                promptDescriptionEl.textContent = template.description || 'No description provided.';
+                promptNameEl.textContent = template.name || 'Prompt-Vorlage';
+                promptDescriptionEl.textContent = template.description || 'Keine Beschreibung vorhanden.';
             } else {
-                promptNameEl.textContent = 'Prompt template not found';
+                promptNameEl.textContent = 'Prompt-Vorlage nicht gefunden';
                 promptDescriptionEl.textContent = '—';
             }
         } catch (error) {
             console.error('Failed to load prompt template details:', error);
-            promptNameEl.textContent = 'Unable to load template';
+            promptNameEl.textContent = 'Vorlage konnte nicht geladen werden';
             promptDescriptionEl.textContent = '—';
         }
     }
 
     function formatShortId(id) {
-        if (!id) return 'Unknown';
+        if (!id) return 'Unbekannt';
         const text = String(id);
         return text.length > 12 ? `${text.substring(0, 8)}…` : text;
     }

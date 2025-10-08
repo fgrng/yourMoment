@@ -35,21 +35,21 @@ async function handleCredentialTest(credentialId) {
         // Show loading state on button
         if (button) {
             button.disabled = true;
-            button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testing...';
+            button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Wird getestet …';
         }
 
-        window.showAlert('🔄 Testing credential against myMoment platform...', 'info', false);
+        window.showAlert('🔄 Zugang wird gegen die myMoment-Plattform getestet …', 'info', false);
         window.scrollTo({ top: 0, behavior: 'smooth' });
 
         const response = await fetch(`/api/v1/mymoment-credentials/${credentialId}/test`, fetchOptions('POST'));
 
         if (response.ok) {
             const result = await response.json();
-            window.showAlert(`✅ Credential test successful! Authenticated as ${result.username} on ${result.platform}.`, 'success');
+            window.showAlert(`✅ Zugangstest erfolgreich! Angemeldet als ${result.username} auf ${result.platform}.`, 'success');
 
             // Temporarily show success state on button
             if (button) {
-                button.innerHTML = '<i class="bi bi-check-circle-fill"></i> Success';
+                button.innerHTML = '<i class="bi bi-check-circle-fill"></i> Erfolgreich';
                 button.classList.remove('btn-outline-info');
                 button.classList.add('btn-success');
 
@@ -63,8 +63,8 @@ async function handleCredentialTest(credentialId) {
             }
         } else {
             const error = await response.json();
-            const message = error?.detail || 'Authentication failed';
-            window.showAlert(`❌ Credential test failed: ${message}`, 'danger');
+            const message = error?.detail || 'Authentifizierung fehlgeschlagen';
+            window.showAlert(`❌ Zugangstest fehlgeschlagen: ${message}`, 'danger');
 
             // Reset button on error
             if (button) {
@@ -74,7 +74,7 @@ async function handleCredentialTest(credentialId) {
         }
     } catch (error) {
         console.error('Error testing credential:', error);
-        window.showAlert('❌ Error testing credential. Please check your network and try again.', 'danger');
+        window.showAlert('❌ Fehler beim Testen des Zugangs. Bitte Netzwerk prüfen und erneut versuchen.', 'danger');
 
         // Reset button on error
         if (button) {
@@ -87,12 +87,12 @@ async function handleCredentialTest(credentialId) {
 async function handleCredentialDelete(credentialId) {
     await deleteResource(
         `/api/v1/mymoment-credentials/${credentialId}`,
-        'myMoment credential',
+        'myMoment-Zugang',
         () => {
-            window.showAlert('Credential deleted successfully!', 'success');
+            window.showAlert('Zugang erfolgreich gelöscht!', 'success');
             setTimeout(() => window.location.reload(), 1200);
         },
-        'Delete this myMoment credential? This action cannot be undone.'
+        'Diesen myMoment-Zugang löschen? Dies kann nicht rückgängig gemacht werden.'
     );
 }
 
@@ -117,15 +117,15 @@ export function initPromptTemplatesPage() {
         try {
             await deleteResource(
                 `/api/v1/prompt-templates/${templateId}`,
-                'prompt template',
+                'Prompt-Vorlage',
                 () => {
-                    window.showAlert('Prompt template deleted successfully.', 'success');
+                    window.showAlert('Prompt-Vorlage erfolgreich gelöscht.', 'success');
                     setTimeout(() => window.location.reload(), 1200);
                 },
-                'Delete this prompt template? This action cannot be undone.'
+                'Diese Prompt-Vorlage löschen? Diese Aktion kann nicht rückgängig gemacht werden.'
             );
         } catch (error) {
-            window.showAlert(`Error deleting template: ${error.message}`, 'danger');
+            window.showAlert(`Fehler beim Löschen der Vorlage: ${error.message}`, 'danger');
         }
     });
 }

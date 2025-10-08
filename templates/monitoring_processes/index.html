@@ -1,21 +1,21 @@
 {% extends "simple_base.html" %}
 
-{% block title %}Monitoring Processes - yourMoment{% endblock %}
+{% block title %}Überwachungsprozesse - yourMoment{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-12">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
             <div>
-                <h1 class="mb-0"><i class="bi bi-activity me-2"></i>Monitoring Processes</h1>
-                <p class="text-muted mb-0">Manage automated article monitoring workflows</p>
+                <h1 class="mb-0"><i class="bi bi-activity me-2"></i>Überwachungsprozesse</h1>
+                <p class="text-muted mb-0">Verwalte automatisierte Workflows zur Artikelüberwachung</p>
             </div>
             <div class="d-flex gap-2">
                 <button id="refreshBtn" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-repeat me-2"></i>Refresh
+                    <i class="bi bi-arrow-repeat me-2"></i>Aktualisieren
                 </button>
                 <a href="/processes/new" class="btn btn-primary">
-                    <i class="bi bi-plus-circle me-2"></i>New Process
+                    <i class="bi bi-plus-circle me-2"></i>Neuer Prozess
                 </a>
             </div>
         </div>
@@ -26,37 +26,37 @@
     <div class="col-md-3 mb-3">
         <label for="statusFilter" class="form-label">Status</label>
         <select id="statusFilter" class="form-select">
-            <option value="ALL" selected>All processes</option>
-            <option value="RUNNING">Running</option>
-            <option value="STOPPED">Stopped</option>
-            <option value="ERROR">Error</option>
+            <option value="ALL" selected>Alle Prozesse</option>
+            <option value="RUNNING">Laufend</option>
+            <option value="STOPPED">Angehalten</option>
+            <option value="ERROR">Fehler</option>
         </select>
     </div>
     <div class="col-md-3 mb-3">
-        <label for="providerFilter" class="form-label">LLM Provider</label>
+        <label for="providerFilter" class="form-label">LLM-Anbieter</label>
         <select id="providerFilter" class="form-select">
-            <option value="ALL" selected>All providers</option>
+            <option value="ALL" selected>Alle Anbieter</option>
         </select>
     </div>
     <div class="col-md-6 mb-3">
-        <label for="searchInput" class="form-label">Search</label>
-        <input type="search" id="searchInput" class="form-control" placeholder="Search by name or description">
+        <label for="searchInput" class="form-label">Suche</label>
+        <input type="search" id="searchInput" class="form-control" placeholder="Nach Name oder Beschreibung suchen">
     </div>
 </div>
 
 <div id="loadingState" class="text-center my-5">
     <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">Loading...</span>
+        <span class="visually-hidden">Wird geladen …</span>
     </div>
-    <p class="mt-2 text-muted">Loading monitoring processes...</p>
+    <p class="mt-2 text-muted">Überwachungsprozesse werden geladen …</p>
 </div>
 
 <div id="emptyState" class="text-center my-5" style="display: none;">
     <i class="bi bi-calendar4-week text-muted" style="font-size: 4rem;"></i>
-    <h3 class="mt-3">No Monitoring Processes Yet</h3>
-    <p class="text-muted">Create a monitoring process to watch myMoment and post AI comments automatically.</p>
+    <h3 class="mt-3">Noch keine Überwachungsprozesse</h3>
+    <p class="text-muted">Erstelle einen Überwachungsprozess, um myMoment zu beobachten und KI-Kommentare automatisch zu veröffentlichen.</p>
     <a href="/processes/new" class="btn btn-primary mt-3">
-        <i class="bi bi-plus-circle me-2"></i>Create Process
+        <i class="bi bi-plus-circle me-2"></i>Prozess erstellen
     </a>
 </div>
 
