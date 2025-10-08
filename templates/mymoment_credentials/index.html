@@ -1,18 +1,18 @@
 {% extends "simple_base.html" %}
 
-{% block title %}myMoment Credentials - yourMoment{% endblock %}
+{% block title %}myMoment-Zugangsdaten - yourMoment{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center">
             <div>
-                <h1><i class="bi bi-person-circle me-2"></i>myMoment Credentials</h1>
-                <p class="text-muted">Manage the credentials used to access myMoment for automated commenting</p>
+                <h1><i class="bi bi-person-circle me-2"></i>myMoment-Zugangsdaten</h1>
+                <p class="text-muted">Verwalte die Zugangsdaten, mit denen du myMoment für automatisierte Kommentare nutzt</p>
             </div>
             <div>
                 <a href="/settings/mymoment-credentials/new" class="btn btn-primary">
-                    <i class="bi bi-plus-circle me-2"></i>Add Credential
+                    <i class="bi bi-plus-circle me-2"></i>Zugang hinzufügen
                 </a>
             </div>
         </div>
@@ -26,27 +26,27 @@
         <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">
-                    <i class="bi bi-person-badge me-2"></i>{{ credential.name or credential.username or 'Credential' }}
+                    <i class="bi bi-person-badge me-2"></i>{{ credential.name or credential.username or 'Zugang' }}
                 </h5>
                 <span class="badge {{ 'bg-success' if credential.is_active else 'bg-secondary' }}">
-                    {{ 'Active' if credential.is_active else 'Inactive' }}
+                    {{ 'Aktiv' if credential.is_active else 'Inaktiv' }}
                 </span>
             </div>
             <div class="card-body">
                 <div class="mb-2">
-                    <strong>Username:</strong><br>
+                    <strong>Benutzername:</strong><br>
                     <code class="text-muted small">{{ credential.username }}</code>
                 </div>
                 <div class="mb-2">
-                    <strong>Created:</strong><br>
+                    <strong>Erstellt:</strong><br>
                     <small class="text-muted">
-                        {{ credential.created_at.strftime('%Y-%m-%d %H:%M') if credential.created_at else '—' }}
+                        {{ credential.created_at.strftime('%Y-%m-%d %H:%M') if credential.created_at else '–' }}
                     </small>
                 </div>
                 <div class="mb-2">
-                    <strong>Last Used:</strong><br>
+                    <strong>Zuletzt genutzt:</strong><br>
                     <small class="text-muted">
-                        {{ credential.last_used.strftime('%Y-%m-%d %H:%M') if credential.last_used else 'Not yet used' }}
+                        {{ credential.last_used.strftime('%Y-%m-%d %H:%M') if credential.last_used else 'Noch nicht verwendet' }}
                     </small>
                 </div>
             </div>
@@ -54,19 +54,19 @@
                 <div class="btn-group w-100" role="group">
                     <a href="/settings/mymoment-credentials/{{ credential.id }}/edit"
                        class="btn btn-outline-primary btn-sm">
-                        <i class="bi bi-pencil"></i> Edit
+                        <i class="bi bi-pencil"></i> Bearbeiten
                     </a>
                     <button type="button"
                             class="btn btn-outline-info btn-sm"
                             data-credential-id="{{ credential.id }}"
                             data-action="test-credential">
-                        <i class="bi bi-check-circle"></i> Test
+                        <i class="bi bi-check-circle"></i> Testen
                     </button>
                     <button type="button"
                             class="btn btn-outline-danger btn-sm"
                             data-credential-id="{{ credential.id }}"
                             data-action="delete-credential">
-                        <i class="bi bi-trash"></i> Delete
+                        <i class="bi bi-trash"></i> Löschen
                     </button>
                 </div>
             </div>
@@ -77,10 +77,10 @@
 {% else %}
 <div class="text-center my-5">
     <i class="bi bi-person-circle text-muted" style="font-size: 4rem;"></i>
-    <h3 class="mt-3">No myMoment Credentials</h3>
-    <p class="text-muted">Add your first credential to start monitoring articles.</p>
+    <h3 class="mt-3">Keine myMoment-Zugangsdaten vorhanden</h3>
+    <p class="text-muted">Füge deinen ersten Zugang hinzu, um Artikel zu überwachen.</p>
     <a href="/settings/mymoment-credentials/new" class="btn btn-primary mt-3">
-        <i class="bi bi-plus-circle me-2"></i>Add Your First Credential
+        <i class="bi bi-plus-circle me-2"></i>Ersten Zugang hinzufügen
     </a>
 </div>
 {% endif %}

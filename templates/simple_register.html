@@ -1,6 +1,6 @@
 {% extends "simple_base.html" %}
 
-{% block title %}Register - yourMoment{% endblock %}
+{% block title %}Registrierung - yourMoment{% endblock %}
 
 {% block content %}
     <div class="ym-logo-container">
@@ -9,8 +9,8 @@
 
     <div class="auth-form">
         <div class="text-center mb-4">
-            <h2>Create Account</h2>
-            <p class="text-muted">Join yourMoment to automate your myMoment comments</p>
+            <h2>Konto erstellen</h2>
+            <p class="text-muted">Werde Teil von yourMoment, um deine myMoment-Kommentare zu automatisieren</p>
         </div>
 
         {% if error_message %}
@@ -21,33 +21,33 @@
 
         <form id="registerForm" action="/register" method="post">
             <div class="mb-3">
-                <label for="email" class="form-label">Email Address</label>
+                <label for="email" class="form-label">E-Mail-Adresse</label>
                 <input type="email" class="form-control" id="email" name="email" required value="{{ form_email or '' }}">
             </div>
 
             <div class="mb-3">
-                <label for="password" class="form-label">Password</label>
+                <label for="password" class="form-label">Passwort</label>
                 <input type="password" class="form-control" id="password" name="password" required minlength="8">
-                <div class="form-text">At least 8 characters with letters and numbers</div>
+                <div class="form-text">Mindestens 8 Zeichen mit Buchstaben und Zahlen</div>
             </div>
 
             <div class="mb-3">
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="agree_terms" name="agree_terms" required>
                     <label class="form-check-label" for="agree_terms">
-                        I agree to the Terms of Service
+                        Ich stimme den Nutzungsbedingungen zu
                     </label>
                 </div>
             </div>
 
             <button type="submit" class="btn btn-primary w-100 mb-3">
                 <i class="bi bi-person-plus me-2"></i>
-                Create Account
+                Konto erstellen
             </button>
         </form>
 
         <div class="text-center">
-            <p>Already have an account? <a href="/login">Sign In</a></p>
+            <p>Du hast bereits ein Konto? <a href="/login">Jetzt anmelden</a></p>
         </div>
     </div>
 {% endblock %}

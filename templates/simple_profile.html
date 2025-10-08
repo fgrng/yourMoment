@@ -1,12 +1,12 @@
 {% extends "simple_base.html" %}
 
-{% block title %}Profile - yourMoment{% endblock %}
+{% block title %}Profil - yourMoment{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-12">
-        <h1><i class="bi bi-person-circle me-2"></i>User Profile</h1>
-        <p class="text-muted">Manage your account information and settings</p>
+        <h1><i class="bi bi-person-circle me-2"></i>Benutzerprofil</h1>
+        <p class="text-muted">Verwalte deine Kontoinformationen und Einstellungen</p>
     </div>
 </div>
 
@@ -15,40 +15,40 @@
     <div class="col-md-8">
         <div class="card">
             <div class="card-header">
-                <h5><i class="bi bi-person me-2"></i>Account Information</h5>
+                <h5><i class="bi bi-person me-2"></i>Kontoinformationen</h5>
             </div>
             <div class="card-body">
                 <div class="row mb-3">
-                    <div class="col-sm-4 fw-bold">Email:</div>
+                    <div class="col-sm-4 fw-bold">E-Mail:</div>
                     <div class="col-sm-8">{{ user.email }}</div>
                 </div>
                 <div class="row mb-3">
-                    <div class="col-sm-4 fw-bold">Account Status:</div>
+                    <div class="col-sm-4 fw-bold">Kontostatus:</div>
                     <div class="col-sm-8">
                         {% if user.is_active %}
-                            <span class="badge bg-success">Active</span>
+                            <span class="badge bg-success">Aktiv</span>
                         {% else %}
-                            <span class="badge bg-secondary">Inactive</span>
+                            <span class="badge bg-secondary">Inaktiv</span>
                         {% endif %}
                     </div>
                 </div>
                 <div class="row mb-3">
-                    <div class="col-sm-4 fw-bold">Email Verified:</div>
+                    <div class="col-sm-4 fw-bold">E-Mail bestätigt:</div>
                     <div class="col-sm-8">
                         {% if user.is_verified %}
-                            <span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Verified</span>
+                            <span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Bestätigt</span>
                         {% else %}
-                            <span class="badge bg-warning"><i class="bi bi-exclamation-circle-fill"></i> Not Verified</span>
+                            <span class="badge bg-warning"><i class="bi bi-exclamation-circle-fill"></i> Nicht bestätigt</span>
                         {% endif %}
                     </div>
                 </div>
                 <div class="row mb-3">
-                    <div class="col-sm-4 fw-bold">User ID:</div>
+                    <div class="col-sm-4 fw-bold">Benutzer-ID:</div>
                     <div class="col-sm-8"><code>{{ user.id }}</code></div>
                 </div>
                 <div class="row mb-3">
-                    <div class="col-sm-4 fw-bold">Member Since:</div>
-                    <div class="col-sm-8">{{ user.created_at.strftime('%Y-%m-%d %H:%M') if user.created_at else 'N/A' }}</div>
+                    <div class="col-sm-4 fw-bold">Mitglied seit:</div>
+                    <div class="col-sm-8">{{ user.created_at.strftime('%Y-%m-%d %H:%M') if user.created_at else '–' }}</div>
                 </div>
             </div>
         </div>
@@ -58,19 +58,19 @@
     <div class="col-md-4">
         <div class="card">
             <div class="card-header">
-                <h5><i class="bi bi-shield-lock me-2"></i>Security</h5>
+                <h5><i class="bi bi-shield-lock me-2"></i>Sicherheit</h5>
             </div>
             <div class="card-body">
                 <div class="d-grid gap-2">
                     <button class="btn btn-outline-secondary" disabled>
-                        <i class="bi bi-key me-2"></i>Change Password
+                        <i class="bi bi-key me-2"></i>Passwort ändern
                     </button>
                     <button class="btn btn-outline-danger" disabled>
-                        <i class="bi bi-trash me-2"></i>Delete Account
+                        <i class="bi bi-trash me-2"></i>Konto löschen
                     </button>
                 </div>
                 <p class="text-muted small mt-2 mb-0">
-                    <i class="bi bi-info-circle"></i> Coming soon
+                    <i class="bi bi-info-circle"></i> Demnächst verfügbar
                 </p>
             </div>
         </div>
@@ -82,32 +82,32 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <h5><i class="bi bi-bar-chart-fill me-2"></i>Account Statistics</h5>
+                <h5><i class="bi bi-bar-chart-fill me-2"></i>Konto-Statistiken</h5>
             </div>
             <div class="card-body">
                 <div class="row text-center">
                     <div class="col-md-3">
                         <div class="stat-box">
                             <h3 class="text-primary" id="processCount">-</h3>
-                            <p class="text-muted">Monitoring Processes</p>
+                            <p class="text-muted">Überwachungsprozesse</p>
                         </div>
                     </div>
                     <div class="col-md-3">
                         <div class="stat-box">
                             <h3 class="text-success" id="aiCommentCount">-</h3>
-                            <p class="text-muted">AI Comments</p>
+                            <p class="text-muted">KI-Kommentare</p>
                         </div>
                     </div>
                     <div class="col-md-3">
                         <div class="stat-box">
                             <h3 class="text-info" id="llmProviderCount">-</h3>
-                            <p class="text-muted">LLM Providers</p>
+                            <p class="text-muted">LLM-Anbieter</p>
                         </div>
                     </div>
                     <div class="col-md-3">
                         <div class="stat-box">
                             <h3 class="text-warning" id="mymomentCredentialCount">-</h3>
-                            <p class="text-muted">myMoment Credentials</p>
+                            <p class="text-muted">myMoment-Zugangsdaten</p>
                         </div>
                     </div>
                 </div>

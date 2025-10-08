@@ -1,6 +1,6 @@
 {% extends "simple_base.html" %}
 
-{% block title %}{{ 'Edit' if provider_id else 'New' }} LLM Provider - yourMoment{% endblock %}
+{% block title %}{% if provider_id %}LLM-Anbieter bearbeiten{% else %}Neuen LLM-Anbieter verbinden{% endif %} - yourMoment{% endblock %}
 
 {% block content %}
 <div class="row">
@@ -9,15 +9,15 @@
             <div>
                 <h1 class="mb-0">
                     <i class="bi bi-plug me-2"></i>
-                    {{ 'Edit' if provider_id else 'Connect' }} LLM Provider
+                    {% if provider_id %}LLM-Anbieter bearbeiten{% else %}LLM-Anbieter verbinden{% endif %}
                 </h1>
                 <p class="text-muted mb-0">
-                    {{ 'Update the model configuration and API key' if provider_id else 'Add an API provider used for generating automated comments' }}
+                    {% if provider_id %}Aktualisiere die Modellkonfiguration und den API-Schlüssel{% else %}Füge einen API-Anbieter für die automatische Kommentierung hinzu{% endif %}
                 </p>
             </div>
             <div>
                 <a href="/settings/llm-providers" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-left me-2"></i>Back to Providers
+                    <i class="bi bi-arrow-left me-2"></i>Zurück zu den Anbietern
                 </a>
             </div>
         </div>
@@ -26,65 +26,65 @@
 
 <div id="loadingState" class="text-center my-5" style="display: {{ 'block' if provider_id else 'none' }};">
     <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">Loading...</span>
+        <span class="visually-hidden">Wird geladen …</span>
     </div>
-    <p class="mt-2 text-muted">Loading provider configuration...</p>
+    <p class="mt-2 text-muted">Anbieterkonfiguration wird geladen …</p>
 </div>
 
 <div class="row mt-4" id="formContainer" style="display: {{ 'none' if provider_id else 'flex' }};">
     <div class="col-lg-8">
         <div class="card mb-3">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Provider Configuration</h5>
+                <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Anbieterkonfiguration</h5>
             </div>
             <div class="card-body">
                 <form id="providerForm">
                     <div class="mb-3">
-                        <label for="providerName" class="form-label">Provider <span class="text-danger">*</span></label>
+                        <label for="providerName" class="form-label">Anbieter <span class="text-danger">*</span></label>
                         <select id="providerName" name="provider_name" class="form-select" {{ 'disabled' if provider_id else '' }} required>
-                            <option value="">Select provider</option>
+                            <option value="">Anbieter auswählen</option>
                             <option value="openai">OpenAI</option>
                             <option value="mistral">Mistral</option>
                         </select>
-                        <div class="form-text">Choose the LLM platform this configuration uses. Provider type cannot be changed after creation.</div>
+                        <div class="form-text">Wähle die LLM-Plattform für diese Konfiguration. Der Anbietertyp kann später nicht geändert werden.</div>
                     </div>
 
                     <div class="mb-3">
-                        <label for="apiKey" class="form-label">API Key {% if not provider_id %}<span class="text-danger">*</span>{% endif %}</label>
+                        <label for="apiKey" class="form-label">API-Schlüssel {% if not provider_id %}<span class="text-danger">*</span>{% endif %}</label>
                         <div class="input-group">
-                            <input type="password" id="apiKey" name="api_key" class="form-control" {{ '' if provider_id else 'required' }} placeholder="Enter API key">
+                            <input type="password" id="apiKey" name="api_key" class="form-control" {{ '' if provider_id else 'required' }} placeholder="API-Schlüssel eingeben">
                             <button class="btn btn-outline-secondary" type="button" id="toggleApiKey"><i class="bi bi-eye"></i></button>
                         </div>
-                        <div class="form-text">{{ 'Leave blank to keep the current API key' if provider_id else 'Your API key is encrypted before storage. It will not be shown again after saving.' }}</div>
+                        <div class="form-text">{{ 'Leer lassen, um den aktuellen API-Schlüssel zu behalten' if provider_id else 'Dein API-Schlüssel wird vor der Speicherung verschlüsselt und nach dem Speichern nicht erneut angezeigt.' }}</div>
                     </div>
 
                     <div class="mb-3">
-                        <label for="modelName" class="form-label">Model Name <span class="text-danger">*</span></label>
-                        <input type="text" id="modelName" name="model_name" class="form-control" maxlength="100" required placeholder="e.g., gpt-4o-mini or mistral-large-latest">
-                        <div class="form-text">Specify the exact model identifier provided by the LLM vendor.</div>
+                        <label for="modelName" class="form-label">Modellname <span class="text-danger">*</span></label>
+                        <input type="text" id="modelName" name="model_name" class="form-control" maxlength="100" required placeholder="z. B. gpt-4o-mini oder mistral-large-latest">
+                        <div class="form-text">Gib den exakten Modellbezeichner des LLM-Anbieters an.</div>
                     </div>
 
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label for="maxTokens" class="form-label">Max Tokens</label>
-                            <input type="number" id="maxTokens" name="max_tokens" class="form-control" min="1" placeholder="Use vendor default" disabled>
-                            <div class="form-text">Optional token limit for responses.</div>
+                            <label for="maxTokens" class="form-label">Maximale Token</label>
+                            <input type="number" id="maxTokens" name="max_tokens" class="form-control" min="1" placeholder="Anbietervorgabe verwenden" disabled>
+                            <div class="form-text">Optionales Token-Limit für Antworten.</div>
                         </div>
                         <div class="col-md-6">
-                            <label for="temperature" class="form-label">Temperature</label>
+                            <label for="temperature" class="form-label">Temperatur</label>
                             <div class="input-group">
-                                <input type="number" id="temperature" name="temperature" class="form-control" min="0" max="1" step="0.05" placeholder="Use vendor default" disabled>
+                                <input type="number" id="temperature" name="temperature" class="form-control" min="0" max="1" step="0.05" placeholder="Anbietervorgabe verwenden" disabled>
                                 <span class="input-group-text">0.0 - 1.0</span>
                             </div>
-                            <div class="form-text">Optional temperature value. Lower values produce focused answers; higher values add creativity.</div>
+                            <div class="form-text">Optionaler Temperaturwert. Niedrige Werte erzeugen fokussierte Antworten, höhere Werte sorgen für mehr Kreativität.</div>
                         </div>
                     </div>
 
                     <div class="d-flex gap-2 mt-4">
                         <button type="submit" class="btn btn-primary" id="submitBtn">
-                            <i class="bi bi-check-circle me-2"></i>{{ 'Save Changes' if provider_id else 'Create Provider' }}
+                            <i class="bi bi-check-circle me-2"></i>{% if provider_id %}Änderungen speichern{% else %}Anbieter erstellen{% endif %}
                         </button>
-                        <a href="/settings/llm-providers" class="btn btn-outline-secondary">Cancel</a>
+                        <a href="/settings/llm-providers" class="btn btn-outline-secondary">Abbrechen</a>
                     </div>
                 </form>
             </div>
@@ -94,14 +94,14 @@
     <div class="col-lg-4">
         <div class="card mb-3">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Provider Tips</h5>
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Anbieter-Tipps</h5>
             </div>
             <div class="card-body small">
                 <ul class="mb-0">
-                    <li>Keep API keys scoped and rotate them regularly.</li>
-                    <li>Match models to your monitoring scenario (speed vs quality).</li>
-                    <li>Temperature of 0.2-0.4 is recommended for compliance-friendly comments.</li>
-                    <li>Leave optional fields blank to use provider defaults.</li>
+                    <li>Halte API-Schlüssel eng gefasst und rotiere sie regelmäßig.</li>
+                    <li>Wähle Modelle passend zu deinem Szenario (Geschwindigkeit vs. Qualität).</li>
+                    <li>Eine Temperatur von 0,2–0,4 sorgt für regelkonforme Kommentare.</li>
+                    <li>Lass optionale Felder leer, um Anbietervorgaben zu nutzen.</li>
                 </ul>
             </div>
         </div>
@@ -146,7 +146,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             return;
         }
 
-        const originalHtml = setButtonLoading(submitBtn, 'Saving...');
+        const originalHtml = setButtonLoading(submitBtn, 'Speichern …');
         const url = isEditMode ? `/api/v1/llm-providers/${providerId}` : '/api/v1/llm-providers/create';
         const method = isEditMode ? 'PATCH' : 'POST';
 
@@ -155,7 +155,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             method,
             payload,
             () => {
-                window.showAlert('Provider configuration saved successfully.', 'success');
+                window.showAlert('Anbieterkonfiguration wurde erfolgreich gespeichert.', 'success');
                 setTimeout(() => {
                     window.location.href = '/settings/llm-providers';
                 }, 1000);
@@ -176,14 +176,14 @@ document.addEventListener('DOMContentLoaded', async function() {
             const response = await fetch('/api/v1/llm-providers/index', fetchOptions('GET'));
 
             if (!response.ok) {
-                throw new Error(`Failed to load provider: ${response.status}`);
+                throw new Error(`Anbieter konnte nicht geladen werden (HTTP ${response.status})`);
             }
 
             const providers = await response.json();
             const provider = providers.find(item => item.id === providerId);
 
             if (!provider) {
-                window.showAlert('Provider configuration not found or inaccessible.', 'danger');
+                window.showAlert('Anbieterkonfiguration nicht gefunden oder kein Zugriff.', 'danger');
                 loadingState.style.display = 'none';
                 return;
             }
@@ -201,7 +201,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             formContainer.style.display = 'flex';
         } catch (error) {
             console.error('Error loading provider configuration:', error);
-            window.showAlert('Unable to load provider configuration. Please try again later.', 'danger');
+            window.showAlert('Anbieterkonfiguration konnte nicht geladen werden. Bitte später erneut versuchen.', 'danger');
             loadingState.style.display = 'none';
         }
     }
@@ -214,17 +214,17 @@ document.addEventListener('DOMContentLoaded', async function() {
         const temperature = temperatureInput.value.trim();
 
         if (!providerName) {
-            window.showAlert('Select a provider before saving.', 'warning');
+            window.showAlert('Bitte wähle vor dem Speichern einen Anbieter aus.', 'warning');
             return null;
         }
 
         if (!isEditMode && !apiKey) {
-            window.showAlert('API key is required when creating a provider.', 'warning');
+            window.showAlert('Beim Anlegen eines Anbieters ist ein API-Schlüssel erforderlich.', 'warning');
             return null;
         }
 
         if (!modelName) {
-            window.showAlert('Model name is required.', 'warning');
+            window.showAlert('Der Modellname ist erforderlich.', 'warning');
             return null;
         }
 
@@ -267,7 +267,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
 
         if (Object.keys(diff).length === 0) {
-            window.showAlert('No changes detected. Update a field before saving.', 'info');
+            window.showAlert('Keine Änderungen erkannt. Bitte ändere ein Feld, bevor du speicherst.', 'info');
             return null;
         }
 
@@ -280,15 +280,15 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
         const parsed = Number(value);
         if (!Number.isFinite(parsed)) {
-            window.showAlert('Numeric fields must contain valid numbers.', 'warning');
+            window.showAlert('Numerische Felder müssen gültige Zahlen enthalten.', 'warning');
             return false;
         }
         if (min !== null && parsed < min) {
-            window.showAlert(`Value must be greater than or equal to ${min}.`, 'warning');
+            window.showAlert(`Der Wert muss größer oder gleich ${min} sein.`, 'warning');
             return false;
         }
         if (max !== null && parsed > max) {
-            window.showAlert(`Value must be less than or equal to ${max}.`, 'warning');
+            window.showAlert(`Der Wert muss kleiner oder gleich ${max} sein.`, 'warning');
             return false;
         }
         return true;

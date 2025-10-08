@@ -45,10 +45,10 @@ export function escapeAttribute(text) {
 /**
  * Format a date string to localized format
  * @param {string|Date} value - Date value to format
- * @param {string} fallback - Fallback text if date is invalid (default: 'Unknown')
+ * @param {string} fallback - Fallback text if date is invalid (default: 'Unbekannt')
  * @returns {string} Formatted date string or fallback
  */
-export function formatDate(value, fallback = 'Unknown') {
+export function formatDate(value, fallback = 'Unbekannt') {
     if (!value) {
         return fallback;
     }
@@ -73,15 +73,15 @@ export function formatProviderLabel(providerName) {
 /**
  * Format a duration in minutes to human-readable format
  * @param {number} minutes - Duration in minutes
- * @returns {string} Formatted duration (e.g., '2h 30m')
+ * @returns {string} Formatted duration (z. B. '2 Std 30 Min')
  */
 export function formatDuration(minutes) {
-    if (!minutes || minutes === 0) return '0m';
+    if (!minutes || minutes === 0) return '0 Min';
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
-    if (hours > 0 && mins > 0) return `${hours}h ${mins}m`;
-    if (hours > 0) return `${hours}h`;
-    return `${mins}m`;
+    if (hours > 0 && mins > 0) return `${hours} Std ${mins} Min`;
+    if (hours > 0) return `${hours} Std`;
+    return `${mins} Min`;
 }
 
 // ============================================================================
@@ -174,7 +174,7 @@ export function togglePasswordVisibility(input, icon) {
  * @param {string} loadingText - Text to display during loading
  * @returns {string} Original button HTML for restoration
  */
-export function setButtonLoading(button, loadingText = 'Saving...') {
+export function setButtonLoading(button, loadingText = 'Wird gespeichert…') {
     const originalHtml = button.innerHTML;
     button.disabled = true;
     button.innerHTML = `
@@ -206,7 +206,7 @@ export function resetButton(button, originalHtml) {
  * @param {string} confirmMessage - Custom confirmation message (optional)
  */
 export async function deleteResource(url, resourceName, onSuccess, confirmMessage = null) {
-    const message = confirmMessage || `Delete this ${resourceName}? This action cannot be undone.`;
+    const message = confirmMessage || `Diesen ${resourceName} löschen? Dies kann nicht rückgängig gemacht werden.`;
 
     if (!confirm(message)) {
         return;
@@ -216,7 +216,7 @@ export async function deleteResource(url, resourceName, onSuccess, confirmMessag
         const response = await fetch(url, fetchOptions('DELETE'));
 
         if (!response.ok) {
-            let errorMessage = `Failed to delete ${resourceName}.`;
+            let errorMessage = `${resourceName} konnte nicht gelöscht werden.`;
             const error = await safeParseJson(response);
             if (error) {
                 const extracted = extractErrorMessage(error);
@@ -250,7 +250,7 @@ export async function submitForm(url, method, payload, onSuccess, onError) {
 
         if (!response.ok) {
             const error = await safeParseJson(response);
-            const message = extractErrorMessage(error) || 'Request failed';
+            const message = extractErrorMessage(error) || 'Anfrage fehlgeschlagen';
             if (onError) {
                 onError(message, response.status, error);
             }
@@ -265,7 +265,7 @@ export async function submitForm(url, method, payload, onSuccess, onError) {
     } catch (error) {
         console.error('Form submission error:', error);
         if (onError) {
-            onError(error.message || 'Unexpected error occurred', 0, error);
+            onError(error.message || 'Es ist ein unerwarteter Fehler aufgetreten', 0, error);
         }
         return false;
     }

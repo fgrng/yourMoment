@@ -70,10 +70,10 @@ async function loadAllData() {
             fetch('/api/v1/mymoment-credentials/index', fetchOptions())
         ]);
 
-        await assertOk(processResp, 'Failed to load monitoring processes.');
-        await assertOk(providerResp, 'Failed to load LLM providers.');
-        await assertOk(templateResp, 'Failed to load prompt templates.');
-        await assertOk(credentialResp, 'Failed to load myMoment credentials.');
+        await assertOk(processResp, 'Überwachungsprozesse konnten nicht geladen werden.');
+        await assertOk(providerResp, 'LLM-Anbieter konnten nicht geladen werden.');
+        await assertOk(templateResp, 'Prompt-Vorlagen konnten nicht geladen werden.');
+        await assertOk(credentialResp, 'myMoment-Zugangsdaten konnten nicht geladen werden.');
 
         processes = await processResp.json();
         providers = await providerResp.json();
@@ -101,7 +101,7 @@ async function loadAllData() {
     } catch (error) {
         console.error('Error loading monitoring processes:', error);
         loadingState.style.display = 'none';
-        window.showAlert(error.message || 'Unable to load monitoring processes. Please try again.', 'danger');
+        window.showAlert(error.message || 'Überwachungsprozesse konnten nicht geladen werden. Bitte versuche es erneut.', 'danger');
     }
 }
 
@@ -144,11 +144,11 @@ async function assertOk(response, message) {
 
 function populateProviderFilter() {
     const currentSelection = providerFilter.value;
-    providerFilter.innerHTML = '<option value="ALL">All providers</option>';
+    providerFilter.innerHTML = '<option value="ALL">Alle Anbieter</option>';
     providers.forEach(provider => {
         const option = document.createElement('option');
         option.value = provider.id;
-        option.textContent = formatProviderLabel(provider.provider_name) + ' - ' + (provider.model_name || 'Model not set');
+        option.textContent = formatProviderLabel(provider.provider_name) + ' - ' + (provider.model_name || 'Kein Modell festgelegt');
         providerFilter.appendChild(option);
     });
     providerFilter.value = currentSelection || 'ALL';
@@ -185,8 +185,8 @@ function renderProcesses(list) {
     if (!list.length) {
         processList.style.display = 'none';
         emptyState.style.display = 'block';
-        emptyState.querySelector('h3').textContent = processes.length ? 'No processes match your filters' : 'No Monitoring Processes Yet';
-        emptyState.querySelector('p').textContent = processes.length ? 'Adjust the filters or search terms to view other processes.' : 'Create a monitoring process to watch myMoment and post AI comments automatically.';
+        emptyState.querySelector('h3').textContent = processes.length ? 'Keine Prozesse entsprechen deinen Filtern' : 'Noch keine Überwachungsprozesse';
+        emptyState.querySelector('p').textContent = processes.length ? 'Passe Filter oder Suchbegriffe an, um weitere Prozesse anzuzeigen.' : 'Erstelle einen Überwachungsprozess, um myMoment zu beobachten und KI-Kommentare automatisch zu posten.';
         return;
     }
 
@@ -198,20 +198,20 @@ function renderProcesses(list) {
         col.className = 'col-12 col-lg-6 col-xxl-4 mb-4';
 
         const provider = providerMap.get(process.llm_provider_id);
-        const providerLabel = provider ? `${formatProviderLabel(provider.provider_name)} - ${provider.model_name || 'Model not set'}` : 'Unknown provider';
+        const providerLabel = provider ? `${formatProviderLabel(provider.provider_name)} - ${provider.model_name || 'Kein Modell festgelegt'}` : 'Unbekannter Anbieter';
         const promptNames = process.prompt_template_ids
-            .map(templateId => promptTemplateMap.get(templateId)?.name || 'Unknown template')
+            .map(templateId => promptTemplateMap.get(templateId)?.name || 'Unbekannte Vorlage')
             .join(', ');
         const credentialNames = process.mymoment_login_ids
-            .map(credentialId => credentialMap.get(credentialId)?.name || credentialMap.get(credentialId)?.username || 'Unknown credential')
+            .map(credentialId => credentialMap.get(credentialId)?.name || credentialMap.get(credentialId)?.username || 'Unbekannter Zugang')
             .join(', ');
 
         const statusBadge = process.is_running
-            ? '<span class="badge bg-success">Running</span>'
-            : process.error_message ? '<span class="badge bg-danger">Error</span>' : '<span class="badge bg-secondary">Stopped</span>';
+            ? '<span class="badge bg-success">Läuft</span>'
+            : process.error_message ? '<span class="badge bg-danger">Fehler</span>' : '<span class="badge bg-secondary">Angehalten</span>';
 
         const errorBlock = process.error_message
-            ? `<div class="alert alert-warning mt-3 mb-0"><strong>Error:</strong> ${escapeHtml(process.error_message)}</div>`
+            ? `<div class="alert alert-warning mt-3 mb-0"><strong>Fehler:</strong> ${escapeHtml(process.error_message)}</div>`
             : '';
 
         col.innerHTML = `
@@ -229,49 +229,49 @@ function renderProcesses(list) {
                 <div class="card-body">
                     ${process.description ? `<p class="text-muted mb-3">${escapeHtml(process.description)}</p>` : ''}
                     <div class="mb-2">
-                        <strong>Mode:</strong>
+                        <strong>Modus:</strong>
                         <span class="small">
                             ${process.generate_only
-                                ? '<span class="badge bg-info">Generate Only</span>'
-                                : '<span class="badge bg-primary">Generate & Post</span>'}
+                                ? '<span class="badge bg-info">Nur erzeugen</span>'
+                                : '<span class="badge bg-primary">Erzeugen & Veröffentlichen</span>'}
                         </span>
                     </div>
                     <div class="mb-2">
-                        <strong>LLM Provider:</strong>
+                        <strong>LLM-Anbieter:</strong>
                         <div class="small">${escapeHtml(providerLabel)}</div>
                     </div>
                     <div class="mb-2">
-                        <strong>Credentials:</strong>
-                        <div class="small text-truncate" title="${escapeAttribute(credentialNames)}">${escapeHtml(credentialNames) || '<span class="text-muted">None selected</span>'}</div>
+                        <strong>Zugangsdaten:</strong>
+                        <div class="small text-truncate" title="${escapeAttribute(credentialNames)}">${escapeHtml(credentialNames) || '<span class="text-muted">Keine ausgewählt</span>'}</div>
                     </div>
                     <div class="mb-2">
                         <strong>Prompts:</strong>
-                        <div class="small text-truncate" title="${escapeAttribute(promptNames)}">${escapeHtml(promptNames) || '<span class="text-muted">None selected</span>'}</div>
+                        <div class="small text-truncate" title="${escapeAttribute(promptNames)}">${escapeHtml(promptNames) || '<span class="text-muted">Keine ausgewählt</span>'}</div>
                     </div>
                     <div class="mb-2">
-                        <strong>Max Duration:</strong>
-                        <span class="small">${process.max_duration_minutes} minutes</span>
+                        <strong>Maximale Dauer:</strong>
+                        <span class="small">${process.max_duration_minutes} Minuten</span>
                     </div>
                     ${formatSchedule(process)}
                     ${errorBlock}
                     <div class="text-end small text-muted">
-                        <div>Updated ${formatRelative(process.updated_at)}</div>
+                        <div>Aktualisiert ${formatRelative(process.updated_at)}</div>
                     </div>
                 </div>
                 <div class="card-footer bg-transparent">
                     <div class="d-flex flex-wrap gap-2">
                         <a class="btn btn-outline-info btn-sm" href="/processes/${process.id}/ai-comments">
-                            <i class="bi bi-chat-dots"></i> View Details
+                            <i class="bi bi-chat-dots"></i> Details anzeigen
                         </a>
                         ${process.is_running
-                            ? `<button class="btn btn-outline-warning btn-sm" type="button" onclick="window.YM.monitoring.stopProcess('${process.id}')"><i class="bi bi-pause-circle"></i> Stop</button>`
-                            : `<button class="btn btn-outline-success btn-sm" type="button" onclick="window.YM.monitoring.startProcess('${process.id}')"><i class="bi bi-play-circle"></i> Start</button>`
+                            ? `<button class="btn btn-outline-warning btn-sm" type="button" onclick="window.YM.monitoring.stopProcess('${process.id}')"><i class="bi bi-pause-circle"></i> Stoppen</button>`
+                            : `<button class="btn btn-outline-success btn-sm" type="button" onclick="window.YM.monitoring.startProcess('${process.id}')"><i class="bi bi-play-circle"></i> Starten</button>`
                         }
                         <a class="btn btn-outline-primary btn-sm" href="/processes/${process.id}/edit">
-                            <i class="bi bi-pencil"></i> Edit
+                            <i class="bi bi-pencil"></i> Bearbeiten
                         </a>
                         <button class="btn btn-outline-danger btn-sm" type="button" onclick="window.YM.monitoring.deleteProcess('${process.id}')">
-                            <i class="bi bi-trash"></i> Delete
+                            <i class="bi bi-trash"></i> Löschen
                         </button>
                     </div>
                 </div>
@@ -291,12 +291,12 @@ export async function startProcess(processId) {
                 'Content-Type': 'application/json'
             }
         });
-        await assertOk(response, 'Failed to start process.');
-        window.showAlert('Process started successfully.', 'success');
+        await assertOk(response, 'Prozess konnte nicht gestartet werden.');
+        window.showAlert('Prozess erfolgreich gestartet.', 'success');
         loadAllData();
     } catch (error) {
         console.error('Start process error:', error);
-        window.showAlert(error.message || 'Unable to start process.', 'danger');
+        window.showAlert(error.message || 'Prozess konnte nicht gestartet werden.', 'danger');
     }
 }
 
@@ -309,17 +309,17 @@ export async function stopProcess(processId) {
                 'Content-Type': 'application/json'
             }
         });
-        await assertOk(response, 'Failed to stop process.');
-        window.showAlert('Process stopped successfully.', 'success');
+        await assertOk(response, 'Prozess konnte nicht gestoppt werden.');
+        window.showAlert('Prozess erfolgreich gestoppt.', 'success');
         loadAllData();
     } catch (error) {
         console.error('Stop process error:', error);
-        window.showAlert(error.message || 'Unable to stop process.', 'danger');
+        window.showAlert(error.message || 'Prozess konnte nicht gestoppt werden.', 'danger');
     }
 }
 
 export async function deleteProcess(processId) {
-    if (!confirm('Delete this monitoring process? This action cannot be undone.')) {
+    if (!confirm('Diesen Überwachungsprozess löschen? Dies kann nicht rückgängig gemacht werden.')) {
         return;
     }
     try {
@@ -332,37 +332,38 @@ export async function deleteProcess(processId) {
         });
         if (!response.ok) {
             const errorBody = await safeParseJson(response);
-            const message = extractErrorMessage(errorBody) || `Failed to delete process (HTTP ${response.status}).`;
+            const message = extractErrorMessage(errorBody) || `Prozess konnte nicht gelöscht werden (HTTP ${response.status}).`;
             window.showAlert(message, 'danger');
             return;
         }
-        window.showAlert('Monitoring process deleted.', 'success');
+        window.showAlert('Überwachungsprozess gelöscht.', 'success');
         loadAllData();
     } catch (error) {
         console.error('Delete process error:', error);
-        window.showAlert(error.message || 'Unable to delete process.', 'danger');
+        window.showAlert(error.message || 'Prozess konnte nicht gelöscht werden.', 'danger');
     }
 }
 
 function formatSchedule(process) {
     if (process.is_running) {
         const started = formatRelative(process.started_at);
-        const expires = process.expires_at ? `Expires ${formatRelative(process.expires_at)}` : '';
-        return `<div class="mb-2"><strong>Running:</strong><div class="small">Started ${started}<br>${expires}</div></div>`;
+        const expiresText = process.expires_at ? formatRelative(process.expires_at) : '';
+        const expires = expiresText ? `<br>Läuft ab ${expiresText}` : '';
+        return `<div class="mb-2"><strong>Aktiv:</strong><div class="small">Gestartet ${started}${expires}</div></div>`;
     }
     if (process.stopped_at) {
-        return `<div class="mb-2"><strong>Last Run:</strong><div class="small">Stopped ${formatRelative(process.stopped_at)}</div></div>`;
+        return `<div class="mb-2"><strong>Letzter Lauf:</strong><div class="small">Gestoppt ${formatRelative(process.stopped_at)}</div></div>`;
     }
-    return '<div class="mb-2"><strong>Status:</strong><div class="small">Not started yet</div></div>';
+    return '<div class="mb-2"><strong>Status:</strong><div class="small">Noch nicht gestartet</div></div>';
 }
 
 function formatRelative(value) {
     if (!value) {
-        return 'N/A';
+        return 'Nicht verfügbar';
     }
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) {
-        return 'N/A';
+        return 'Nicht verfügbar';
     }
 
     const diffMs = date.getTime() - Date.now();
@@ -370,24 +371,27 @@ function formatRelative(value) {
     const diffMinutes = Math.round(Math.abs(diffMs) / 60000);
 
     if (diffMinutes < 1) {
-        return isFuture ? 'in less than a minute' : 'just now';
+        return isFuture ? 'in weniger als einer Minute' : 'gerade eben';
     }
 
     if (diffMinutes < 60) {
+        const unit = diffMinutes === 1 ? 'Minute' : 'Minuten';
         return isFuture
-            ? `in ${diffMinutes} minute${diffMinutes === 1 ? '' : 's'}`
-            : `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'} ago`;
+            ? `in ${diffMinutes} ${unit}`
+            : `vor ${diffMinutes} ${unit}`;
     }
 
     const diffHours = Math.round(diffMinutes / 60);
     if (diffHours < 24) {
+        const unit = diffHours === 1 ? 'Stunde' : 'Stunden';
         return isFuture
-            ? `in ${diffHours} hour${diffHours === 1 ? '' : 's'}`
-            : `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+            ? `in ${diffHours} ${unit}`
+            : `vor ${diffHours} ${unit}`;
     }
 
     const diffDays = Math.round(diffHours / 24);
+    const unit = diffDays === 1 ? 'Tag' : 'Tagen';
     return isFuture
-        ? `in ${diffDays} day${diffDays === 1 ? '' : 's'}`
-        : `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+        ? `in ${diffDays} ${unit}`
+        : `vor ${diffDays} ${unit}`;
 }

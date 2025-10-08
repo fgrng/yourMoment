@@ -1,18 +1,18 @@
 {% extends "simple_base.html" %}
 
-{% block title %}LLM Providers - yourMoment{% endblock %}
+{% block title %}LLM-Anbieter - yourMoment{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-12">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
             <div>
-                <h1 class="mb-0"><i class="bi bi-sliders me-2"></i>LLM Providers</h1>
-                <p class="text-muted mb-0">Manage API credentials and models used for AI comment generation</p>
+                <h1 class="mb-0"><i class="bi bi-sliders me-2"></i>LLM-Anbieter</h1>
+                <p class="text-muted mb-0">Verwalte API-Zugangsdaten und Modelle für die KI-Kommentierung</p>
             </div>
             <div>
                 <a href="/settings/llm-providers/new" class="btn btn-primary">
-                    <i class="bi bi-plus-circle me-2"></i>Add Provider
+                    <i class="bi bi-plus-circle me-2"></i>Anbieter hinzufügen
                 </a>
             </div>
         </div>
@@ -21,41 +21,41 @@
 
 <div class="row mt-4">
     <div class="col-md-4 mb-3">
-        <label for="providerFilter" class="form-label">Provider</label>
+        <label for="providerFilter" class="form-label">Anbieter</label>
         <select id="providerFilter" class="form-select">
-            <option value="ALL" selected>All Providers</option>
+            <option value="ALL" selected>Alle Anbieter</option>
             <option value="openai">OpenAI</option>
             <option value="mistral">Mistral</option>
         </select>
-        <div class="form-text">Filter by vendor to focus on a specific integration.</div>
+        <div class="form-text">Filtere nach Anbieter, um eine bestimmte Integration anzuzeigen.</div>
     </div>
     <div class="col-md-4 mb-3">
-        <label for="searchInput" class="form-label">Search</label>
-        <input type="search" id="searchInput" class="form-control" placeholder="Search by model name or notes">
-        <div class="form-text">Search is applied locally to the loaded providers.</div>
+        <label for="searchInput" class="form-label">Suche</label>
+        <input type="search" id="searchInput" class="form-control" placeholder="Nach Modellname oder Notizen suchen">
+        <div class="form-text">Die Suche wird lokal auf die geladenen Anbieter angewendet.</div>
     </div>
     <div class="col-md-4 mb-3">
-        <label class="form-label">Quick Help</label>
+        <label class="form-label">Kurzhilfe</label>
         <div class="border rounded bg-light p-3 small">
-            <p class="mb-2"><strong>Tip:</strong> Use separate API keys for production and testing environments.</p>
-            <p class="mb-0">Keep your keys private - they are encrypted before storage.</p>
+            <p class="mb-2"><strong>Tipp:</strong> Verwende getrennte API-Schlüssel für Produktion und Test.</p>
+            <p class="mb-0">Halte deine Schlüssel geheim – sie werden vor der Speicherung verschlüsselt.</p>
         </div>
     </div>
 </div>
 
 <div id="loadingState" class="text-center my-5">
     <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">Loading...</span>
+        <span class="visually-hidden">Wird geladen …</span>
     </div>
-    <p class="mt-2 text-muted">Loading LLM providers...</p>
+    <p class="mt-2 text-muted">LLM-Anbieter werden geladen …</p>
 </div>
 
 <div id="emptyState" class="text-center my-5" style="display: none;">
     <i class="bi bi-cloud-upload text-muted" style="font-size: 4rem;"></i>
-    <h3 class="mt-3">No LLM Providers yet</h3>
-    <p class="text-muted">Add your first provider to enable automated comment generation.</p>
+    <h3 class="mt-3">Noch keine LLM-Anbieter</h3>
+    <p class="text-muted">Füge deinen ersten Anbieter hinzu, um automatische Kommentare zu aktivieren.</p>
     <a href="/settings/llm-providers/new" class="btn btn-primary mt-3">
-        <i class="bi bi-plus-circle me-2"></i>Add Provider
+        <i class="bi bi-plus-circle me-2"></i>Anbieter hinzufügen
     </a>
 </div>
 
