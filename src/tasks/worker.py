@@ -26,6 +26,10 @@ TASK_MODULES: Iterable[str] = (
     'src.tasks.session_manager',
     'src.tasks.timeout_enforcer',
     'src.tasks.scheduler',
+    'src.tasks.article_discovery',  # NEW: v2 pipeline - article discovery
+    'src.tasks.article_preparation',  # NEW: v2 pipeline - article content preparation
+    'src.tasks.comment_generation',  # NEW: v2 pipeline - AI comment generation
+    'src.tasks.comment_posting',  # NEW: v2 pipeline - comment posting
 )
 
 # Configure logging for Celery
@@ -48,6 +52,10 @@ class CeleryConfig:
         'src.tasks.session_manager.*': {'queue': 'sessions'},
         'src.tasks.timeout_enforcer.*': {'queue': 'timeouts'},
         'src.tasks.scheduler.*': {'queue': 'scheduler'},
+        'src.tasks.article_discovery.*': {'queue': 'discovery'},  # NEW: v2 pipeline
+        'src.tasks.article_preparation.*': {'queue': 'preparation'},  # NEW: v2 pipeline
+        'src.tasks.comment_generation.*': {'queue': 'generation'},  # NEW: v2 pipeline
+        'src.tasks.comment_posting.*': {'queue': 'posting'},  # NEW: v2 pipeline
     }
 
     # Define queues
@@ -57,6 +65,10 @@ class CeleryConfig:
         Queue('sessions', routing_key='sessions'),
         Queue('timeouts', routing_key='timeouts'),
         Queue('scheduler', routing_key='scheduler'),
+        Queue('discovery', routing_key='discovery'),  # NEW: v2 pipeline
+        Queue('preparation', routing_key='preparation'),  # NEW: v2 pipeline
+        Queue('generation', routing_key='generation'),  # NEW: v2 pipeline
+        Queue('posting', routing_key='posting'),  # NEW: v2 pipeline
         Queue('celery', routing_key='celery'),  # default queue
     )
 

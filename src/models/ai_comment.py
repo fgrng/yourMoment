@@ -11,6 +11,14 @@ This design ensures:
 - Immutable audit trail: article content at comment time is preserved
 - Single source of truth: one record = one AI commenting action
 - No orphaned data: article snapshot lifecycle tied to comment lifecycle
+
+Status workflow:
+- discovered: Article discovered, basic metadata captured (no content yet)
+- prepared: Article content fetched and ready for comment generation
+- generated: AI comment generated but not yet posted
+- posted: Comment successfully posted to myMoment
+- failed: Operation failed at any stage
+- deleted: Soft-deleted record
 """
 
 import uuid
@@ -111,7 +119,7 @@ class AIComment(BaseModel):
         nullable=False,
         default=lambda: "discovered",
         index=True
-    )  # discovered, generated, posted, failed, deleted
+    )  # discovered, prepared, generated, posted, failed, deleted
 
     # Comment generation metadata
     ai_model_name = Column(String(100), nullable=True)  # e.g., "claude-3-opus-20240229"
@@ -141,7 +149,7 @@ class AIComment(BaseModel):
     # Constraints
     __table_args__ = (
         CheckConstraint(
-            "status IN ('discovered', 'generated', 'posted', 'failed', 'deleted')",
+            "status IN ('discovered', 'prepared', 'generated', 'posted', 'failed', 'deleted')",
             name="check_ai_comment_status"
         ),
         CheckConstraint(
@@ -200,6 +208,11 @@ class AIComment(BaseModel):
         return self.status == "discovered"
 
     @property
+    def is_prepared(self) -> bool:
+        """Check if this article is prepared with full content but comment not yet generated."""
+        return self.status == "prepared"
+
+    @property
     def is_generated(self) -> bool:
         """Check if this comment is generated but not yet posted."""
         return self.status == "generated"
@@ -238,6 +251,7 @@ class AIComment(BaseModel):
         """Get a display-friendly status."""
         return {
             "discovered": "Article discovered",
+            "prepared": "Article content prepared",
             "generated": "Comment generated (not posted)",
             "posted": "Posted to myMoment",
             "failed": "Posting failed",
