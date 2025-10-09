@@ -26,10 +26,11 @@ TASK_MODULES: Iterable[str] = (
     'src.tasks.session_manager',
     'src.tasks.timeout_enforcer',
     'src.tasks.scheduler',
-    'src.tasks.article_discovery',  # NEW: v2 pipeline - article discovery
-    'src.tasks.article_preparation',  # NEW: v2 pipeline - article content preparation
-    'src.tasks.comment_generation',  # NEW: v2 pipeline - AI comment generation
-    'src.tasks.comment_posting',  # NEW: v2 pipeline - comment posting
+    'src.tasks.article_discovery',  # Article discovery stage
+    'src.tasks.article_preparation',  # Article content preparation stage
+    'src.tasks.comment_generation',  # AI comment generation stage
+    'src.tasks.comment_posting',  # Comment posting stage
+    'src.tasks.monitoring_orchestrator',  # Workflow orchestration
 )
 
 # Configure logging for Celery
@@ -52,10 +53,11 @@ class CeleryConfig:
         'src.tasks.session_manager.*': {'queue': 'sessions'},
         'src.tasks.timeout_enforcer.*': {'queue': 'timeouts'},
         'src.tasks.scheduler.*': {'queue': 'scheduler'},
-        'src.tasks.article_discovery.*': {'queue': 'discovery'},  # NEW: v2 pipeline
-        'src.tasks.article_preparation.*': {'queue': 'preparation'},  # NEW: v2 pipeline
-        'src.tasks.comment_generation.*': {'queue': 'generation'},  # NEW: v2 pipeline
-        'src.tasks.comment_posting.*': {'queue': 'posting'},  # NEW: v2 pipeline
+        'src.tasks.article_discovery.*': {'queue': 'discovery'},
+        'src.tasks.article_preparation.*': {'queue': 'preparation'},
+        'src.tasks.comment_generation.*': {'queue': 'generation'},
+        'src.tasks.comment_posting.*': {'queue': 'posting'},
+        'src.tasks.monitoring_orchestrator.*': {'queue': 'orchestration'},
     }
 
     # Define queues
@@ -65,10 +67,11 @@ class CeleryConfig:
         Queue('sessions', routing_key='sessions'),
         Queue('timeouts', routing_key='timeouts'),
         Queue('scheduler', routing_key='scheduler'),
-        Queue('discovery', routing_key='discovery'),  # NEW: v2 pipeline
-        Queue('preparation', routing_key='preparation'),  # NEW: v2 pipeline
-        Queue('generation', routing_key='generation'),  # NEW: v2 pipeline
-        Queue('posting', routing_key='posting'),  # NEW: v2 pipeline
+        Queue('discovery', routing_key='discovery'),
+        Queue('preparation', routing_key='preparation'),
+        Queue('generation', routing_key='generation'),
+        Queue('posting', routing_key='posting'),
+        Queue('orchestration', routing_key='orchestration'),
         Queue('celery', routing_key='celery'),  # default queue
     )
 
@@ -85,11 +88,11 @@ class CeleryConfig:
     worker_max_tasks_per_child = 100  # Restart worker after 100 tasks to prevent memory leaks
 
     # Task time limits
-    task_soft_time_limit = 300  # 5 minutes soft limit
-    task_time_limit = 600  # 10 minutes hard limit
+    task_soft_time_limit = 3*(60*60)  # 3 hours soft limit
+    task_time_limit = 6*(60*60)  # 6 hours hard limit
 
     # Result expiration
-    result_expires = 3600  # 1 hour
+    result_expires = 24*(60*60)  # 24 hours
 
     # Task routing optimization
     task_ignore_result = False
@@ -265,21 +268,51 @@ def get_task_info() -> Dict[str, Any]:
 
 def health_check() -> Dict[str, Any]:
     """
-    Perform health check on Celery worker.
+    Perform health check on Celery worker and queues.
+
+    Returns detailed information about:
+    - Broker connection status
+    - Active workers count
+    - Queue configurations
+    - Active tasks per queue (if workers are available)
 
     Returns:
-        Health status information
+        Health status information dictionary
     """
     try:
         # Check if we can connect to broker
         inspect = celery_app.control.inspect()
         stats = inspect.stats()
+        active_queues = inspect.active_queues()
+
+        # Build queue status information
+        queue_status = {}
+        all_queues = [queue.name for queue in CeleryConfig.task_queues]
+
+        for queue_name in all_queues:
+            queue_info = {
+                'configured': True,
+                'workers_consuming': 0
+            }
+
+            # Count workers consuming from this queue
+            if active_queues:
+                for worker, queues in active_queues.items():
+                    if any(q['name'] == queue_name for q in queues):
+                        queue_info['workers_consuming'] += 1
+
+            queue_status[queue_name] = queue_info
 
         return {
             'status': 'healthy',
             'broker_connection': 'ok',
             'workers': len(stats) if stats else 0,
-            'queues': [queue.name for queue in CeleryConfig.task_queues],
+            'queues': all_queues,
+            'queue_details': queue_status,
+            'pipeline_queues': [
+                'discovery', 'preparation', 'generation',
+                'posting', 'orchestration'
+            ]
         }
     except Exception as e:
         logger.error(f"Celery health check failed: {e}")

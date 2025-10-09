@@ -174,6 +174,33 @@ class MyMomentLogin(Base):
             self.password_encrypted
         )
 
+    def get_username(self) -> str:
+        """
+        Get the decrypted username.
+
+        Returns:
+            Decrypted username
+
+        Note:
+            This is a convenience method that unpacks get_credentials().
+        """
+        username, _ = self.get_credentials()
+        return username
+
+    def get_password(self) -> str:
+        """
+        Get the decrypted password.
+
+        Returns:
+            Decrypted password
+
+        Note:
+            This is a convenience method that unpacks get_credentials().
+            Use only when actually needed for myMoment login.
+        """
+        _, password = self.get_credentials()
+        return password
+
     @property
     def username(self) -> str:
         """
@@ -181,8 +208,7 @@ class MyMomentLogin(Base):
         Returns:
             Decrypted username (safe to display in UI)
         """
-        username, _ = self.get_credentials()
-        return username
+        return self.get_username()
 
     def to_dict(self, include_credentials: bool = False) -> dict:
         """

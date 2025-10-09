@@ -209,6 +209,17 @@ class ProcessControlResponse(BaseModel):
     message: str = Field(..., description="Operation result message")
 
 
+class PipelineStatusResponse(BaseModel):
+    """Response model for pipeline status with AIComment counts by stage."""
+    process_id: str = Field(..., description="Process unique identifier")
+    discovered: int = Field(..., ge=0, description="Number of articles discovered")
+    prepared: int = Field(..., ge=0, description="Number of articles with content prepared")
+    generated: int = Field(..., ge=0, description="Number of AI comments generated")
+    posted: int = Field(..., ge=0, description="Number of comments posted to myMoment")
+    failed: int = Field(..., ge=0, description="Number of failed comments")
+    total: int = Field(..., ge=0, description="Total number of AIComment records")
+
+
 # === Prompt Template Schemas ===
 
 class PromptTemplateCreate(BaseModel):

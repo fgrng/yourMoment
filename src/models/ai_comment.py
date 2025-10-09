@@ -95,8 +95,9 @@ class AIComment(BaseModel):
     article_url = Column(String(500), nullable=False)  # myMoment article URL
 
     # Article content (frozen snapshot)
-    article_content = Column(Text, nullable=False)  # Processed text content
-    article_raw_html = Column(Text, nullable=False)  # Original HTML
+    # nullable=True to support discovered -> prepared workflow
+    article_content = Column(Text, nullable=True)  # Processed text content (populated in 'prepared' stage)
+    article_raw_html = Column(Text, nullable=True)  # Original HTML (populated in 'prepared' stage)
 
     # Article timestamps
     article_published_at = Column(DateTime(timezone=True), nullable=True)  # When published on myMoment
@@ -153,8 +154,8 @@ class AIComment(BaseModel):
             name="check_ai_comment_status"
         ),
         CheckConstraint(
-            "(status = 'discovered') OR (comment_content IS NOT NULL)",
-            name="check_comment_content_required_after_discovery"
+            "(status IN ('discovered', 'prepared')) OR (comment_content IS NOT NULL)",
+            name="check_comment_content_required_after_preparation"
         ),
         CheckConstraint(
             "(status != 'posted') OR (status = 'posted' AND posted_at IS NOT NULL)",

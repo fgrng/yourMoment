@@ -13,6 +13,7 @@ import {
 
 let allComments = [];
 let monitoringProcess = null;
+let pipelineStatus = null;  // Add pipeline status tracking
 let pollingInterval = null;
 let processId = null;
 
@@ -58,8 +59,8 @@ async function loadComments() {
     window.showAlert();
     loadingState.style.display = 'block';
     emptyState.style.display = 'none';
-    commentsList.style.display = 'none';
-    commentsList.innerHTML = '';
+    // commentsList.style.display = 'none';
+    // commentsList.innerHTML = '';
 
     try {
         const limit = limitSelect.value;
@@ -86,8 +87,10 @@ async function loadComments() {
         if (!allComments.length) {
             emptyState.style.display = 'block';
         } else {
+            commentsList.innerHTML = '';
             commentsList.style.display = 'flex';
             renderComments(filterComments());
+            console.log("reloaded")
         }
 
         // Setup polling if viewing process-specific comments and process is running
@@ -104,13 +107,23 @@ async function loadProcessDetails() {
     if (!processId) return;
 
     try {
-        const response = await fetch(`/api/v1/monitoring-processes/${processId}`, fetchOptions('GET'));
+        // Fetch both process details and pipeline status
+        const [processResponse, pipelineResponse] = await Promise.all([
+            fetch(`/api/v1/monitoring-processes/${processId}`, fetchOptions('GET')),
+            fetch(`/api/v1/monitoring-processes/${processId}/pipeline-status`, fetchOptions('GET'))
+        ]);
 
-        if (!response.ok) {
+        if (!processResponse.ok) {
             return;
         }
 
-        monitoringProcess = await response.json();
+        monitoringProcess = await processResponse.json();
+
+        // Load pipeline status if available
+        if (pipelineResponse.ok) {
+            pipelineStatus = await pipelineResponse.json();
+        }
+
         renderProcessDetails();
 
     } catch (error) {
@@ -124,15 +137,20 @@ function renderProcessDetails() {
         return;
     }
 
-    const generatedCount = allComments.filter(c => c.status === 'generated').length;
-    const postedCount = allComments.filter(c => c.status === 'posted').length;
-
     const statusBadgeClass = monitoringProcess.is_running
         ? 'bg-success'
         : monitoringProcess.error_message ? 'bg-danger' : 'bg-secondary';
     const statusText = monitoringProcess.is_running
         ? 'LÄUFT'
         : monitoringProcess.error_message ? 'FEHLER' : 'ANGEHALTEN';
+
+    // Use pipeline status if available, otherwise fall back to old fields
+    const discoveredCount = pipelineStatus ? pipelineStatus.discovered : 0;
+    const preparedCount = pipelineStatus ? pipelineStatus.prepared : 0;
+    const generatedCount = pipelineStatus ? pipelineStatus.generated : (monitoringProcess.comments_generated || 0);
+    const postedCount = pipelineStatus ? pipelineStatus.posted : 0;
+    const failedCount = pipelineStatus ? pipelineStatus.failed : 0;
+    const totalCount = pipelineStatus ? pipelineStatus.total : (monitoringProcess.articles_discovered || 0);
 
     processDetailsCard.innerHTML = `
         <div class="card mt-4 border-primary">
@@ -159,29 +177,39 @@ function renderProcessDetails() {
                                 <div class="text-muted small">Modus</div>
                                 <div class="fw-bold">
                                     ${monitoringProcess.generate_only
-                                        ? '<span class="badge bg-warning text-dark">Nur erzeugen</span>'
-                                        : '<span class="badge bg-primary">Erzeugen & Veröffentlichen</span>'}
+                                        ? '<span class="badge bg-warning">Nur erzeugen</span>'
+                                        : '<span class="badge bg-danger">Erzeugen & Veröffentlichen</span>'}
                                 </div>
                             </div>
                             <div class="col-6 col-md-3">
-                                <div class="text-muted small">Gefundene Artikel</div>
-                                <div class="fw-bold">${monitoringProcess.articles_discovered || 0}</div>
+                                <div class="text-muted small">Gesamt verarbeitete Artikel</div>
+                                <div class="fw-bold">${totalCount}</div>
                             </div>
                             <div class="col-6 col-md-3">
-                                <div class="text-muted small">Generierte Kommentare</div>
-                                <div class="fw-bold">${monitoringProcess.comments_generated || 0}</div>
+                                <div class="text-muted small">Fehlgeschlagene</div>
+                                <div class="fw-bold text-danger">${failedCount}</div>
                             </div>
                         </div>
-                        <div class="row g-3">
+                        <div class="row g-3 mb-3">
                             <div class="col-6 col-md-3">
-                                <div class="text-muted small">Ausstehende Veröffentlichungen</div>
+                                <div class="text-muted small">Entdeckt</div>
+                                <div class="fw-bold text-secondary">${discoveredCount}</div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="text-muted small">Vorbereitet</div>
+                                <div class="fw-bold text-primary">${preparedCount}</div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="text-muted small">Generiert</div>
                                 <div class="fw-bold text-warning">${generatedCount}</div>
                             </div>
                             <div class="col-6 col-md-3">
-                                <div class="text-muted small">Veröffentlichte insgesamt</div>
+                                <div class="text-muted small">Veröffentlicht</div>
                                 <div class="fw-bold text-success">${postedCount}</div>
                             </div>
-                            <div class="col-12 col-md-6">
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-12">
                                 <div class="text-muted small">Letzte Aktivität</div>
                                 <div class="small">
                                     ${formatLastActivity(monitoringProcess)}
@@ -198,7 +226,6 @@ function renderProcessDetails() {
                                 ${generatedCount === 0 ? 'disabled' : ''}>
                                 <i class="bi bi-send-fill me-2"></i>
                                 Alle generierten Kommentare veröffentlichen
-                                ${generatedCount > 0 ? `<span class="badge bg-white text-success ms-1">${generatedCount}</span>` : ''}
                             </button>
                             <a href="/processes/${monitoringProcess.id}/edit" class="btn btn-outline-primary">
                                 <i class="bi bi-pencil me-2"></i>Prozess bearbeiten
@@ -207,15 +234,6 @@ function renderProcessDetails() {
                                 <i class="bi bi-arrow-left me-2"></i>Zurück zu den Prozessen
                             </a>
                         </div>
-                        ${generatedCount === 0
-                            ? `<div class="alert alert-info mt-3 small mb-0">
-                                <i class="bi bi-info-circle me-1"></i>
-                                Keine ausstehenden Kommentare zum Veröffentlichen
-                            </div>`
-                            : `<div class="alert alert-warning mt-3 small mb-0">
-                                <i class="bi bi-exclamation-triangle me-1"></i>
-                                ${generatedCount} Kommentar${generatedCount === 1 ? '' : 'e'} zur Veröffentlichung bereit
-                            </div>`}
                     </div>
                 </div>
             </div>
@@ -325,15 +343,30 @@ function renderComments(comments) {
         const col = document.createElement('div');
         col.className = 'col-md-6 col-lg-4';
 
+        //                                 <div class="text-muted small">Entdeckt</div>
+                            //     <div class="fw-bold text-secondary">${discoveredCount}</div>
+                            // </div>
+                            // <div class="col-6 col-md-3">
+                            //     <div class="text-muted small">Vorbereitet</div>
+                            //     <div class="fw-bold text-primary">${preparedCount}</div>
+                            // </div>
+                            // <div class="col-6 col-md-3">
+                            //     <div class="text-muted small">Generiert</div>
+                            //     <div class="fw-bold text-warning">${generatedTotal}</div>
+                            // </div>
+                            // <div class="col-6 col-md-3">
+                            //     <div class="text-muted small">Veröffentlicht</div>
+                            //     <div class="fw-bold text-success">${postedTotal}</div>
         const statusBadgeClass = comment.status === 'posted'
             ? 'bg-success'
-            : comment.status === 'generated' ? 'bg-info text-dark'
-            : comment.status === 'failed' ? 'bg-danger'
-            : 'bg-secondary';
+            : comment.status === 'generated' ? 'bg-warning'
+            : comment.status === 'prepared' ? 'bg-primary'
+            : comment.status === 'discovered' ? 'bg-secondary'
+            : 'bg-danger';
         const statusLabel = formatCommentStatus(comment.status);
 
         const truncatedTitle = (comment.article_title || 'Unbekannter Artikel').length > 25
-            ? (comment.article_title || 'Unbekannter Artikel').substring(0, 25) + '…'
+            ? (comment.article_title || 'Unbekannter Artikel').substring(0, 20) + '…'
             : (comment.article_title || 'Unbekannter Artikel');
 
         const commentPreview = comment.comment_content
@@ -379,9 +412,9 @@ function renderComments(comments) {
                             <i class="bi bi-eye"></i> Details anzeigen
                         </a>
                         <button
-                            class="btn btn-success btn-sm post-comment-btn"
+                            class="btn ${comment.status === 'generated' ? 'btn-success' : 'btn-outline-success'} btn-sm post-comment-btn"
                             data-comment-id="${comment.id}"
-                            ${comment.status === 'posted' ? 'disabled' : ''}>
+                            ${comment.status === 'generated' ? '' : 'disabled'}>
                             <i class="bi bi-send"></i> ${comment.status === 'posted' ? 'Veröffentlicht' : 'Auf myMoment veröffentlichen'}
                         </button>
                     </div>
@@ -404,9 +437,9 @@ function formatCommentStatus(status) {
     const mapping = {
         posted: 'Veröffentlicht',
         generated: 'Generiert',
-        failed: 'Fehlgeschlagen',
-        skipped: 'Übersprungen',
-        pending: 'Ausstehend'
+        prepared: 'Vorbereitet',
+        discovered: 'Entdeckt',
+        failed: 'Fehlgeschlagen'
     };
     return mapping[status] || status;
 }

@@ -11,6 +11,7 @@ from src.api.schemas import (
     MonitoringProcessCreate,
     MonitoringProcessUpdate,
     MonitoringProcessResponse,
+    PipelineStatusResponse,
     ErrorResponse
 )
 from src.services.monitoring_service import (
@@ -537,6 +538,78 @@ async def stop_monitoring_process(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "monitoring_process_error",
             "Failed to stop monitoring process."
+        )
+
+
+@router.get("/{process_id}/pipeline-status", response_model=PipelineStatusResponse)
+async def get_pipeline_status(
+    process_id: uuid.UUID = Path(..., description="Process unique identifier"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Get pipeline status for a monitoring process.
+
+    Returns detailed statistics about the pipeline stages by counting
+    AIComment records in each status:
+    - discovered: Articles scraped but content not yet fetched
+    - prepared: Articles with content prepared for generation
+    - generated: AI comments generated but not yet posted
+    - posted: Comments successfully posted to myMoment
+    - failed: Comments that failed at any stage
+
+    This endpoint is useful for tracking the progress of a running monitoring
+    process or understanding the final state after completion.
+
+    **Requirements:**
+    - Process must exist and belong to the current user
+    """
+    try:
+        # Validate process_id format
+        if not isinstance(process_id, uuid.UUID):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid process ID format"
+            )
+
+        service = MonitoringService(session)
+
+        # Get pipeline status from service
+        pipeline_status = await service.get_pipeline_status(process_id, current_user.id)
+
+        logger.debug(f"Retrieved pipeline status for process {process_id}: {pipeline_status}")
+
+        return PipelineStatusResponse(**pipeline_status)
+
+    except HTTPException:
+        raise
+    except ProcessOperationError as e:
+        if "not found" in str(e).lower():
+            raise http_error(
+                status.HTTP_404_NOT_FOUND,
+                "monitoring_process_not_found",
+                "Monitoring process not found."
+            )
+        logger.error(
+            "Process operation error getting pipeline status for process %s: %s",
+            process_id,
+            e,
+            exc_info=True
+        )
+        raise http_error(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "monitoring_process_error",
+            "Failed to retrieve pipeline status."
+        )
+    except Exception as e:
+        logger.error(
+            f"Unexpected error getting pipeline status for process {process_id}: {e}",
+            exc_info=True
+        )
+        raise http_error(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "monitoring_process_error",
+            "Failed to retrieve pipeline status."
         )
 
 

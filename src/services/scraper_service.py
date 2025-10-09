@@ -146,6 +146,12 @@ class ScraperService:
     - Article discovery with filtering
     - Comment generation integration
     - Rate limiting and error recovery
+
+    Database Session Lifecycle:
+    - DB session is required for initialization (reading credentials, session records)
+    - Once SessionContext is created, HTTP operations do NOT use the DB session
+    - Callers should close DB session after initialization, before HTTP operations
+    - Pattern: Open DB → Init session → Close DB → HTTP scraping → Open DB → Update
     """
 
     def __init__(self, db_session: AsyncSession, config: Optional[ScrapingConfig] = None):
@@ -171,13 +177,18 @@ class ScraperService:
         self._last_request_time = 0.0
         self._request_lock = asyncio.Lock()
 
+        logger.debug(f"ScraperService initialized with DB session {id(db_session)}")
+
     async def __aenter__(self):
         """Async context manager entry."""
+        logger.debug(f"ScraperService context entered (DB session {id(self.db_session)})")
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit - cleanup all sessions."""
+        logger.debug(f"ScraperService context exiting (DB session {id(self.db_session)})")
         await self.cleanup_all_sessions()
+        logger.debug("ScraperService context exited, all sessions cleaned up")
 
     async def initialize_session_for_login(
         self,
@@ -452,6 +463,9 @@ class ScraperService:
         """
         Discover new articles from myMoment platform.
 
+        Returns article metadata only (no full content). This method performs
+        HTTP requests only and does NOT use the database session.
+
         Args:
             context: Authenticated session context
             tab: Which tab to scrape ('home', 'alle', or classroom ID)
@@ -459,7 +473,7 @@ class ScraperService:
             limit: Maximum number of articles to retrieve
 
         Returns:
-            List of discovered articles
+            List of discovered articles (metadata only, no content)
 
         Raises:
             ScrapingError: If article discovery fails
@@ -470,6 +484,7 @@ class ScraperService:
 
             articles_url = f"{self.config.base_url}/articles/"
 
+            logger.debug(f"Starting HTTP request to discover articles (login {context.login_id}, tab={tab})")
             await self._rate_limit()
             async with context.aiohttp_session.get(articles_url) as response:
                 if response.status != 200:
@@ -504,6 +519,7 @@ class ScraperService:
                         continue
 
             context.last_activity = datetime.utcnow()
+            logger.debug(f"HTTP request completed for article discovery (login {context.login_id})")
             logger.info(f"Discovered {len(articles)} articles for login {context.login_id}")
 
             return articles
@@ -680,6 +696,8 @@ class ScraperService:
         """
         Get full content of a specific article.
 
+        This method performs HTTP requests only and does NOT use the database session.
+
         Args:
             context: Authenticated session context
             article_id: Article ID to retrieve
@@ -696,6 +714,7 @@ class ScraperService:
 
             article_url = f"{self.config.base_url}/article/{article_id}/"
 
+            logger.debug(f"Starting HTTP request to fetch article content (article_id={article_id}, login={context.login_id})")
             await self._rate_limit()
             async with context.aiohttp_session.get(article_url) as response:
                 if response.status != 200:
@@ -750,6 +769,7 @@ class ScraperService:
                     csrf_token = csrf_input.get('value')
 
             context.last_activity = datetime.utcnow()
+            logger.debug(f"HTTP request completed for article content (article_id={article_id}, login={context.login_id})")
 
             return {
                 'id': article_id,
@@ -811,6 +831,7 @@ class ScraperService:
                 'highlight': highlight or ''
             }
 
+            logger.debug(f"Starting HTTP request to post comment (article_id={article_id}, login={context.login_id})")
             await self._rate_limit()
             async with context.aiohttp_session.post(
                 comment_url,
@@ -822,6 +843,7 @@ class ScraperService:
             ) as response:
                 success = response.status in [200, 302]
 
+                logger.debug(f"HTTP request completed for post comment (article_id={article_id}, login={context.login_id}, status={response.status})")
                 if success:
                     context.last_activity = datetime.utcnow()
                     logger.info(f"Successfully posted comment to article {article_id} via login {context.login_id}")
