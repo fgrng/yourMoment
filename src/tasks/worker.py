@@ -20,17 +20,13 @@ from src.config.settings import get_settings
 
 # Task modules that need to be imported so Celery registers them
 TASK_MODULES: Iterable[str] = (
-    'src.tasks.article_monitor',
-    'src.tasks.comment_generator',
-    'src.tasks.comment_poster',
     'src.tasks.session_manager',
     'src.tasks.timeout_enforcer',
     'src.tasks.scheduler',
-    'src.tasks.article_discovery',  # Article discovery stage
-    'src.tasks.article_preparation',  # Article content preparation stage
-    'src.tasks.comment_generation',  # AI comment generation stage
-    'src.tasks.comment_posting',  # Comment posting stage
-    'src.tasks.monitoring_orchestrator',  # Workflow orchestration
+    'src.tasks.article_discovery',
+    'src.tasks.article_preparation',
+    'src.tasks.comment_generation',
+    'src.tasks.comment_posting',
 )
 
 # Configure logging for Celery
@@ -47,9 +43,6 @@ class CeleryConfig:
 
     # Task routing and queues
     task_routes = {
-        'src.tasks.article_monitor.*': {'queue': 'monitoring'},
-        'src.tasks.comment_generator.*': {'queue': 'comments'},
-        'src.tasks.comment_poster.*': {'queue': 'comments'},
         'src.tasks.session_manager.*': {'queue': 'sessions'},
         'src.tasks.timeout_enforcer.*': {'queue': 'timeouts'},
         'src.tasks.scheduler.*': {'queue': 'scheduler'},
@@ -57,13 +50,10 @@ class CeleryConfig:
         'src.tasks.article_preparation.*': {'queue': 'preparation'},
         'src.tasks.comment_generation.*': {'queue': 'generation'},
         'src.tasks.comment_posting.*': {'queue': 'posting'},
-        'src.tasks.monitoring_orchestrator.*': {'queue': 'orchestration'},
     }
 
     # Define queues
     task_queues = (
-        Queue('monitoring', routing_key='monitoring'),
-        Queue('comments', routing_key='comments'),
         Queue('sessions', routing_key='sessions'),
         Queue('timeouts', routing_key='timeouts'),
         Queue('scheduler', routing_key='scheduler'),
@@ -71,7 +61,6 @@ class CeleryConfig:
         Queue('preparation', routing_key='preparation'),
         Queue('generation', routing_key='generation'),
         Queue('posting', routing_key='posting'),
-        Queue('orchestration', routing_key='orchestration'),
         Queue('celery', routing_key='celery'),  # default queue
     )
 
@@ -115,6 +104,10 @@ class CeleryConfig:
         'health-check-monitoring': {
             'task': 'src.tasks.scheduler.health_check_monitoring_processes',
             'schedule': 120.0,  # Every 2 minutes
+        },
+        'trigger-monitoring-pipeline': {
+            'task': 'src.tasks.scheduler.trigger_monitoring_pipeline',
+            'schedule': 180.0,  # Every 3 minutes
         },
     }
     beat_scheduler = 'celery.beat:PersistentScheduler'
@@ -310,8 +303,7 @@ def health_check() -> Dict[str, Any]:
             'queues': all_queues,
             'queue_details': queue_status,
             'pipeline_queues': [
-                'discovery', 'preparation', 'generation',
-                'posting', 'orchestration'
+                'discovery', 'preparation', 'generation', 'posting'
             ]
         }
     except Exception as e:

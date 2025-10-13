@@ -403,20 +403,24 @@ class MonitoringService:
         user_id: uuid.UUID
     ) -> Dict[str, Any]:
         """
-        Start a monitoring process using the orchestrator pipeline.
+        Start a monitoring process using parallel task spawning (v3.0+).
 
-        The orchestrator coordinates four isolated pipeline stages:
+        Spawns all four pipeline stage tasks in parallel:
         1. Article Discovery (discover_articles)
         2. Article Content Preparation (prepare_content_of_articles)
         3. AI Comment Generation (generate_comments_for_articles)
         4. Comment Posting (post_comments_for_articles)
+
+        Each task polls the database for work items in their respective states
+        (e.g., discovery task looks for articles to discover, preparation task
+        looks for discovered articles to prepare, etc.).
 
         Args:
             process_id: Process ID to start
             user_id: User ID for validation
 
         Returns:
-            Start result with task_id
+            Start result with all task IDs
 
         Raises:
             ProcessOperationError: If start fails
@@ -459,12 +463,46 @@ class MonitoringService:
             process.started_at = now_utc
             process.last_activity_at = now_utc
 
-            # Enqueue orchestrator task with error handling for Redis connection
+            # Import stage tasks
             try:
-                from src.tasks.monitoring_orchestrator import orchestrate_monitoring_process
-                # Start with 'discover' stage - orchestrator will handle stage progression
-                task = orchestrate_monitoring_process.delay(str(process_id), 'discover')
-                task_id = task.id
+                from src.tasks.article_discovery import discover_articles
+                from src.tasks.article_preparation import prepare_content_of_articles
+                from src.tasks.comment_generation import generate_comments_for_articles
+                from src.tasks.comment_posting import post_comments_for_articles
+            except Exception as import_error:
+                # Rollback process status changes
+                process.status = ProcessStatus.CREATED
+                process.started_at = None
+                process.last_activity_at = None
+                await self.db_session.commit()
+                raise ProcessOperationError(
+                    f"Failed to import pipeline tasks: {import_error}"
+                )
+
+            # Spawn all four stage tasks in parallel (v3.0+)
+            try:
+                discovery_task = discover_articles.delay(str(process_id))
+                process.celery_discovery_task_id = discovery_task.id
+
+                preparation_task = prepare_content_of_articles.delay(str(process_id))
+                process.celery_preparation_task_id = preparation_task.id
+
+                generation_task = generate_comments_for_articles.delay(str(process_id))
+                process.celery_generation_task_id = generation_task.id
+
+                # Only spawn posting task if not in generate_only mode
+                posting_task_id = None
+                if not process.generate_only:
+                    posting_task = post_comments_for_articles.delay(str(process_id))
+                    process.celery_posting_task_id = posting_task.id
+                    posting_task_id = posting_task.id
+
+                logger.info(
+                    f"Spawned parallel pipeline tasks for process {process_id}: "
+                    f"discovery={discovery_task.id}, preparation={preparation_task.id}, "
+                    f"generation={generation_task.id}, posting={posting_task_id if not process.generate_only else 'skipped'}"
+                )
+
             except Exception as celery_error:
                 # Check if it's a Redis connection error
                 error_msg = str(celery_error).lower()
@@ -482,16 +520,16 @@ class MonitoringService:
                     # Re-raise other Celery errors
                     raise
 
-            # Store task ID for tracking
-            process.celery_task_id = task_id
-
             await self.db_session.commit()
-
-            logger.info(f"Started monitoring process {process_id} with orchestrator task {task_id}")
 
             return {
                 'process_id': str(process_id),
-                'task_id': task_id,
+                'task_ids': {
+                    'discovery': discovery_task.id,
+                    'preparation': preparation_task.id,
+                    'generation': generation_task.id,
+                    'posting': posting_task_id
+                },
                 'status': 'queued',
                 'started_at': process.started_at.isoformat(),
                 'associated_logins': login_count,
@@ -520,7 +558,13 @@ class MonitoringService:
         reason: str = "user_requested"
     ) -> Dict[str, Any]:
         """
-        Stop a running monitoring process by revoking Celery task.
+        Stop a running monitoring process by revoking all stage-specific Celery tasks (v3.0+).
+
+        Revokes all four pipeline stage tasks:
+        - celery_discovery_task_id
+        - celery_preparation_task_id
+        - celery_generation_task_id
+        - celery_posting_task_id
 
         Args:
             process_id: Process ID to stop
@@ -544,11 +588,30 @@ class MonitoringService:
                     'current_status': process.status
                 }
 
-            # Revoke Celery task if exists
+            # Revoke all stage-specific tasks (v3.0+)
+            from src.tasks.worker import celery_app
+            revoked_tasks = {}
+
+            for task_field in ['celery_discovery_task_id', 'celery_preparation_task_id',
+                               'celery_generation_task_id', 'celery_posting_task_id']:
+                task_id = getattr(process, task_field, None)
+                if task_id:
+                    try:
+                        celery_app.control.revoke(task_id, terminate=True)
+                        revoked_tasks[task_field] = task_id
+                        logger.info(f"Revoked {task_field}: {task_id}")
+                    except Exception as e:
+                        logger.error(f"Failed to revoke {task_field} {task_id}: {e}")
+                        revoked_tasks[task_field] = f"error: {e}"
+
+            # Also revoke legacy celery_task_id if present (for backward compatibility)
             if process.celery_task_id:
-                from src.tasks.worker import celery_app
-                celery_app.control.revoke(process.celery_task_id, terminate=True)
-                logger.info(f"Revoked Celery task {process.celery_task_id} for process {process_id}")
+                try:
+                    celery_app.control.revoke(process.celery_task_id, terminate=True)
+                    revoked_tasks['legacy_celery_task_id'] = process.celery_task_id
+                    logger.info(f"Revoked legacy Celery task {process.celery_task_id} for process {process_id}")
+                except Exception as e:
+                    logger.error(f"Failed to revoke legacy task {process.celery_task_id}: {e}")
 
             # Update process status
             now_utc = datetime.now(timezone.utc)
@@ -565,6 +628,7 @@ class MonitoringService:
                 'status': 'stopped',
                 'stopped_at': process.stopped_at.isoformat(),
                 'reason': reason,
+                'revoked_tasks': revoked_tasks,
                 'final_stats': {
                     'articles_discovered': process.articles_discovered,
                     'comments_generated': process.comments_generated,
