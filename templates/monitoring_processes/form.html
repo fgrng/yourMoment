@@ -522,11 +522,13 @@ document.addEventListener('DOMContentLoaded', async function() {
             loadedTabs = data.items || [];
 
             // Populate tab selector
-            tabFilter.innerHTML = '<option value="">Alle Tabs</option>';
             loadedTabs.forEach(tab => {
                 const option = document.createElement('option');
                 option.value = tab.id;
                 option.textContent = tab.name;
+                if (option.value == "alle") {
+                    option.disabled = true;
+                }
                 tabFilter.appendChild(option);
             });
 

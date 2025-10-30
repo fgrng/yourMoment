@@ -31,118 +31,17 @@ class SchedulingTask(BaseTask):
 
     async def get_async_session(self) -> AsyncSession:
         """Get async database session."""
-        sessionmaker = self.db_manager.get_async_sessionmaker()
+        sessionmaker = await self.db_manager.create_sessionmaker()
         return sessionmaker()
 
+    async def _trigger_pipeline_async(self, force_immediate: bool = False) -> Dict[str, Any]:
+        """
+        Async implementation of pipeline triggering.
 
-@celery_app.task(
-    bind=True,
-    base=SchedulingTask,
-    name='src.tasks.scheduler.health_check_monitoring_processes',
-    queue='scheduler'
-)
-def health_check_monitoring_processes(self) -> Dict[str, Any]:
-    """
-    Perform basic health check on monitoring processes.
-
-    Returns:
-        Dictionary with basic health status
-    """
-    try:
-        result = asyncio.run(self._health_check_async())
-        return result
-    except Exception as exc:
-        logger.error(f"Health check failed: {exc}")
-        raise
-
-    async def _health_check_async(self) -> Dict[str, Any]:
-        """Check for processes that need attention."""
-        async with self.get_async_session() as session:
-            try:
-                # Count processes by status
-                result = await session.execute(
-                    select(
-                        MonitoringProcess.status,
-                        func.count(MonitoringProcess.id).label('count')
-                    )
-                    .where(MonitoringProcess.is_active == True)
-                    .group_by(MonitoringProcess.status)
-                )
-
-                process_stats = {row.status: row.count for row in result}
-
-                # Check for stale processes (inactive > 1 hour)
-                stale_threshold = datetime.utcnow() - timedelta(hours=1)
-                stale_result = await session.execute(
-                    select(func.count(MonitoringProcess.id))
-                    .where(
-                        and_(
-                            MonitoringProcess.status == "running",
-                            MonitoringProcess.is_active == True,
-                            MonitoringProcess.last_activity_at < stale_threshold
-                        )
-                    )
-                )
-                stale_count = stale_result.scalar()
-
-                # Check active sessions
-                session_result = await session.execute(
-                    select(func.count(MyMomentSession.id))
-                    .where(
-                        and_(
-                            MyMomentSession.is_active == True,
-                            MyMomentSession.expires_at > datetime.utcnow()
-                        )
-                    )
-                )
-                active_sessions = session_result.scalar()
-
-                return {
-                    'process_stats': process_stats,
-                    'stale_processes': stale_count,
-                    'active_sessions': active_sessions,
-                    'status': 'warning' if stale_count > 0 else 'healthy',
-                    'timestamp': datetime.utcnow().isoformat()
-                }
-
-            except Exception as e:
-                logger.error(f"Health check failed: {e}")
-                return {
-                    'status': 'error',
-                    'error': str(e),
-                    'timestamp': datetime.utcnow().isoformat()
-                }
-
-
-@celery_app.task(
-    bind=True,
-    base=SchedulingTask,
-    name='src.tasks.scheduler.trigger_monitoring_pipeline',
-    queue='scheduler'
-)
-def trigger_monitoring_pipeline(self) -> Dict[str, Any]:
-    """
-    Periodically trigger pipeline stage tasks for all active monitoring processes.
-
-    This task runs every few minutes and ensures continuous monitoring by:
-    1. Finding all running monitoring processes
-    2. For each process, checking each pipeline stage
-    3. Spawning stage tasks only if no task is currently running for that stage
-
-    This implements continuous monitoring without double-spawning tasks.
-
-    Returns:
-        Dictionary with spawned task counts and details
-    """
-    try:
-        result = asyncio.run(self._trigger_pipeline_async())
-        return result
-    except Exception as exc:
-        logger.error(f"Pipeline trigger failed: {exc}")
-        raise
-
-    async def _trigger_pipeline_async(self) -> Dict[str, Any]:
-        """Async implementation of pipeline triggering."""
+        Args:
+            force_immediate: If True, spawn tasks for ALL running processes immediately.
+                            If False (default), only spawn if no task is currently running.
+        """
         start_time = datetime.utcnow()
 
         # Import stage tasks
@@ -155,7 +54,7 @@ def trigger_monitoring_pipeline(self) -> Dict[str, Any]:
         skipped_tasks = []
         errors = []
 
-        async with self.get_async_session() as session:
+        async with await self.get_async_session() as session:
             try:
                 # Find all running monitoring processes
                 result = await session.execute(
@@ -179,7 +78,8 @@ def trigger_monitoring_pipeline(self) -> Dict[str, Any]:
                             discover_articles,
                             prepare_content_of_articles,
                             generate_comments_for_articles,
-                            post_comments_for_articles
+                            post_comments_for_articles,
+                            force_immediate=force_immediate
                         )
 
                         spawned_tasks.extend(process_spawned['spawned'])
@@ -236,7 +136,8 @@ def trigger_monitoring_pipeline(self) -> Dict[str, Any]:
         discover_articles_task,
         prepare_content_task,
         generate_comments_task,
-        post_comments_task
+        post_comments_task,
+        force_immediate: bool = False
     ) -> Dict[str, List[Dict[str, str]]]:
         """
         Spawn stage tasks for a single process, checking if tasks are already running.
@@ -247,6 +148,8 @@ def trigger_monitoring_pipeline(self) -> Dict[str, Any]:
             prepare_content_task: Preparation task callable
             generate_comments_task: Generation task callable
             post_comments_task: Posting task callable
+            force_immediate: If True, spawn all tasks regardless of previous state.
+                            Useful for initial process start.
 
         Returns:
             Dictionary with 'spawned' and 'skipped' task lists
@@ -294,9 +197,9 @@ def trigger_monitoring_pipeline(self) -> Dict[str, Any]:
             # Get current task ID for this stage
             current_task_id = getattr(process, stage['task_id_field'], None)
 
-            # Check if task is still running
+            # Check if task is still running (unless force_immediate)
             is_running = False
-            if current_task_id:
+            if not force_immediate and current_task_id:
                 try:
                     task_result = AsyncResult(current_task_id)
                     # Task is running if state is PENDING, STARTED, or RETRY
@@ -349,61 +252,34 @@ def trigger_monitoring_pipeline(self) -> Dict[str, Any]:
         return {'spawned': spawned, 'skipped': skipped}
 
 
+# Register the task as a Celery task
 @celery_app.task(
-    name='src.tasks.scheduler.system_maintenance',
+    name='src.tasks.scheduler.trigger_monitoring_pipeline',
     queue='scheduler'
 )
-def system_maintenance() -> Dict[str, Any]:
+def trigger_monitoring_pipeline(force_immediate: bool = False) -> Dict[str, Any]:
     """
-    Schedule basic maintenance tasks.
+    Periodically trigger pipeline stage tasks for all active monitoring processes.
+
+    This task runs every few minutes and ensures continuous monitoring by:
+    1. Finding all running monitoring processes
+    2. For each process, checking each pipeline stage
+    3. Spawning stage tasks only if no task is currently running for that stage
+
+    This implements continuous monitoring without double-spawning tasks.
+
+    Args:
+        force_immediate: If True, immediately trigger for newly started processes
+                        (called from MonitoringService after process.start_process)
+
+    Returns:
+        Dictionary with spawned task counts and details
     """
     try:
-        maintenance_tasks = []
-
-        # Schedule cleanup tasks
-        cleanup_tasks = [
-            ('cleanup_expired_sessions', 'sessions'),
-            ('cleanup_old_articles', 'monitoring'),  # Cleans AIComment records (articles + comments)
-            ('cleanup_old_session_records', 'sessions')
-        ]
-
-        for task_name, queue in cleanup_tasks:
-            try:
-                if task_name == 'cleanup_expired_sessions':
-                    from src.tasks.session_manager import cleanup_expired_sessions
-                    task_result = cleanup_expired_sessions.apply_async(queue=queue)
-                elif task_name == 'cleanup_old_articles':
-                    from src.tasks.article_monitor import cleanup_old_articles
-                    task_result = cleanup_old_articles.apply_async(queue=queue)
-                elif task_name == 'cleanup_old_session_records':
-                    from src.tasks.session_manager import cleanup_old_session_records
-                    task_result = cleanup_old_session_records.apply_async(queue=queue)
-
-                maintenance_tasks.append({
-                    'task': task_name,
-                    'status': 'scheduled',
-                    'task_id': task_result.id
-                })
-
-            except Exception as e:
-                maintenance_tasks.append({
-                    'task': task_name,
-                    'status': 'error',
-                    'error': str(e)
-                })
-
-        logger.info(f"Scheduled {len(maintenance_tasks)} maintenance tasks")
-
-        return {
-            'maintenance_tasks': maintenance_tasks,
-            'timestamp': datetime.utcnow().isoformat(),
-            'status': 'success'
-        }
-
+        # Create instance of SchedulingTask and run async method
+        scheduler = SchedulingTask()
+        result = asyncio.run(scheduler._trigger_pipeline_async(force_immediate=force_immediate))
+        return result
     except Exception as exc:
-        logger.error(f"System maintenance failed: {exc}")
-        return {
-            'status': 'failed',
-            'error': str(exc),
-            'timestamp': datetime.utcnow().isoformat()
-        }
+        logger.error(f"Pipeline trigger failed: {exc}")
+        raise

@@ -30,32 +30,8 @@ class TimeoutEnforcementTask(BaseTask):
 
     async def get_async_session(self) -> AsyncSession:
         """Get async database session."""
-        sessionmaker = self.db_manager.get_async_sessionmaker()
+        sessionmaker = await self.db_manager.create_sessionmaker()
         return sessionmaker()
-
-
-@celery_app.task(
-    bind=True,
-    base=TimeoutEnforcementTask,
-    name='src.tasks.timeout_enforcer.check_process_timeouts',
-    queue='timeouts'
-)
-def check_process_timeouts(self) -> Dict[str, Any]:
-    """
-    Check all running monitoring processes for timeout violations.
-
-    This task enforces maximum duration limits as specified in FR-008.
-    Processes that exceed their maximum duration are immediately stopped.
-
-    Returns:
-        Dictionary with timeout check results
-    """
-    try:
-        result = asyncio.run(self._check_process_timeouts_async())
-        return result
-    except Exception as exc:
-        logger.error(f"Process timeout check failed: {exc}")
-        raise
 
     async def _check_process_timeouts_async(self) -> Dict[str, Any]:
         """Async implementation of process timeout checking."""
@@ -64,7 +40,7 @@ def check_process_timeouts(self) -> Dict[str, Any]:
         stopped_processes = 0
         errors = []
 
-        async with self.get_async_session() as session:
+        async with await self.get_async_session() as session:
             try:
                 # Find all running processes
                 result = await session.execute(
@@ -121,7 +97,6 @@ def check_process_timeouts(self) -> Dict[str, Any]:
                                     status="stopped",
                                     stopped_at=current_time,
                                     last_activity_at=current_time,
-                                    stop_reason="timeout",
                                     celery_discovery_task_id=None,
                                     celery_preparation_task_id=None,
                                     celery_generation_task_id=None,
@@ -169,3 +144,27 @@ def check_process_timeouts(self) -> Dict[str, Any]:
                     'execution_time_seconds': execution_time,
                     'timestamp': datetime.utcnow().isoformat()
                 }
+
+
+# Register the task as a Celery task
+@celery_app.task(
+    name='src.tasks.timeout_enforcer.check_process_timeouts',
+    queue='timeouts'
+)
+def check_process_timeouts() -> Dict[str, Any]:
+    """
+    Check all running monitoring processes for timeout violations.
+
+    This task enforces maximum duration limits as specified in FR-008.
+    Processes that exceed their maximum duration are immediately stopped.
+
+    Returns:
+        Dictionary with timeout check results
+    """
+    try:
+        task = TimeoutEnforcementTask()
+        result = asyncio.run(task._check_process_timeouts_async())
+        return result
+    except Exception as exc:
+        logger.error(f"Process timeout check failed: {exc}")
+        raise

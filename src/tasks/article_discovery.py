@@ -42,6 +42,7 @@ class ProcessConfig:
     llm_provider_id: Optional[uuid.UUID]
     tab_filter: Optional[str]
     category_filter: Optional[int]
+    search_filter: Optional[str]
 
 
 class ArticleDiscoveryTask(BaseTask):
@@ -128,7 +129,8 @@ class ArticleDiscoveryTask(BaseTask):
                 prompt_ids=prompt_ids,
                 llm_provider_id=llm_provider_id,
                 tab_filter=process.tab_filter,
-                category_filter=process.category_filter
+                category_filter=process.category_filter,
+                search_filter=process.search_filter
             )
 
         # Session closed automatically (< 100ms total)
@@ -188,14 +190,21 @@ class ArticleDiscoveryTask(BaseTask):
                     )
 
                     # Scrape article index (metadata only, no full content)
-                    tab = config_snapshot.tab_filter or "alle"
+                    # Tab filter must be explicitly set, no default to "alle"
+                    if not config_snapshot.tab_filter:
+                        logger.warning(f"No tab filter specified for process {config_snapshot.process_id}, skipping article discovery")
+                        return []
+
+                    tab = config_snapshot.tab_filter
                     category = str(config_snapshot.category_filter) if config_snapshot.category_filter else None
+                    search = config_snapshot.search_filter
                     limit = 20  # Default articles per login
 
                     articles = await scraper.discover_new_articles(
                         context=context,
                         tab=tab,
                         category=category,
+                        search=search,
                         limit=limit
                     )
 

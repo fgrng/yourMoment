@@ -27,28 +27,8 @@ class SessionManagementTask(BaseTask):
 
     async def get_async_session(self):
         """Get async database session."""
-        sessionmaker = self.db_manager.get_async_sessionmaker()
+        sessionmaker = await self.db_manager.create_sessionmaker()
         return sessionmaker()
-
-
-@celery_app.task(
-    bind=True,
-    base=SessionManagementTask,
-    name='src.tasks.session_manager.cleanup_expired_sessions',
-    queue='sessions'
-)
-def cleanup_expired_sessions(self) -> Dict[str, Any]:
-    """
-    Clean up expired myMoment sessions.
-
-    This task removes sessions that have expired or are no longer valid.
-    """
-    try:
-        result = asyncio.run(self._cleanup_expired_sessions_async())
-        return result
-    except Exception as exc:
-        logger.error(f"Session cleanup failed: {exc}")
-        raise
 
     async def _cleanup_expired_sessions_async(self) -> Dict[str, Any]:
         """Async implementation of session cleanup."""
@@ -56,7 +36,7 @@ def cleanup_expired_sessions(self) -> Dict[str, Any]:
         cleaned_up_count = 0
         errors = []
 
-        async with self.get_async_session() as session:
+        async with await self.get_async_session() as session:
             try:
                 # Find expired sessions
                 result = await session.execute(
@@ -110,11 +90,31 @@ def cleanup_expired_sessions(self) -> Dict[str, Any]:
                 }
 
 
+# Register the task as a Celery task
+@celery_app.task(
+    name='src.tasks.session_manager.cleanup_expired_sessions',
+    queue='sessions'
+)
+def cleanup_expired_sessions() -> Dict[str, Any]:
+    """
+    Clean up expired myMoment sessions.
+
+    This task removes sessions that have expired or are no longer valid.
+    """
+    try:
+        task = SessionManagementTask()
+        result = asyncio.run(task._cleanup_expired_sessions_async())
+        return result
+    except Exception as exc:
+        logger.error(f"Session cleanup failed: {exc}")
+        raise
+
+
 @celery_app.task(
     name='src.tasks.session_manager.cleanup_old_session_records',
     queue='sessions'
 )
-def cleanup_old_session_records() -> Dict[str, Any]:
+def cleanup_old_session_records_task() -> Dict[str, Any]:
     """
     Clean up old session records based on retention policy.
 
@@ -126,6 +126,7 @@ def cleanup_old_session_records() -> Dict[str, Any]:
     except Exception as exc:
         logger.error(f"Session record cleanup failed: {exc}")
         raise
+
 
 async def _cleanup_old_session_records_async() -> Dict[str, Any]:
     """Async implementation of session record cleanup."""

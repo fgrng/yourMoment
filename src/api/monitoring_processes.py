@@ -60,6 +60,10 @@ async def create_monitoring_process(
             if isinstance(tabs, list) and tabs:
                 tab_filter = tabs[0]
 
+        # Validate that tab_filter is not "alle"
+        if tab_filter == "alle":
+            raise ProcessValidationError("Tab filter cannot be 'alle'. Please select a specific tab or class.")
+
         process = await service.create_process(
             user_id=current_user.id,
             name=process_data.name,
@@ -225,6 +229,10 @@ async def update_monitoring_process(
             tabs = target_filters.get("tabs")
             if isinstance(tabs, list) and tabs:
                 tab_filter = tabs[0]
+
+        # Validate that tab_filter is not "alle"
+        if tab_filter == "alle":
+            raise ProcessValidationError("Tab filter cannot be 'alle'. Please select a specific tab or class.")
 
         # Build update kwargs with only provided fields
         update_kwargs = {}

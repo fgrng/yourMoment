@@ -403,30 +403,28 @@ class MonitoringService:
         user_id: uuid.UUID
     ) -> Dict[str, Any]:
         """
-        Start a monitoring process using parallel task spawning (v3.0+).
+        Start a monitoring process by marking it as 'running'.
 
-        Spawns all four pipeline stage tasks in parallel:
-        1. Article Discovery (discover_articles)
-        2. Article Content Preparation (prepare_content_of_articles)
-        3. AI Comment Generation (generate_comments_for_articles)
-        4. Comment Posting (post_comments_for_articles)
+        The Scheduler (trigger_monitoring_pipeline) will pick up the process and spawn
+        all four pipeline stage tasks on the next scheduled run (max 3-minute wait).
 
-        Each task polls the database for work items in their respective states
-        (e.g., discovery task looks for articles to discover, preparation task
-        looks for discovered articles to prepare, etc.).
+        This separates concerns:
+        - MonitoringService: Configuration and lifecycle management only
+        - Scheduler: All task spawning and continuous pipeline orchestration
 
         Args:
             process_id: Process ID to start
             user_id: User ID for validation
 
         Returns:
-            Start result with all task IDs
+            Start result indicating process is marked for scheduling
 
         Raises:
             ProcessOperationError: If start fails
         """
         process = None
         login_count = 0
+        prompt_count = 0
 
         try:
             # Validate process exists and belongs to user
@@ -458,79 +456,36 @@ class MonitoringService:
                 )
 
             # Update process status to running
+            # The scheduler (trigger_monitoring_pipeline) will pick this up and spawn tasks
             now_utc = datetime.now(timezone.utc)
             process.status = ProcessStatus.RUNNING
             process.started_at = now_utc
             process.last_activity_at = now_utc
 
-            # Import stage tasks
-            try:
-                from src.tasks.article_discovery import discover_articles
-                from src.tasks.article_preparation import prepare_content_of_articles
-                from src.tasks.comment_generation import generate_comments_for_articles
-                from src.tasks.comment_posting import post_comments_for_articles
-            except Exception as import_error:
-                # Rollback process status changes
-                process.status = ProcessStatus.CREATED
-                process.started_at = None
-                process.last_activity_at = None
-                await self.db_session.commit()
-                raise ProcessOperationError(
-                    f"Failed to import pipeline tasks: {import_error}"
-                )
-
-            # Spawn all four stage tasks in parallel (v3.0+)
-            try:
-                discovery_task = discover_articles.delay(str(process_id))
-                process.celery_discovery_task_id = discovery_task.id
-
-                preparation_task = prepare_content_of_articles.delay(str(process_id))
-                process.celery_preparation_task_id = preparation_task.id
-
-                generation_task = generate_comments_for_articles.delay(str(process_id))
-                process.celery_generation_task_id = generation_task.id
-
-                # Only spawn posting task if not in generate_only mode
-                posting_task_id = None
-                if not process.generate_only:
-                    posting_task = post_comments_for_articles.delay(str(process_id))
-                    process.celery_posting_task_id = posting_task.id
-                    posting_task_id = posting_task.id
-
-                logger.info(
-                    f"Spawned parallel pipeline tasks for process {process_id}: "
-                    f"discovery={discovery_task.id}, preparation={preparation_task.id}, "
-                    f"generation={generation_task.id}, posting={posting_task_id if not process.generate_only else 'skipped'}"
-                )
-
-            except Exception as celery_error:
-                # Check if it's a Redis connection error
-                error_msg = str(celery_error).lower()
-                if 'redis' in error_msg or 'connection refused' in error_msg or 'connection error' in error_msg:
-                    # Rollback process status changes
-                    process.status = ProcessStatus.CREATED
-                    process.started_at = None
-                    process.last_activity_at = None
-                    await self.db_session.commit()
-                    raise ProcessOperationError(
-                        "Background task system (Redis/Celery) is unavailable. "
-                        "Please ensure Redis is running or contact the administrator."
-                    )
-                else:
-                    # Re-raise other Celery errors
-                    raise
-
             await self.db_session.commit()
+
+            logger.info(
+                f"Process {process_id} marked as running. "
+                f"Triggering scheduler to spawn pipeline tasks immediately."
+            )
+
+            # Trigger scheduler task immediately to spawn tasks
+            # This ensures first run happens immediately, not waiting up to 3 minutes
+            try:
+                from src.tasks.scheduler import trigger_monitoring_pipeline
+                # Use force_immediate=True to spawn tasks regardless of state
+                trigger_monitoring_pipeline.delay(force_immediate=True)
+                logger.info(f"Spawned immediate scheduler task for process {process_id}")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to trigger immediate scheduler for process {process_id}: {e}. "
+                    f"Tasks will be spawned on next periodic scheduler run."
+                )
 
             return {
                 'process_id': str(process_id),
-                'task_ids': {
-                    'discovery': discovery_task.id,
-                    'preparation': preparation_task.id,
-                    'generation': generation_task.id,
-                    'posting': posting_task_id
-                },
-                'status': 'queued',
+                'status': 'scheduled',
+                'message': 'Process marked as running. Pipeline tasks spawned (or will be within 3 minutes).',
                 'started_at': process.started_at.isoformat(),
                 'associated_logins': login_count,
                 'associated_prompts': prompt_count,
@@ -605,7 +560,7 @@ class MonitoringService:
                         revoked_tasks[task_field] = f"error: {e}"
 
             # Also revoke legacy celery_task_id if present (for backward compatibility)
-            if process.celery_task_id:
+            if hasattr(process, 'celery_task_id') and process.celery_task_id:
                 try:
                     celery_app.control.revoke(process.celery_task_id, terminate=True)
                     revoked_tasks['legacy_celery_task_id'] = process.celery_task_id

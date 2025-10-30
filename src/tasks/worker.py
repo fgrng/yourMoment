@@ -95,19 +95,15 @@ class CeleryConfig:
     beat_schedule = {
         'check-process-timeouts': {
             'task': 'src.tasks.timeout_enforcer.check_process_timeouts',
-            'schedule': 60.0,  # Every minute
+            'schedule': settings.monitoring.PROCESS_HEALTH_CHECK_INTERVAL_SECONDS,
         },
         'cleanup-expired-sessions': {
             'task': 'src.tasks.session_manager.cleanup_expired_sessions',
             'schedule': 300.0,  # Every 5 minutes
         },
-        'health-check-monitoring': {
-            'task': 'src.tasks.scheduler.health_check_monitoring_processes',
-            'schedule': 120.0,  # Every 2 minutes
-        },
         'trigger-monitoring-pipeline': {
             'task': 'src.tasks.scheduler.trigger_monitoring_pipeline',
-            'schedule': 180.0,  # Every 3 minutes
+            'schedule': settings.monitoring.ARTICLE_DISCOVERY_INTERVAL_SECONDS,
         },
     }
     beat_scheduler = 'celery.beat:PersistentScheduler'
