@@ -24,6 +24,7 @@ class DatabaseManager:
         self._echo_override = echo
         self._engine: Optional[AsyncEngine] = None
         self._sessionmaker: Optional[async_sessionmaker] = None
+        self._use_pool = False  # For testing connection pooling
 
     def _resolve_config(self) -> tuple[str, bool]:
         """Resolve database URL and echo flag from settings with optional overrides."""
@@ -54,17 +55,24 @@ class DatabaseManager:
         database_url, echo = self._resolve_config()
 
         try:
-            self._engine = create_async_engine(
-                database_url,
-                echo=echo,
-                # poolclass=StaticPool,
-                connect_args={
-                    "check_same_thread": False, # allow use outside creating thread
-                    "timeout": 5.0, # busy timeout in seconds
+            # Configure engine arguments based on pooling requirements
+            engine_args = {
+                "echo": echo,
+                "connect_args": {
+                    "check_same_thread": False,  # allow use outside creating thread
+                    "timeout": 5.0,  # busy timeout in seconds
                 },
-                pool_size=5,
-                max_overflow=10
-            )
+            }
+
+            # Only add pool args if not using StaticPool (e.g., for testing)
+            if self._use_pool:
+                engine_args["pool_size"] = 5
+                engine_args["max_overflow"] = 10
+            else:
+                # Use StaticPool for in-memory and simple test databases
+                engine_args["poolclass"] = StaticPool
+
+            self._engine = create_async_engine(database_url, **engine_args)
 
             # Enable foreign key constraints for SQLite
             @event.listens_for(Engine, "connect")
@@ -155,6 +163,14 @@ async def close_database():
         _database_manager = None
 
 
-def create_test_database_manager(sqlite_file: str = ":memory:") -> DatabaseManager:
-    """Create a database manager for testing."""
-    return DatabaseManager(database_url=f"sqlite+aiosqlite:///{sqlite_file}", echo=True)
+def create_test_database_manager(sqlite_file: str = ":memory:", use_pool: bool = False) -> DatabaseManager:
+    """
+    Create a database manager for testing.
+
+    Args:
+        sqlite_file: SQLite database file path (default: in-memory)
+        use_pool: If True, use connection pooling (for pool testing)
+    """
+    manager = DatabaseManager(database_url=f"sqlite+aiosqlite:///{sqlite_file}", echo=False)
+    manager._use_pool = use_pool  # Flag for conditional pooling
+    return manager

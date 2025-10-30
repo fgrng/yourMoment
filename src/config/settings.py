@@ -331,23 +331,35 @@ class Settings:
         self.monitoring = MonitoringSettings()
 
     def _get_database_settings(self) -> DatabaseSettings:
-        """Get database settings with environment-specific defaults."""
+        """
+        Get database settings with environment-specific defaults.
+
+        Pydantic BaseSettings will automatically load from .env file and environment variables.
+        Environment variables take precedence over .env file values.
+        """
+        # Load base settings from .env file (Pydantic handles this)
+        base_settings = DatabaseSettings()
+
+        # Apply environment-specific overrides only if not explicitly set
         if self.app.ENVIRONMENT == "testing":
-            # Override with test-specific database
-            return DatabaseSettings(
-                DB_SQLITE_FILE=os.getenv("DB_SQLITE_FILE", "yourMoment_testing.db"),
-                DB_ECHO=False
-            )
+            # Override with test-specific database if not explicitly configured
+            if base_settings.DB_SQLITE_FILE == DatabaseSettings.model_fields["DB_SQLITE_FILE"].default:
+                base_settings.DB_SQLITE_FILE = "yourMoment_testing.db"
+            base_settings.DB_ECHO = False
         elif self.app.ENVIRONMENT == "production":
-            return DatabaseSettings(
-                DB_SQLITE_FILE=os.getenv("DB_SQLITE_FILE", "yourmoment.db"),
-                DB_ECHO=False
-            )
+            # Production should explicitly set DB_SQLITE_FILE, use default if not
+            base_settings.DB_ECHO = False
         else:  # development
-            return DatabaseSettings(
-                DB_SQLITE_FILE=os.getenv("DB_SQLITE_FILE", "yourmoment.db"),
-                DB_ECHO=os.getenv("DB_ECHO", "false").lower() == "true"
-            )
+            # In development, default to yourmoment_development.db if not set in .env
+            if base_settings.DB_SQLITE_FILE == "yourmoment.db":
+                # Only override if it's the hardcoded default, not from .env
+                env_value = os.getenv("DB_SQLITE_FILE")
+                if env_value:
+                    base_settings.DB_SQLITE_FILE = env_value
+                else:
+                    base_settings.DB_SQLITE_FILE = "yourmoment_development.db"
+
+        return base_settings
 
     def _get_security_settings(self) -> SecuritySettings:
         """Get security settings with environment-specific defaults."""

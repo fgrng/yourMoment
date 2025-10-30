@@ -4,14 +4,51 @@ Celery-based background task processing system for the yourMoment application.
 
 ## Overview
 
-The background task system provides asynchronous execution for:
+The background task system provides asynchronous execution using a **parallel pipeline architecture** with four independent stages:
 
-- **Article Monitoring** – Scraping myMoment platform for new articles
+- **Article Discovery** – Scrape myMoment article metadata and create work items
+- **Article Preparation** – Fetch full article content for discovered items
 - **Comment Generation** – AI-powered comment creation using configured LLM providers
 - **Comment Posting** – Publishing generated comments to myMoment
 - **Session Management** – myMoment login session lifecycle and cleanup
-- **Timeout Enforcement** – Automatic process termination based on duration limits
-- **Health Monitoring** – Periodic system health checks and maintenance
+- **Timeout Enforcement** – Automatic process termination based on duration limits (FR-008)
+
+### Architecture Diagram
+
+```
+API Layer: POST /start-process
+    ↓
+MonitoringService.start_process()
+    ↓
+[Spawn 4 Tasks in Parallel]
+    ├─→ discover_articles task (queue: discovery)
+    ├─→ prepare_content_of_articles task (queue: preparation)
+    ├─→ generate_comments_for_articles task (queue: generation)
+    └─→ post_comments_for_articles task (queue: posting)
+
+Each task polls for work via AIComment.status:
+    Discovery Stage          Preparation Stage        Generation Stage       Posting Stage
+    ┌─────────────────────┐  ┌────────────────────┐   ┌──────────────────┐  ┌──────────────────┐
+    │  discover_articles  │  │  prepare_content   │   │  generate_comment│  │  post_comments   │
+    │  ├─ Scrape articles │  │  ├─ Fetch content  │   │  ├─ Call LLM     │  │  ├─ Post to myMoment
+    │  └─ status:'disc'   │→ │  └─ status:'prep'  │→ │  └─ status:'gen' │→ │  └─ status:'posted'
+    └─────────────────────┘  └────────────────────┘   └──────────────────┘  └──────────────────┘
+         ↓                           ↓                        ↓                      ↓
+      AIComment                  AIComment                AIComment            AIComment
+      Database Coordination       Database Coordination    Database Coordination Database Coordination
+
+Continuous Monitoring (Celery Beat):
+    Every 60 seconds (configurable): trigger_monitoring_pipeline
+    ├─ Find all running processes
+    ├─ Check if each stage task is already running
+    └─ Respawn only if previous iteration completed
+
+Timeout Enforcement (Celery Beat):
+    Every 30 seconds (configurable): check_process_timeouts
+    ├─ Check all running processes
+    ├─ Compare elapsed time vs max_duration_minutes
+    └─ Revoke all 4 stage tasks if exceeded
+```
 
 ## Quick Start
 
@@ -59,48 +96,42 @@ docker-compose -f docker-compose.celery.yml up -d celery_monitor
 
 ### Registered Tasks
 
-**Article Monitoring** (`monitoring` queue)
-- `start_monitoring_process` – Initialize monitoring workflow for a process
-- `stop_monitoring_process` – Terminate monitoring workflow
-- `periodic_monitoring_check` – Scheduled article discovery
-- `cleanup_old_articles` – Remove old article/comment records
-
-**Comment Generation & Posting** (`comments` queue)
-- `generate_comments_for_process` – Generate AI comments using LLM providers
-- `post_comments_for_process` – Post generated comments to myMoment
+**Pipeline Stage Tasks** (run in parallel, coordinate via AIComment.status)
+- `discover_articles` (discovery queue) – Scrape article metadata, create AIComment records with status='discovered'
+- `prepare_content_of_articles` (preparation queue) – Fetch full article content, update status='prepared'
+- `generate_comments_for_articles` (generation queue) – Generate AI comments via LLM, update status='generated'
+- `post_comments_for_articles` (posting queue) – Post to myMoment, update status='posted' or 'failed'
 
 **Session Management** (`sessions` queue)
-- `initialize_process_sessions` – Create myMoment sessions for process credentials
-- `terminate_process_sessions` – Close all sessions for a process
-- `cleanup_expired_sessions` – Remove expired session records
+- `cleanup_expired_sessions` – Remove expired myMoment session records
 - `cleanup_old_session_records` – Archive old session data
-- `health_check_sessions` – Verify session health
 
 **Timeout Enforcement** (`timeouts` queue)
-- `check_process_timeouts` – Enforce max_duration_minutes limits
+- `check_process_timeouts` – Enforce max_duration_minutes limits, revoke all 4 stage tasks on timeout
 
-**System Scheduler** (`scheduler` queue)
-- `health_check_monitoring_processes` – Process health status checks
-- `system_maintenance` – Coordinate maintenance tasks
+**Continuous Monitoring** (`scheduler` queue)
+- `trigger_monitoring_pipeline` – Periodic task spawner (configurable interval) for continuous monitoring
 
 ### Task Queues
 
-| Queue | Purpose | Task Modules |
-|-------|---------|--------------|
-| `monitoring` | Article discovery & scraping | `article_monitor.*` |
-| `comments` | AI comment workflow | `comment_generator.*`, `comment_poster.*` |
-| `sessions` | Session lifecycle | `session_manager.*` |
-| `timeouts` | Duration enforcement | `timeout_enforcer.*` |
-| `scheduler` | Maintenance & health | `scheduler.*` |
-| `celery` | Default queue | Miscellaneous tasks |
+| Queue | Purpose | Task Modules | Concurrency |
+|-------|---------|--------------|-------------|
+| `discovery` | Article metadata scraping | `article_discovery.*` | 1-2 (network-bound) |
+| `preparation` | Article content fetching | `article_preparation.*` | 1-2 (network-bound) |
+| `generation` | LLM comment generation | `comment_generation.*` | 2-4 (I/O-bound) |
+| `posting` | Comment posting to myMoment | `comment_posting.*` | 1-2 (network-bound) |
+| `sessions` | Session lifecycle management | `session_manager.*` | 1 (low volume) |
+| `timeouts` | Duration enforcement | `timeout_enforcer.*` | 1 (low volume) |
+| `scheduler` | Continuous monitoring | `scheduler.*` | 1 (low volume) |
+| `celery` | Default queue | Miscellaneous | - |
 
 ### Periodic Tasks (Celery Beat)
 
 | Task | Schedule | Description |
 |------|----------|-------------|
-| `check-process-timeouts` | Every 60s | Enforce max_duration_minutes limits |
-| `cleanup-expired-sessions` | Every 5 min | Remove expired myMoment sessions |
-| `health-check-monitoring` | Every 2 min | Check process and session health |
+| `check-process-timeouts` | Every 30s (configurable) | Enforce max_duration_minutes limits, revoke stage tasks on timeout |
+| `cleanup-expired-sessions` | Every 5 min | Remove expired myMoment session records |
+| `trigger-monitoring-pipeline` | Every 60s (configurable) | Spawn pipeline stage tasks for running processes (continuous monitoring) |
 
 ## Configuration
 
@@ -120,292 +151,125 @@ CELERY_WORKER_CONCURRENCY=4  # Number of worker processes
 ### Task Settings (in `src/tasks/worker.py`)
 
 **Execution Limits**
-- Task soft time limit: 300s (5 minutes)
-- Task hard time limit: 600s (10 minutes)
-- Worker tasks per child: 100 (auto-restart after 100 tasks)
+- Task soft time limit: 3 hours (for long-running monitoring processes)
+- Task hard time limit: 6 hours (absolute maximum)
+- Worker tasks per child: 100 (auto-restart after 100 tasks to prevent memory leaks)
 
 **Reliability**
-- Prefetch multiplier: 1 (one task at a time for better control)
-- Acks late: True (acknowledge after completion)
-- Result expiration: 3600s (1 hour)
+- Prefetch multiplier: 1 (one task at a time for resource control)
+- Acks late: True (acknowledge after successful completion)
+- Result expiration: 24 hours (preserve task results for API status queries)
 
-**Routing**
+**Periodic Task Intervals** (configurable via environment variables)
+- `PROCESS_HEALTH_CHECK_INTERVAL_SECONDS` – Check process timeouts (default: 30 seconds)
+- `ARTICLE_DISCOVERY_INTERVAL_SECONDS` – Trigger monitoring pipeline (default: 60 seconds)
+- Session cleanup interval is hardcoded to 300 seconds (5 minutes)
+
+**Task Routing** (parallel architecture)
 Tasks are automatically routed by module name:
-- `article_monitor.*` → `monitoring` queue
-- `comment_generator.*`, `comment_poster.*` → `comments` queue
+- `article_discovery.*` → `discovery` queue
+- `article_preparation.*` → `preparation` queue
+- `comment_generation.*` → `generation` queue
+- `comment_posting.*` → `posting` queue
 - `session_manager.*` → `sessions` queue
 - `timeout_enforcer.*` → `timeouts` queue
 - `scheduler.*` → `scheduler` queue
 
-## Development
-
-### CLI Commands
-
-The `celery_cli.py` script provides convenient management commands:
-
-```bash
-# Worker management
-python celery_cli.py worker                    # Start worker (all queues)
-python celery_cli.py worker --loglevel debug   # Debug logging
-python celery_cli.py worker --queues monitoring,comments  # Specific queues
-python celery_cli.py worker --concurrency 8    # Custom concurrency
-
-# Scheduler
-python celery_cli.py beat                      # Start beat scheduler
-
-# Monitoring
-python celery_cli.py monitor                   # CLI monitoring
-python celery_cli.py health                    # Health check
-python celery_cli.py info                      # Task and queue info
-
-# Debugging
-python celery_cli.py purge                     # Clear all queues
-```
-
-### Task Information
-
-```bash
-# Get registered tasks and queue information
-python -c "
-import sys
-sys.path.insert(0, 'src')
-from tasks.worker import get_task_info
-import json
-print(json.dumps(get_task_info(), indent=2))
-"
-```
-
-### Testing Tasks
-
-```bash
-# Test individual task execution
-PYTHONPATH=src python -c "
-from tasks.scheduler import health_check_monitoring_processes
-result = health_check_monitoring_processes.delay()
-print(f'Task ID: {result.id}')
-print(f'Status: {result.status}')
-"
-```
-
-## Production Deployment
-
-### Horizontal Scaling
-
-**Multiple Workers**
-```bash
-# Scale workers for different workloads
-python celery_cli.py worker --queues monitoring --concurrency 4 &
-python celery_cli.py worker --queues comments --concurrency 8 &
-python celery_cli.py worker --queues sessions,timeouts --concurrency 2 &
-```
-
-**Resource Allocation**
-- `monitoring` queue: CPU-intensive (web scraping) – moderate concurrency
-- `comments` queue: I/O-intensive (LLM API calls) – higher concurrency
-- `sessions`/`timeouts`: Low load – minimal workers needed
-
-### Process Management
-
-**Systemd** (recommended for production)
-```ini
-# /etc/systemd/system/yourmoment-celery-worker.service
-[Unit]
-Description=yourMoment Celery Worker
-After=network.target redis.service
-
-[Service]
-Type=forking
-User=yourmoment
-WorkingDirectory=/opt/yourmoment
-Environment="PATH=/opt/yourmoment/.venv/bin"
-ExecStart=/opt/yourmoment/.venv/bin/python celery_cli.py worker --loglevel info
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-
-**Supervisor** (alternative)
-```ini
-[program:yourmoment-celery-worker]
-command=/opt/yourmoment/.venv/bin/python celery_cli.py worker
-directory=/opt/yourmoment
-user=yourmoment
-autostart=true
-autorestart=true
-```
-
-### Monitoring
-
-**Flower Web UI** (if docker-compose.celery.yml available)
-```bash
-docker-compose -f docker-compose.celery.yml up -d celery_monitor
-# Access at http://localhost:5555
-```
-
-**Redis Monitoring**
-```bash
-redis-cli monitor                # Real-time command monitoring
-redis-cli info clients           # Client connections
-redis-cli --stat                 # Stats every second
-```
-
-**Health Checks**
-```bash
-# Application health check
-curl http://localhost:8000/health
-
-# Celery health (programmatic)
-python celery_cli.py health
-```
-
-## Troubleshooting
-
-### Redis Connection Issues
-
-**Problem**: `Cannot connect to broker`
-```bash
-# Verify Redis is running
-redis-cli ping  # Should return "PONG"
-
-# Check connection settings
-echo $CELERY_BROKER_URL
-echo $CELERY_RESULT_BACKEND
-
-# Test connection
-python -c "
-import redis
-r = redis.from_url('redis://localhost:6379/0')
-print(r.ping())
-"
-```
-
-### Task Execution Issues
-
-**Problem**: Tasks not being picked up
-```bash
-# Verify worker is running and consuming from correct queues
-python celery_cli.py info
-
-# Check queue contents
-redis-cli llen monitoring    # Check monitoring queue depth
-redis-cli llen comments      # Check comments queue depth
-
-# Restart workers
-pkill -f "celery worker" && python celery_cli.py worker &
-```
-
-**Problem**: Tasks hanging or timing out
-```bash
-# Check task time limits in worker.py:
-# - Soft limit: 300s (5 min)
-# - Hard limit: 600s (10 min)
-
-# View active tasks
-python celery_cli.py monitor
-
-# Increase limits if needed (in src/tasks/worker.py)
-task_soft_time_limit = 600  # 10 minutes
-task_time_limit = 1200      # 20 minutes
-```
-
-### Memory Issues
-
-**Problem**: Worker consuming excessive memory
-```bash
-# Reduce concurrency
-CELERY_WORKER_CONCURRENCY=2 python celery_cli.py worker
-
-# Note: Workers auto-restart after 100 tasks (configured)
-# Check current setting in worker.py:
-# worker_max_tasks_per_child = 100
-```
-
-### Database Lock Issues
-
-**Problem**: SQLite database locked errors
-```bash
-# This happens with high concurrency on SQLite
-# Solutions:
-# 1. Reduce worker concurrency to 1-2
-CELERY_WORKER_CONCURRENCY=1 python celery_cli.py worker
-
-# 2. Migrate to PostgreSQL for production
-# Update DB_SQLITE_FILE in .env or set DATABASE_URL
-```
-
-### Beat Scheduler Issues
-
-**Problem**: Periodic tasks not running
-```bash
-# Check beat is running
-ps aux | grep "celery beat"
-
-# Start beat if not running
-python celery_cli.py beat &
-
-# Verify schedule
-python -c "
-import sys
-sys.path.insert(0, 'src')
-from tasks.worker import CeleryConfig
-print(CeleryConfig.beat_schedule)
-"
-```
-
-### Debugging Tools
-
-```bash
-# Enable debug logging
-python celery_cli.py worker --loglevel debug
-
-# Monitor all task events
-python celery_cli.py monitor --refresh 0.5
-
-# Clear stuck tasks (use with caution!)
-python celery_cli.py purge
-
-# Inspect active workers
-celery -A src.tasks.worker inspect active
-
-# View worker stats
-celery -A src.tasks.worker inspect stats
-```
 
 ## Task Workflow
 
 ### Monitoring Process Lifecycle
 
 1. **Start Process** (via API: `POST /api/v1/monitoring-processes/{id}/start`)
-   - API dispatches: `start_monitoring_process.delay(process_id)`
-   - Task initializes sessions: `initialize_process_sessions`
-   - Begins periodic monitoring loop
+   - API calls `MonitoringService.start_process(process_id)`
+   - **Spawns all 4 pipeline tasks in parallel** (no sequential orchestration)
+   - Each task gets unique Celery task ID, stored in MonitoringProcess
+   - Process status set to "running"
 
-2. **Article Discovery**
-   - `periodic_monitoring_check` runs at configured intervals
-   - Scrapes articles from myMoment
-   - Stores new articles in database
+2. **Continuous Monitoring Loop** (via Celery Beat)
+   - `trigger_monitoring_pipeline` runs at configurable interval (default 60 seconds)
+   - Checks each running process
+   - Respawns stage tasks only if previous iteration completed
+   - Prevents double-spawning via task state checking
 
-3. **Comment Generation**
-   - `generate_comments_for_process` triggered for new articles
-   - Uses LLM provider configurations
-   - Applies prompt templates
-   - Stores generated comments
+3. **Article Discovery Stage** (`discover_articles` task)
+   - Scrapes article metadata from each associated login
+   - Creates AIComment records with status='discovered'
+   - Creates cross-product: articles × logins × prompts
+   - No external I/O within database transactions
 
-4. **Comment Posting**
-   - `post_comments_for_process` publishes to myMoment
-   - Respects rate limits
-   - Updates comment status
+4. **Article Preparation Stage** (`prepare_content_of_articles` task)
+   - Polls for AIComments with status='discovered'
+   - Fetches full article content for each
+   - Updates AIComment with content, sets status='prepared'
+   - Per-article error isolation (failures don't cascade)
 
-5. **Timeout Enforcement**
-   - `check_process_timeouts` runs every 60s
-   - Compares runtime against `max_duration_minutes`
-   - Dispatches `stop_monitoring_process` if exceeded
+5. **Comment Generation Stage** (`generate_comments_for_articles` task)
+   - Polls for AIComments with status='prepared'
+   - Calls LLM provider for each article
+   - Caches LLM configs and prompt templates in memory
+   - Updates AIComment with generated text, sets status='generated'
+   - Per-article LLM error handling
 
-6. **Stop Process** (via API or timeout)
-   - Terminates monitoring loop
-   - Closes sessions: `terminate_process_sessions`
+6. **Comment Posting Stage** (`post_comments_for_articles` task)
+   - Polls for AIComments with status='generated'
+   - Posts to myMoment via each associated login
+   - Caches login credentials in memory
+   - Updates status='posted' on success, 'failed' on error
+   - Exponential backoff retry (max 3 attempts)
+   - Optional if `generate_only=True` (task not spawned)
+
+7. **Timeout Enforcement** (runs at configurable interval, default 30s)
+   - `check_process_timeouts` queries all running processes
+   - Compares elapsed time against `max_duration_minutes`
+   - **Revokes all 4 stage tasks** if exceeded (uses stage-specific task IDs)
    - Updates process status to "stopped"
+
+8. **Stop Process** (via API or automatic timeout)
+   - API calls `MonitoringService.stop_process(process_id)`
+   - **Revokes all 4 active stage tasks** (discovery, preparation, generation, posting)
+   - Updates process status to "stopped"
+   - Sessions cleanup handled by `cleanup_expired_sessions` (5-minute schedule)
+
+## Database Session Management
+
+The pipeline tasks use optimized database session patterns to minimize lock contention:
+
+### Session Patterns
+
+**Pattern 1: Read-Only Config** (< 100ms)
+- Used by: Article discovery (reading process config)
+- Session: Opens → reads data → closes immediately
+- I/O: Happens AFTER session closes
+
+**Pattern 2: Batch Write** (single transaction)
+- Used by: Article discovery (creating AIComment records)
+- Session: Opens → batch insert → commit → closes
+- Benefit: Single commit for many records
+
+**Pattern 3: Iterative Single Updates** (< 50ms per update)
+- Used by: Preparation, generation, posting stages
+- Session: For each record: open → update → commit → close
+- Benefit: No long-lived locks, failures isolated per record
+
+**Pattern 4: Batch Read + Cached Data** (< 500ms total)
+- Used by: Generation and posting stages
+- Process:
+  1. Open session → read all items to process
+  2. Close session
+  3. Extract unique foreign key IDs from memory
+  4. Open session → read reference data (LLM configs, templates, logins)
+  5. Close session
+  6. Cache reference data in memory
+  7. Process items using cached data (no DB access)
+
+### Key Benefits
+- **Short transactions**: All DB sessions < 500ms
+- **No blocking I/O**: Network operations outside sessions
+- **Predictable pool usage**: Connections released quickly
+- **Better scalability**: Can handle many concurrent processes
+
+See `TODO_refactor_monitoring.md` lines 212-394 for detailed examples.
 
 ## Security & Best Practices
 
@@ -436,3 +300,4 @@ Development and production use separate Redis databases:
 - Development: `redis://localhost:6379/0`
 - Testing: `redis://localhost:6379/1`
 - Production: Configure separately with authentication
+

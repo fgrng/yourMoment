@@ -27,6 +27,7 @@ from src.models.monitoring_process import MonitoringProcess
 from src.services.mymoment_session_service import MyMomentSessionService
 from src.services.mymoment_credentials_service import MyMomentCredentialsService
 from src.config.settings import get_settings
+from src.utils.url_sanitizer import sanitize_url, is_url_malformed
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +147,12 @@ class ScraperService:
     - Article discovery with filtering
     - Comment generation integration
     - Rate limiting and error recovery
+
+    Database Session Lifecycle:
+    - DB session is required for initialization (reading credentials, session records)
+    - Once SessionContext is created, HTTP operations do NOT use the DB session
+    - Callers should close DB session after initialization, before HTTP operations
+    - Pattern: Open DB → Init session → Close DB → HTTP scraping → Open DB → Update
     """
 
     def __init__(self, db_session: AsyncSession, config: Optional[ScrapingConfig] = None):
@@ -171,13 +178,18 @@ class ScraperService:
         self._last_request_time = 0.0
         self._request_lock = asyncio.Lock()
 
+        logger.debug(f"ScraperService initialized with DB session {id(db_session)}")
+
     async def __aenter__(self):
         """Async context manager entry."""
+        logger.debug(f"ScraperService context entered (DB session {id(self.db_session)})")
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit - cleanup all sessions."""
+        logger.debug(f"ScraperService context exiting (DB session {id(self.db_session)})")
         await self.cleanup_all_sessions()
+        logger.debug("ScraperService context exited, all sessions cleaned up")
 
     async def initialize_session_for_login(
         self,
@@ -306,13 +318,21 @@ class ScraperService:
             )
 
             # Create HTTP session
+            # Important: We will handle redirects manually for ALL requests to sanitize
+            # malformed Location headers that myMoment returns (containing backslashes)
             connector = aiohttp.TCPConnector(limit=10)
             timeout = aiohttp.ClientTimeout(total=self.config.request_timeout)
             http_session = aiohttp.ClientSession(
                 connector=connector,
                 timeout=timeout,
                 headers={
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'de-DE,de;q=0.9,en;q=0.8',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'DNT': '1',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1'
                 }
             )
 
@@ -368,10 +388,12 @@ class ScraperService:
 
             # Load login page to get CSRF token
             login_url = f"{self.config.base_url}/accounts/login/"
+            logger.info(f"Try auth using base url: {self.config.base_url}")
+            logger.info(f"Resulting in login url: {login_url}")
 
-            await self._rate_limit()
-            async with context.aiohttp_session.get(login_url) as response:
-                login_html = await response.text()
+            # Use redirect handler to sanitize any malformed Location headers
+            response = await self._get_with_redirect_handling(context, login_url)
+            login_html = await response.text()
 
             soup = BeautifulSoup(login_html, 'html.parser')
             csrf_input = soup.find('input', {'name': 'csrfmiddlewaretoken'})
@@ -390,33 +412,145 @@ class ScraperService:
                 'next': ''
             }
 
-            # Perform login
-            await self._rate_limit()
-            async with context.aiohttp_session.post(
+            # Perform login with redirect handling
+            response = await self._request_with_redirect_handling(
+                context,
+                'POST',
                 login_url,
                 data=login_data,
                 headers={
                     'Referer': login_url,
                     'Content-Type': 'application/x-www-form-urlencoded'
                 }
-            ) as response:
-                # Check authentication success
-                if await self._check_authentication_status(context):
-                    context.is_authenticated = True
-                    context.last_activity = datetime.utcnow()
+            )
+            response.close()
 
-                    # Update session record
-                    await self.session_service.touch_session(context.session_id)
+            # Check authentication success
+            if await self._check_authentication_status(context):
+                context.is_authenticated = True
+                context.last_activity = datetime.utcnow()
 
-                    logger.info(f"Successfully authenticated session for login {context.login_id}")
-                    return True
-                else:
-                    raise AuthenticationError(f"Login failed for {username}")
+                # Update session record
+                await self.session_service.touch_session(context.session_id)
+
+                logger.info(f"Successfully authenticated session for login {context.login_id}")
+                return True
+            else:
+                raise AuthenticationError(f"Login failed for {username}")
 
         except Exception as e:
             logger.error(f"Authentication failed for login {context.login_id}: {e}")
             context.is_authenticated = False
             raise AuthenticationError(f"Authentication failed: {e}")
+
+    async def _request_with_redirect_handling(
+        self,
+        context: SessionContext,
+        method: str,
+        url: str,
+        max_redirects: int = 5,
+        **kwargs
+    ) -> aiohttp.ClientResponse:
+        """
+        Perform an HTTP request with manual redirect handling to sanitize malformed URLs.
+
+        This handles the myMoment server bug where Location headers contain backslashes.
+        Works for both GET and POST requests.
+
+        Args:
+            context: Session context for HTTP operations
+            method: HTTP method ('GET', 'POST', etc.)
+            url: URL to request
+            max_redirects: Maximum number of redirects to follow (default: 5)
+            **kwargs: Additional arguments to pass to the request method
+
+        Returns:
+            Final response object with proper status
+
+        Raises:
+            AuthenticationError: If max redirects exceeded or request fails
+        """
+        current_url = url
+        redirect_count = 0
+        request_method = method.upper()
+
+        while redirect_count < max_redirects:
+            logger.debug(f"Request: {request_method} {current_url}")
+            await self._rate_limit()
+
+            # Make the request with redirects disabled
+            response = await context.aiohttp_session.request(
+                request_method,
+                current_url,
+                allow_redirects=False,  # Disable auto-redirects
+                **kwargs
+            )
+
+            # Check for redirect status codes
+            if response.status in [301, 302, 303, 307, 308]:
+                location = response.headers.get('Location')
+
+                # Must close the response when we're following the redirect
+                response.close()
+
+                if not location:
+                    logger.warning(f"Redirect response {response.status} but no Location header")
+                    raise AuthenticationError(f"Redirect response {response.status} but no Location header")
+
+                # Check if Location header is malformed
+                if is_url_malformed(location):
+                    logger.warning(
+                        f"Detected malformed Location header (contains backslash): {repr(location)}"
+                    )
+                    location = sanitize_url(location)
+                    logger.info(f"Sanitized to: {repr(location)}")
+
+                # Handle relative redirects
+                if location.startswith('/'):
+                    # Relative redirect - build absolute URL from current URL
+                    from urllib.parse import urlparse, urlunparse
+                    parsed = urlparse(current_url)
+                    location = urlunparse((
+                        parsed.scheme,
+                        parsed.netloc,
+                        location,
+                        '',
+                        '',
+                        ''
+                    ))
+
+                current_url = location
+                redirect_count += 1
+                logger.debug(f"Following redirect ({redirect_count}/{max_redirects}) to: {current_url}")
+
+                # For redirects, switch to GET method (except for 307/308 which preserve method)
+                if response.status not in [307, 308]:
+                    request_method = 'GET'
+                    kwargs.pop('data', None)  # Remove POST data for GET requests
+
+                continue
+            else:
+                # Not a redirect, return the response
+                logger.debug(f"Final response status: {response.status}")
+                return response
+
+        # Max redirects exceeded
+        raise AuthenticationError(
+            f"Maximum redirects ({max_redirects}) exceeded while accessing {url}"
+        )
+
+    async def _get_with_redirect_handling(
+        self,
+        context: SessionContext,
+        url: str,
+        max_redirects: int = 5
+    ) -> aiohttp.ClientResponse:
+        """
+        Perform a GET request with manual redirect handling.
+
+        Convenience wrapper around _request_with_redirect_handling.
+        """
+        return await self._request_with_redirect_handling(context, 'GET', url, max_redirects)
 
     async def _check_authentication_status(self, context: SessionContext) -> bool:
         """
@@ -429,15 +563,19 @@ class ScraperService:
             True if authenticated
         """
         try:
-            await self._rate_limit()
-            async with context.aiohttp_session.get(f"{self.config.base_url}/") as response:
-                if response.status == 200:
-                    html = await response.text()
-                    soup = BeautifulSoup(html, 'html.parser')
-                    # Look for logout form (indicates authenticated user)
-                    logout_form = soup.find('form', attrs={'action': '/accounts/logout/'})
-                    return logout_form is not None
-                return False
+            # Use redirect handler to sanitize any malformed Location headers
+            response = await self._get_with_redirect_handling(
+                context,
+                f"{self.config.base_url}/"
+            )
+
+            if response.status == 200:
+                html = await response.text()
+                soup = BeautifulSoup(html, 'html.parser')
+                # Look for logout form (indicates authenticated user)
+                logout_form = soup.find('form', attrs={'action': '/accounts/logout/'})
+                return logout_form is not None
+            return False
         except Exception as e:
             logger.warning(f"Failed to check authentication status: {e}")
             return False
@@ -447,19 +585,24 @@ class ScraperService:
         context: SessionContext,
         tab: str = "alle",
         category: Optional[str] = None,
+        search: Optional[str] = None,
         limit: int = 20
     ) -> List[ArticleMetadata]:
         """
         Discover new articles from myMoment platform.
 
+        Returns article metadata only (no full content). This method performs
+        HTTP requests only and does NOT use the database session.
+
         Args:
             context: Authenticated session context
             tab: Which tab to scrape ('home', 'alle', or classroom ID)
-            category: Optional category filter
+            category: Optional category filter (by category ID)
+            search: Optional search string to filter articles by title
             limit: Maximum number of articles to retrieve
 
         Returns:
-            List of discovered articles
+            List of discovered articles (metadata only, no content)
 
         Raises:
             ScrapingError: If article discovery fails
@@ -470,6 +613,7 @@ class ScraperService:
 
             articles_url = f"{self.config.base_url}/articles/"
 
+            logger.debug(f"Starting HTTP request to discover articles (login {context.login_id}, tab={tab})")
             await self._rate_limit()
             async with context.aiohttp_session.get(articles_url) as response:
                 if response.status != 200:
@@ -492,19 +636,52 @@ class ScraperService:
             # Extract article cards
             article_list = tab_content.select_one(':scope > div[class*="article-list"]')
             if article_list:
-                post_cards = article_list.find_all('div', recursive=False)[:limit]
+                post_cards = article_list.find_all('div', recursive=False)
 
                 for card in post_cards:
+                    # Stop when we reach the limit
+                    if len(articles) >= limit:
+                        break
+
                     try:
                         article = self._extract_article_metadata(card)
                         if article:
-                            articles.append(article)
+                            # Apply filters
+                            should_include = True
+                            filter_reasons = []
+
+                            # Apply category filter if specified
+                            if category:
+                                try:
+                                    category_int = int(category)
+                                    if article.category_id != category_int:
+                                        should_include = False
+                                        filter_reasons.append(f"category {article.category_id} != {category_int}")
+                                except ValueError:
+                                    logger.warning(f"Invalid category filter: {category}, skipping category filter")
+
+                            # Apply search filter if specified
+                            if should_include and search:
+                                search_lower = search.lower()
+                                title_lower = article.title.lower() if article.title else ""
+                                if search_lower not in title_lower:
+                                    should_include = False
+                                    filter_reasons.append(f"title does not contain '{search}'")
+
+                            if should_include:
+                                articles.append(article)
+                                logger.debug(f"Article {article.id} ('{article.title}') included in results")
+                            else:
+                                reason = "; ".join(filter_reasons) if filter_reasons else "unknown reason"
+                                logger.debug(f"Article {article.id} ('{article.title}') filtered out ({reason})")
+
                     except Exception as e:
                         logger.warning(f"Failed to extract article metadata: {e}")
                         continue
 
             context.last_activity = datetime.utcnow()
-            logger.info(f"Discovered {len(articles)} articles for login {context.login_id}")
+            logger.debug(f"HTTP request completed for article discovery (login {context.login_id})")
+            logger.info(f"Discovered {len(articles)} articles for login {context.login_id} (tab: {tab}, category: {category}, search: {search})")
 
             return articles
 
@@ -680,6 +857,8 @@ class ScraperService:
         """
         Get full content of a specific article.
 
+        This method performs HTTP requests only and does NOT use the database session.
+
         Args:
             context: Authenticated session context
             article_id: Article ID to retrieve
@@ -696,6 +875,7 @@ class ScraperService:
 
             article_url = f"{self.config.base_url}/article/{article_id}/"
 
+            logger.debug(f"Starting HTTP request to fetch article content (article_id={article_id}, login={context.login_id})")
             await self._rate_limit()
             async with context.aiohttp_session.get(article_url) as response:
                 if response.status != 200:
@@ -750,6 +930,7 @@ class ScraperService:
                     csrf_token = csrf_input.get('value')
 
             context.last_activity = datetime.utcnow()
+            logger.debug(f"HTTP request completed for article content (article_id={article_id}, login={context.login_id})")
 
             return {
                 'id': article_id,
@@ -811,6 +992,7 @@ class ScraperService:
                 'highlight': highlight or ''
             }
 
+            logger.debug(f"Starting HTTP request to post comment (article_id={article_id}, login={context.login_id})")
             await self._rate_limit()
             async with context.aiohttp_session.post(
                 comment_url,
@@ -822,6 +1004,7 @@ class ScraperService:
             ) as response:
                 success = response.status in [200, 302]
 
+                logger.debug(f"HTTP request completed for post comment (article_id={article_id}, login={context.login_id}, status={response.status})")
                 if success:
                     context.last_activity = datetime.utcnow()
                     logger.info(f"Successfully posted comment to article {article_id} via login {context.login_id}")

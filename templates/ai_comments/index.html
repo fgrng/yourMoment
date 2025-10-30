@@ -26,6 +26,8 @@
         <label for="statusFilter" class="form-label">Status</label>
         <select id="statusFilter" class="form-select">
             <option value="ALL" selected>Alle Status</option>
+            <option value="discovered">Entdeckt</option>
+            <option value="prepared">Vorbereitet</option>
             <option value="generated">Erzeugt</option>
             <option value="posted">Veröffentlicht</option>
             <option value="failed">Fehlgeschlagen</option>
@@ -45,6 +47,8 @@
     </div>
 </div>
 
+<div id="commentsList" class="row g-4 mt-4" style="display: none;"></div>
+
 <div id="loadingState" class="text-center my-5">
     <div class="spinner-border text-primary" role="status">
         <span class="visually-hidden">Wird geladen …</span>
@@ -58,7 +62,6 @@
     <p class="text-muted">Sobald Überwachungsprozesse KI-Kommentare erzeugen, erscheinen sie hier.</p>
 </div>
 
-<div id="commentsList" class="row g-4 mt-4" style="display: none;"></div>
 {% endblock %}
 
 {% block extra_js %}

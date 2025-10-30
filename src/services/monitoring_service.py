@@ -52,25 +52,33 @@ class MonitoringService:
     """
     Comprehensive monitoring process orchestration service.
 
-    This service manages the complete lifecycle of monitoring processes:
+    This service manages the complete lifecycle of monitoring processes using
+    a refactored pipeline architecture with isolated task stages.
 
     1. Process Creation & Configuration:
        - Create processes with filtering criteria
        - Associate with multiple myMoment logins
        - Configure prompt templates for comment generation
+       - Configure LLM provider for AI comment generation
        - Validate user access and resource constraints
 
-    2. Process Execution:
-       - Start monitoring with multi-session scraping
-       - Coordinate article discovery across sessions
-       - Manage background task scheduling
-       - Handle process state transitions
+    2. Process Execution Pipeline:
+       - Start monitoring using orchestrator task
+       - Four isolated pipeline stages:
+         * Article Discovery: Scrape article metadata
+         * Content Preparation: Fetch full article content
+         * Comment Generation: Generate AI comments via LLM
+         * Comment Posting: Post comments to myMoment
+       - Stage-based progress tracking via AIComment status
+       - Short-lived database sessions (< 500ms)
+       - External I/O isolated from database transactions
 
     3. Duration & Lifecycle Management:
        - Enforce maximum duration limits (FR-008)
        - Automatic process termination on timeout
        - Process stopping and cleanup
        - Status monitoring and reporting
+       - Pipeline stage progress tracking
 
     4. Multi-Login Coordination:
        - Support multiple myMoment logins per process
@@ -80,9 +88,16 @@ class MonitoringService:
 
     5. Error Handling & Recovery:
        - Robust error handling with graceful degradation
+       - Individual article failure isolation
        - Process failure recovery and cleanup
        - Comprehensive audit logging
        - Resource cleanup on failures
+
+    6. Pipeline Status Monitoring:
+       - Track AIComment counts by status (discovered/prepared/generated/posted/failed)
+       - Real-time pipeline progress visibility
+       - Per-stage error tracking
+       - Overall workflow completion tracking
     """
 
     def __init__(
@@ -388,20 +403,28 @@ class MonitoringService:
         user_id: uuid.UUID
     ) -> Dict[str, Any]:
         """
-        Start a monitoring process by enqueueing Celery task.
+        Start a monitoring process by marking it as 'running'.
+
+        The Scheduler (trigger_monitoring_pipeline) will pick up the process and spawn
+        all four pipeline stage tasks on the next scheduled run (max 3-minute wait).
+
+        This separates concerns:
+        - MonitoringService: Configuration and lifecycle management only
+        - Scheduler: All task spawning and continuous pipeline orchestration
 
         Args:
             process_id: Process ID to start
             user_id: User ID for validation
 
         Returns:
-            Start result with task_id
+            Start result indicating process is marked for scheduling
 
         Raises:
             ProcessOperationError: If start fails
         """
         process = None
         login_count = 0
+        prompt_count = 0
 
         try:
             # Validate process exists and belongs to user
@@ -419,48 +442,55 @@ class MonitoringService:
                     f"Process {process_id} has no associated myMoment logins"
                 )
 
+            # Validate has associated prompts
+            prompt_count = len([mpp for mpp in process.monitoring_process_prompts if mpp.is_active])
+            if prompt_count == 0:
+                raise ProcessOperationError(
+                    f"Process {process_id} has no associated prompt templates"
+                )
+
+            # Validate has LLM provider
+            if not process.llm_provider_id:
+                raise ProcessOperationError(
+                    f"Process {process_id} has no LLM provider configured"
+                )
+
             # Update process status to running
+            # The scheduler (trigger_monitoring_pipeline) will pick this up and spawn tasks
             now_utc = datetime.now(timezone.utc)
             process.status = ProcessStatus.RUNNING
             process.started_at = now_utc
             process.last_activity_at = now_utc
 
-            # Enqueue Celery task with error handling for Redis connection
-            try:
-                from src.tasks.article_monitor import start_monitoring_process
-                task = start_monitoring_process.delay(str(process_id))
-                task_id = task.id
-            except Exception as celery_error:
-                # Check if it's a Redis connection error
-                error_msg = str(celery_error).lower()
-                if 'redis' in error_msg or 'connection refused' in error_msg or 'connection error' in error_msg:
-                    # Rollback process status changes
-                    process.status = ProcessStatus.CREATED
-                    process.started_at = None
-                    process.last_activity_at = None
-                    await self.db_session.commit()
-                    raise ProcessOperationError(
-                        "Background task system (Redis/Celery) is unavailable. "
-                        "Please ensure Redis is running or contact the administrator."
-                    )
-                else:
-                    # Re-raise other Celery errors
-                    raise
-
-            # Store task ID for tracking
-            process.celery_task_id = task_id
-
             await self.db_session.commit()
 
-            logger.info(f"Started monitoring process {process_id} with Celery task {task_id}")
+            logger.info(
+                f"Process {process_id} marked as running. "
+                f"Triggering scheduler to spawn pipeline tasks immediately."
+            )
+
+            # Trigger scheduler task immediately to spawn tasks
+            # This ensures first run happens immediately, not waiting up to 3 minutes
+            try:
+                from src.tasks.scheduler import trigger_monitoring_pipeline
+                # Use force_immediate=True to spawn tasks regardless of state
+                trigger_monitoring_pipeline.delay(force_immediate=True)
+                logger.info(f"Spawned immediate scheduler task for process {process_id}")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to trigger immediate scheduler for process {process_id}: {e}. "
+                    f"Tasks will be spawned on next periodic scheduler run."
+                )
 
             return {
                 'process_id': str(process_id),
-                'task_id': task_id,
-                'status': 'queued',
+                'status': 'scheduled',
+                'message': 'Process marked as running. Pipeline tasks spawned (or will be within 3 minutes).',
                 'started_at': process.started_at.isoformat(),
                 'associated_logins': login_count,
-                'max_duration_minutes': process.max_duration_minutes
+                'associated_prompts': prompt_count,
+                'max_duration_minutes': process.max_duration_minutes,
+                'generate_only': process.generate_only
             }
 
         except ProcessOperationError:
@@ -483,7 +513,13 @@ class MonitoringService:
         reason: str = "user_requested"
     ) -> Dict[str, Any]:
         """
-        Stop a running monitoring process by revoking Celery task.
+        Stop a running monitoring process by revoking all stage-specific Celery tasks (v3.0+).
+
+        Revokes all four pipeline stage tasks:
+        - celery_discovery_task_id
+        - celery_preparation_task_id
+        - celery_generation_task_id
+        - celery_posting_task_id
 
         Args:
             process_id: Process ID to stop
@@ -507,11 +543,30 @@ class MonitoringService:
                     'current_status': process.status
                 }
 
-            # Revoke Celery task if exists
-            if process.celery_task_id:
-                from src.tasks.worker import celery_app
-                celery_app.control.revoke(process.celery_task_id, terminate=True)
-                logger.info(f"Revoked Celery task {process.celery_task_id} for process {process_id}")
+            # Revoke all stage-specific tasks (v3.0+)
+            from src.tasks.worker import celery_app
+            revoked_tasks = {}
+
+            for task_field in ['celery_discovery_task_id', 'celery_preparation_task_id',
+                               'celery_generation_task_id', 'celery_posting_task_id']:
+                task_id = getattr(process, task_field, None)
+                if task_id:
+                    try:
+                        celery_app.control.revoke(task_id, terminate=True)
+                        revoked_tasks[task_field] = task_id
+                        logger.info(f"Revoked {task_field}: {task_id}")
+                    except Exception as e:
+                        logger.error(f"Failed to revoke {task_field} {task_id}: {e}")
+                        revoked_tasks[task_field] = f"error: {e}"
+
+            # Also revoke legacy celery_task_id if present (for backward compatibility)
+            if hasattr(process, 'celery_task_id') and process.celery_task_id:
+                try:
+                    celery_app.control.revoke(process.celery_task_id, terminate=True)
+                    revoked_tasks['legacy_celery_task_id'] = process.celery_task_id
+                    logger.info(f"Revoked legacy Celery task {process.celery_task_id} for process {process_id}")
+                except Exception as e:
+                    logger.error(f"Failed to revoke legacy task {process.celery_task_id}: {e}")
 
             # Update process status
             now_utc = datetime.now(timezone.utc)
@@ -528,6 +583,7 @@ class MonitoringService:
                 'status': 'stopped',
                 'stopped_at': process.stopped_at.isoformat(),
                 'reason': reason,
+                'revoked_tasks': revoked_tasks,
                 'final_stats': {
                     'articles_discovered': process.articles_discovered,
                     'comments_generated': process.comments_generated,
@@ -604,6 +660,91 @@ class MonitoringService:
         except Exception as e:
             logger.error(f"Failed to get process status {process_id}: {e}")
             return {'error': str(e)}
+
+    async def get_pipeline_status(
+        self,
+        process_id: uuid.UUID,
+        user_id: uuid.UUID
+    ) -> Dict[str, Any]:
+        """
+        Get pipeline status with AIComment counts by status.
+
+        This method returns detailed statistics about the pipeline stages
+        by counting AIComment records in each status (discovered, prepared,
+        generated, posted, failed).
+
+        Args:
+            process_id: Process ID to get pipeline status for
+            user_id: User ID for validation
+
+        Returns:
+            Dictionary with status counts per pipeline stage:
+            {
+                'process_id': str,
+                'discovered': int,
+                'prepared': int,
+                'generated': int,
+                'posted': int,
+                'failed': int,
+                'total': int
+            }
+
+        Raises:
+            ProcessOperationError: If process not found
+        """
+        try:
+            # Validate process exists and belongs to user
+            process = await self._get_process_with_associations(process_id, user_id)
+
+            # Import AIComment model
+            from src.models.ai_comment import AIComment
+
+            # Query to count AIComments grouped by status
+            status_counts_stmt = select(
+                AIComment.status,
+                func.count(AIComment.id)
+            ).where(
+                AIComment.monitoring_process_id == process_id
+            ).group_by(AIComment.status)
+
+            result = await self.db_session.execute(status_counts_stmt)
+            status_counts = dict(result.fetchall())
+
+            # Build response with counts for each status
+            pipeline_status = {
+                'process_id': str(process_id),
+                'discovered': status_counts.get('discovered', 0),
+                'prepared': status_counts.get('prepared', 0),
+                'generated': status_counts.get('generated', 0),
+                'posted': status_counts.get('posted', 0),
+                'failed': status_counts.get('failed', 0),
+            }
+
+            # Calculate total
+            pipeline_status['total'] = sum([
+                pipeline_status['discovered'],
+                pipeline_status['prepared'],
+                pipeline_status['generated'],
+                pipeline_status['posted'],
+                pipeline_status['failed']
+            ])
+
+            logger.debug(
+                f"Pipeline status for process {process_id}: "
+                f"discovered={pipeline_status['discovered']}, "
+                f"prepared={pipeline_status['prepared']}, "
+                f"generated={pipeline_status['generated']}, "
+                f"posted={pipeline_status['posted']}, "
+                f"failed={pipeline_status['failed']}"
+            )
+
+            return pipeline_status
+
+        except ProcessOperationError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to get pipeline status for process {process_id}: {e}")
+            raise ProcessOperationError(f"Failed to get pipeline status: {e}")
 
     async def list_user_processes(
         self,

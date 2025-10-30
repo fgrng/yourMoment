@@ -30,32 +30,8 @@ class TimeoutEnforcementTask(BaseTask):
 
     async def get_async_session(self) -> AsyncSession:
         """Get async database session."""
-        sessionmaker = self.db_manager.get_async_sessionmaker()
+        sessionmaker = await self.db_manager.create_sessionmaker()
         return sessionmaker()
-
-
-@celery_app.task(
-    bind=True,
-    base=TimeoutEnforcementTask,
-    name='src.tasks.timeout_enforcer.check_process_timeouts',
-    queue='timeouts'
-)
-def check_process_timeouts(self) -> Dict[str, Any]:
-    """
-    Check all running monitoring processes for timeout violations.
-
-    This task enforces maximum duration limits as specified in FR-008.
-    Processes that exceed their maximum duration are immediately stopped.
-
-    Returns:
-        Dictionary with timeout check results
-    """
-    try:
-        result = asyncio.run(self._check_process_timeouts_async())
-        return result
-    except Exception as exc:
-        logger.error(f"Process timeout check failed: {exc}")
-        raise
 
     async def _check_process_timeouts_async(self) -> Dict[str, Any]:
         """Async implementation of process timeout checking."""
@@ -64,7 +40,7 @@ def check_process_timeouts(self) -> Dict[str, Any]:
         stopped_processes = 0
         errors = []
 
-        async with self.get_async_session() as session:
+        async with await self.get_async_session() as session:
             try:
                 # Find all running processes
                 result = await session.execute(
@@ -92,17 +68,26 @@ def check_process_timeouts(self) -> Dict[str, Any]:
                         if running_duration > max_duration:
                             timeout_processes += 1
 
-                            # Revoke Celery task if it's running
-                            if process.celery_task_id:
-                                try:
-                                    celery_app.control.revoke(
-                                        process.celery_task_id,
-                                        terminate=True,
-                                        signal='SIGTERM'
-                                    )
-                                    logger.info(f"Revoked Celery task {process.celery_task_id} for process '{process.name}'")
-                                except Exception as e:
-                                    logger.error(f"Failed to revoke task {process.celery_task_id}: {e}")
+                            # Revoke all stage-specific Celery tasks if they exist
+                            revoked_tasks = []
+                            for task_field, task_label in [
+                                ('celery_discovery_task_id', 'discovery'),
+                                ('celery_preparation_task_id', 'preparation'),
+                                ('celery_generation_task_id', 'generation'),
+                                ('celery_posting_task_id', 'posting')
+                            ]:
+                                task_id = getattr(process, task_field, None)
+                                if task_id:
+                                    try:
+                                        celery_app.control.revoke(
+                                            task_id,
+                                            terminate=True,
+                                            signal='SIGTERM'
+                                        )
+                                        revoked_tasks.append(task_label)
+                                        logger.info(f"Revoked {task_label} task {task_id} for process '{process.name}'")
+                                    except Exception as e:
+                                        logger.error(f"Failed to revoke {task_label} task {task_id}: {e}")
 
                             # Stop the process immediately
                             await session.execute(
@@ -112,14 +97,17 @@ def check_process_timeouts(self) -> Dict[str, Any]:
                                     status="stopped",
                                     stopped_at=current_time,
                                     last_activity_at=current_time,
-                                    stop_reason="timeout",
-                                    celery_task_id=None
+                                    celery_discovery_task_id=None,
+                                    celery_preparation_task_id=None,
+                                    celery_generation_task_id=None,
+                                    celery_posting_task_id=None
                                 )
                             )
 
                             stopped_processes += 1
+                            revoked_msg = f", revoked tasks: {', '.join(revoked_tasks)}" if revoked_tasks else ""
                             logger.warning(f"Stopped process '{process.name}' due to timeout "
-                                         f"(max duration: {process.max_duration_minutes} minutes)")
+                                         f"(max duration: {process.max_duration_minutes} minutes){revoked_msg}")
 
                     except Exception as e:
                         error_msg = f"Timeout check failed for process '{process.name}': {str(e)}"
@@ -156,3 +144,27 @@ def check_process_timeouts(self) -> Dict[str, Any]:
                     'execution_time_seconds': execution_time,
                     'timestamp': datetime.utcnow().isoformat()
                 }
+
+
+# Register the task as a Celery task
+@celery_app.task(
+    name='src.tasks.timeout_enforcer.check_process_timeouts',
+    queue='timeouts'
+)
+def check_process_timeouts() -> Dict[str, Any]:
+    """
+    Check all running monitoring processes for timeout violations.
+
+    This task enforces maximum duration limits as specified in FR-008.
+    Processes that exceed their maximum duration are immediately stopped.
+
+    Returns:
+        Dictionary with timeout check results
+    """
+    try:
+        task = TimeoutEnforcementTask()
+        result = asyncio.run(task._check_process_timeouts_async())
+        return result
+    except Exception as exc:
+        logger.error(f"Process timeout check failed: {exc}")
+        raise

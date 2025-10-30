@@ -43,18 +43,29 @@ class MonitoringProcess(BaseModel):
     # Process control
     max_duration_minutes = Column(Integer, nullable=False, default=60)  # FR-008: Duration limits
     status = Column(String(50), nullable=False, default="created")  # created, running, stopped, completed, failed
-    celery_task_id = Column(String(255), nullable=True, index=True)  # Celery task ID for tracking
+
+    # Stage-specific Celery task IDs for parallel pipeline (v3.0+)
+    celery_discovery_task_id = Column(String(255), nullable=True, index=True)
+    celery_preparation_task_id = Column(String(255), nullable=True, index=True)
+    celery_generation_task_id = Column(String(255), nullable=True, index=True)
+    celery_posting_task_id = Column(String(255), nullable=True, index=True)
 
     # Process execution tracking
     started_at = Column(DateTime(timezone=True), nullable=True)
     stopped_at = Column(DateTime(timezone=True), nullable=True)
     last_activity_at = Column(DateTime(timezone=True), nullable=True)
 
-    # Statistics
-    articles_discovered = Column(Integer, nullable=False, default=0)
-    comments_generated = Column(Integer, nullable=False, default=0)
-    comments_posted = Column(Integer, nullable=False, default=0)
-    errors_encountered = Column(Integer, nullable=False, default=0)
+    # Stage-specific progress tracking (v3.0+)
+    articles_discovered = Column(Integer, default=0, nullable=False)
+    articles_prepared = Column(Integer, default=0, nullable=False)
+    comments_generated = Column(Integer, default=0, nullable=False)
+    comments_posted = Column(Integer, default=0, nullable=False)
+
+    # Stage-specific error tracking (v3.0+)
+    errors_encountered_in_discovery = Column(Integer, default=0, nullable=False)
+    errors_encountered_in_preparation = Column(Integer, default=0, nullable=False)
+    errors_encountered_in_generation = Column(Integer, default=0, nullable=False)
+    errors_encountered_in_posting = Column(Integer, default=0, nullable=False)
 
     # Status tracking
     is_active = Column(Boolean, nullable=False, default=True)
@@ -110,7 +121,13 @@ class MonitoringProcess(BaseModel):
     def error_message(self) -> str:
         """Get error message if process failed."""
         if self.status == "failed":
-            return f"Process failed after {self.errors_encountered} errors"
+            total_errors = (
+                self.errors_encountered_in_discovery +
+                self.errors_encountered_in_preparation +
+                self.errors_encountered_in_generation +
+                self.errors_encountered_in_posting
+            )
+            return f"Process failed after {total_errors} errors"
         return None
 
     @property

@@ -19,6 +19,7 @@ let providers = [];
 let providerMap = new Map();
 let promptTemplateMap = new Map();
 let credentialMap = new Map();
+let pipelineStatusMap = new Map();  // Store pipeline status for each process
 let pollingInterval = null;
 
 // DOM elements
@@ -59,8 +60,7 @@ async function loadAllData() {
     window.showAlert();
     loadingState.style.display = 'block';
     emptyState.style.display = 'none';
-    processList.style.display = 'none';
-    processList.innerHTML = '';
+    // processList.style.display = 'none';
 
     try {
         const [processResp, providerResp, templateResp, credentialResp] = await Promise.all([
@@ -91,11 +91,15 @@ async function loadAllData() {
         if (!processes.length) {
             emptyState.style.display = 'block';
         } else {
+            // Load pipeline status for running processes
+            await loadPipelineStatusForRunningProcesses();
+
+            processList.innerHTML = '';
             processList.style.display = 'flex';
             renderProcesses(filterProcesses());
         }
 
-        // Setup polling if there are running processes
+        // Setup polling if there are running processes (auto-refresh every 10 seconds)
         updatePolling();
 
     } catch (error) {
@@ -126,12 +130,38 @@ async function loadProcessesOnly() {
         const response = await fetch('/api/v1/monitoring-processes/index?limit=100', fetchOptions());
         if (response.ok) {
             processes = await response.json();
+
+            // Fetch pipeline status for running processes
+            await loadPipelineStatusForRunningProcesses();
+
             renderProcesses(filterProcesses());
             updatePolling();
         }
     } catch (error) {
         console.error('Error polling processes:', error);
     }
+}
+
+/**
+ * Fetch pipeline status for all running processes
+ */
+async function loadPipelineStatusForRunningProcesses() {
+    const runningProcesses = processes.filter(p => p.is_running);
+
+    // Fetch pipeline status in parallel for all running processes
+    const statusPromises = runningProcesses.map(async (process) => {
+        try {
+            const response = await fetch(`/api/v1/monitoring-processes/${process.id}/pipeline-status`, fetchOptions());
+            if (response.ok) {
+                const pipelineStatus = await response.json();
+                pipelineStatusMap.set(process.id, pipelineStatus);
+            }
+        } catch (error) {
+            console.error(`Error fetching pipeline status for process ${process.id}:`, error);
+        }
+    });
+
+    await Promise.all(statusPromises);
 }
 
 async function assertOk(response, message) {
@@ -232,8 +262,8 @@ function renderProcesses(list) {
                         <strong>Modus:</strong>
                         <span class="small">
                             ${process.generate_only
-                                ? '<span class="badge bg-info">Nur erzeugen</span>'
-                                : '<span class="badge bg-primary">Erzeugen & Veröffentlichen</span>'}
+                                ? '<span class="badge bg-warning">Nur erzeugen</span>'
+                                : '<span class="badge bg-danger">Erzeugen & Veröffentlichen</span>'}
                         </span>
                     </div>
                     <div class="mb-2">
@@ -253,6 +283,7 @@ function renderProcesses(list) {
                         <span class="small">${process.max_duration_minutes} Minuten</span>
                     </div>
                     ${formatSchedule(process)}
+                    ${formatPipelineStatus(process)}
                     ${errorBlock}
                     <div class="text-end small text-muted">
                         <div>Aktualisiert ${formatRelative(process.updated_at)}</div>
@@ -352,7 +383,7 @@ function formatSchedule(process) {
         return `<div class="mb-2"><strong>Aktiv:</strong><div class="small">Gestartet ${started}${expires}</div></div>`;
     }
     if (process.stopped_at) {
-        return `<div class="mb-2"><strong>Letzter Lauf:</strong><div class="small">Gestoppt ${formatRelative(process.stopped_at)}</div></div>`;
+        return `<div class="mb-2"><strong>Letzte Aktivität:</strong><div class="small">Gestoppt ${formatRelative(process.stopped_at)}</div></div>`;
     }
     return '<div class="mb-2"><strong>Status:</strong><div class="small">Noch nicht gestartet</div></div>';
 }
@@ -394,4 +425,35 @@ function formatRelative(value) {
     return isFuture
         ? `in ${diffDays} ${unit}`
         : `vor ${diffDays} ${unit}`;
+}
+
+/**
+ * Format pipeline status for display
+ * Shows individual stage counts without overall progress (as stages run in parallel)
+ */
+function formatPipelineStatus(process) {
+    const pipelineStatus = pipelineStatusMap.get(process.id);
+
+    // Only show for running processes or processes with pipeline data
+    if (!pipelineStatus || pipelineStatus.total === 0) {
+        return '';
+    }
+
+    return `
+        <div class="mb-2">
+            <strong>Pipeline-Status:</strong>
+            <div class="small">
+                <div class="d-flex flex-wrap gap-2 mt-1">
+                    <span class="badge bg-secondary" title="Artikel entdeckt">Entdeckt: ${pipelineStatus.discovered}</span>
+                    <span class="badge bg-primary" title="Inhalte vorbereitet">Vorbereitet: ${pipelineStatus.prepared}</span>
+                    <span class="badge bg-warning" title="Kommentare generiert">Generiert: ${pipelineStatus.generated}</span>
+                    <span class="badge bg-success" title="Kommentare veröffentlicht">Veröffentlicht: ${pipelineStatus.posted}</span>
+                    <span class="badge bg-danger" title="Fehlerhafte Artikel">Fehler: ${pipelineStatus.failed}</span>
+                </div>
+                <div class="text-muted mt-1" style="font-size: 0.85em;">
+                    Gesamt verarbeitet: ${pipelineStatus.total} ${pipelineStatus.total === 1 ? 'Artikel' : 'Artikel'}
+                </div>
+            </div>
+        </div>
+    `;
 }
