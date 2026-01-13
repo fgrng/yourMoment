@@ -121,6 +121,7 @@ class MonitoringService:
         name: str,
         description: Optional[str] = None,
         category_filter: Optional[int] = None,
+        task_filter: Optional[int] = None,
         search_filter: Optional[str] = None,
         tab_filter: Optional[str] = None,
         sort_option: Optional[str] = None,
@@ -138,7 +139,8 @@ class MonitoringService:
             user_id: User creating the process
             name: Process name
             description: Optional process description
-            category_filter: Optional myMoment category filter
+            category_filter: Optional myMoment category filter (by category ID)
+            task_filter: Optional myMoment task filter (by task ID)
             search_filter: Optional search terms
             tab_filter: Optional tab filter (new, popular, etc.)
             sort_option: Optional sort criteria
@@ -192,6 +194,7 @@ class MonitoringService:
                 name=name,
                 description=description,
                 category_filter=category_filter,
+                task_filter=task_filter,
                 search_filter=search_filter,
                 tab_filter=tab_filter,
                 sort_option=sort_option,
@@ -247,6 +250,7 @@ class MonitoringService:
         name: Optional[str] = None,
         description: Optional[str] = None,
         category_filter: Optional[int] = None,
+        task_filter: Optional[int] = None,
         search_filter: Optional[str] = None,
         tab_filter: Optional[str] = None,
         sort_option: Optional[str] = None,
@@ -265,6 +269,7 @@ class MonitoringService:
             name: New process name (optional)
             description: New process description (optional)
             category_filter: New category filter (optional)
+            task_filter: New task filter (optional)
             search_filter: New search filter (optional)
             tab_filter: New tab filter (optional)
             sort_option: New sort option (optional)
@@ -304,6 +309,8 @@ class MonitoringService:
             # Update filter fields
             if category_filter is not None:
                 process.category_filter = category_filter
+            if task_filter is not None:
+                process.task_filter = task_filter
             if search_filter is not None:
                 process.search_filter = search_filter
             if tab_filter is not None:

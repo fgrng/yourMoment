@@ -92,6 +92,7 @@ class AIComment(BaseModel):
     article_title = Column(Text, nullable=False)
     article_author = Column(String(200), nullable=False)
     article_category = Column(Integer, nullable=True)  # myMoment category ID
+    article_task_id = Column(Integer, nullable=True)  # myMoment task/Aufgabe ID
     article_url = Column(String(500), nullable=False)  # myMoment article URL
 
     # Article content (frozen snapshot)
@@ -323,6 +324,7 @@ class AIComment(BaseModel):
             "title": self.article_title,
             "author": self.article_author,
             "category": self.article_category,
+            "task_id": self.article_task_id,
             "url": self.article_url,
             "content": self.article_content,
             "raw_html": self.article_raw_html,
