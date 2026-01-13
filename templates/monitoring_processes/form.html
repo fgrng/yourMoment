@@ -78,7 +78,7 @@
                     <div class="mt-3">
                         <label class="form-label">Filter für myMoment Artikel</label>
                         <div class="row g-2">
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label for="tabFilter" class="form-label small">
                                     Tab
                                     <span id="tabLoadingIndicator" class="spinner-border spinner-border-sm ms-2" style="display: none;" role="status">
@@ -90,24 +90,28 @@
                                 </select>
                                 <div class="form-text" id="tabFilterHelp">Wähle myMoment-Zugangsdaten, um verfügbare Klasse zu laden</div>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label for="categoryFilter" class="form-label small">Kategorie</label>
                                 <select id="categoryFilter" class="form-select">
                                     <option value="">Alle Kategorien</option>
-                                    <option value="9">Unterhalten</option>
-                                    <option value="7">Informieren</option>
                                     <option value="4">Anleiten</option>
                                     <option value="14">Berichten</option>
                                     <option value="5">Erklären</option>
                                     <option value="6">Fragen</option>
+                                    <option value="7">Informieren</option>
                                     <option value="8">Überzeugen</option>
-                                    <option value="12">Schreibaufgabe: Schaltplan</option>
-                                    <option value="11">Schreibaufgabe: Wegbeschreibung</option>
-                                    <option value="10">Schreibaufgabe: Fiktionaler Dialog</option>
-                                    <option value="13">Schreibaufgabe: Reisebericht</option>
+                                    <option value="9">Unterhalten</option>
                                 </select>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
+                                <label for="taskFilter" class="form-label small">Schreibaufgabe</label>
+                                <select id="taskFilter" class="form-select">
+                                    <option value="">Alle Aufgaben</option>
+                                    <option value="4">Fiktionaler Dialog zwischen zwei Gegenständen</option>
+                                    <option value="10">Wo ist Hugo? (Anleitung schreiben)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
                                 <label for="searchFilter" class="form-label small">Suchbegriff</label>
                                 <input type="text" id="searchFilter" class="form-control" placeholder="Stichwörter" disabled>
                                 <div class="form-text">Optionale Filter, um Artikel mit bestimmten Titeln auf myMoment anzusteuern (derzeit nicht verfügbar)</div>
@@ -185,6 +189,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     const promptSelect = document.getElementById('promptTemplates');
     const loginSelect = document.getElementById('loginIds');
     const categoryFilter = document.getElementById('categoryFilter');
+    const taskFilter = document.getElementById('taskFilter');
     const tabFilter = document.getElementById('tabFilter');
     const tabLoadingIndicator = document.getElementById('tabLoadingIndicator');
     const tabFilterHelp = document.getElementById('tabFilterHelp');
@@ -314,6 +319,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (filters.category) {
             categoryFilter.value = filters.category;
         }
+        if (filters.task) {
+            taskFilter.value = filters.task;
+        }
         if (filters.search) {
             searchFilter.value = filters.search;
         }
@@ -411,6 +419,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         const category = categoryFilter.value.trim();
         if (category) {
             targetFilters.category = parseInt(category, 10);
+        }
+        const task = taskFilter.value.trim();
+        if (task) {
+            targetFilters.task = parseInt(task, 10);
         }
         const tab = tabFilter.value;
         if (tab) {

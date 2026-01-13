@@ -54,6 +54,12 @@ async def create_monitoring_process(
             if isinstance(categories, list) and categories:
                 category_filter = categories[0]
 
+        task_filter = target_filters.get("task")
+        if task_filter is None:
+            tasks = target_filters.get("tasks")
+            if isinstance(tasks, list) and tasks:
+                task_filter = tasks[0]
+
         tab_filter = target_filters.get("tab")
         if tab_filter is None:
             tabs = target_filters.get("tabs")
@@ -69,6 +75,7 @@ async def create_monitoring_process(
             name=process_data.name,
             description=process_data.description,
             category_filter=category_filter,
+            task_filter=task_filter,
             search_filter=target_filters.get("search"),
             tab_filter=tab_filter,
             sort_option=target_filters.get("sort"),
@@ -224,6 +231,12 @@ async def update_monitoring_process(
             if isinstance(categories, list) and categories:
                 category_filter = categories[0]
 
+        task_filter = target_filters.get("task")
+        if task_filter is None:
+            tasks = target_filters.get("tasks")
+            if isinstance(tasks, list) and tasks:
+                task_filter = tasks[0]
+
         tab_filter = target_filters.get("tab")
         if tab_filter is None:
             tabs = target_filters.get("tabs")
@@ -254,6 +267,8 @@ async def update_monitoring_process(
         # Add filter fields if provided
         if category_filter is not None:
             update_kwargs['category_filter'] = category_filter
+        if task_filter is not None:
+            update_kwargs['task_filter'] = task_filter
         if process_data.target_filters is not None:
             if 'search' in target_filters:
                 update_kwargs['search_filter'] = target_filters['search']

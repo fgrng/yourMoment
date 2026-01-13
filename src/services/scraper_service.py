@@ -32,20 +32,25 @@ from src.utils.url_sanitizer import sanitize_url, is_url_malformed
 logger = logging.getLogger(__name__)
 
 
-# Category mapping: image keyword -> (category_id, category_name)
-# Based on myMoment platform category options
+# Category mapping: category_id -> category_name
+# Based on myMoment platform category options (7 core communication functions)
 CATEGORY_MAPPING = {
-    "unterhalten": (9, "Unterhalten"),
-    "informieren": (7, "Informieren"),
-    "anleiten": (4, "Anleiten"),
-    "berichten": (14, "Berichten"),
-    "erklaeren": (5, "Erklären"),
-    "fragen": (6, "Fragen"),
-    "ueberzeugen": (8, "Überzeugen"),
-    "sa-schaltplan": (12, "Schreibaufgabe: Schaltplan"),
-    "sa-wegbeschreibung": (11, "Schreibaufgabe: Wegbeschreibung"),
-    "sa-fiktionaler_dialog": (10, "Schreibaufgabe: Fiktionaler Dialog"),
-    "sa-reisebericht": (13, "Schreibaufgabe: Reisebericht"),
+    4: "Anleiten",
+    14: "Berichten",
+    5: "Erklären",
+    6: "Fragen",
+    7: "Informieren",
+    8: "Überzeugen",
+    9: "Unterhalten",
+}
+
+# Task mapping: task_id -> task_name
+# Separate from categories in the new myMoment platform structure
+# Tasks are writing assignments (Schreibaufgaben) that can be filtered independently
+TASK_MAPPING = {
+    4: "Fiktionaler Dialog zwischen zwei Gegenständen",
+    10: "Wo ist Hugo? (Anleitung schreiben)",
+    # Additional tasks will be added as they are discovered
 }
 
 
@@ -95,8 +100,8 @@ class ArticleMetadata:
     author: str
     date: str
     status: str
-    category_id: Optional[int]  # Changed from str to int
-    category_name: Optional[str]
+    category_id: Optional[int]  # Category ID only, name can be looked up from CATEGORY_MAPPING
+    task_id: Optional[int]  # Task ID only, name can be looked up from TASK_MAPPING
     visibility: str
     url: str
     content_preview: Optional[str] = None
@@ -585,6 +590,7 @@ class ScraperService:
         context: SessionContext,
         tab: str = "alle",
         category: Optional[str] = None,
+        task: Optional[str] = None,
         search: Optional[str] = None,
         limit: int = 20
     ) -> List[ArticleMetadata]:
@@ -598,6 +604,7 @@ class ScraperService:
             context: Authenticated session context
             tab: Which tab to scrape ('home', 'alle', or classroom ID)
             category: Optional category filter (by category ID)
+            task: Optional task filter (by task ID)
             search: Optional search string to filter articles by title
             limit: Maximum number of articles to retrieve
 
@@ -611,9 +618,18 @@ class ScraperService:
             if not context.is_authenticated:
                 raise ScrapingError(f"Session not authenticated for login {context.login_id}")
 
-            articles_url = f"{self.config.base_url}/articles/"
+            # Build URL with query parameters for filtering
+            articles_url = f"{self.config.base_url}/articles/?tab={tab}"
 
-            logger.debug(f"Starting HTTP request to discover articles (login {context.login_id}, tab={tab})")
+            # Add category filter if specified
+            if category:
+                articles_url += f"&kategorie={category}"
+
+            # Add task filter if specified
+            if task:
+                articles_url += f"&aufgabe={task}"
+
+            logger.debug(f"Starting HTTP request to discover articles (login {context.login_id}, tab={tab}, category={category}, task={task})")
             await self._rate_limit()
             async with context.aiohttp_session.get(articles_url) as response:
                 if response.status != 200:
@@ -646,34 +662,22 @@ class ScraperService:
                     try:
                         article = self._extract_article_metadata(card)
                         if article:
-                            # Apply filters
+                            # Server-side filtering via URL params handles category and task filters
+                            # We only apply client-side search filter if specified
                             should_include = True
-                            filter_reasons = []
-
-                            # Apply category filter if specified
-                            if category:
-                                try:
-                                    category_int = int(category)
-                                    if article.category_id != category_int:
-                                        should_include = False
-                                        filter_reasons.append(f"category {article.category_id} != {category_int}")
-                                except ValueError:
-                                    logger.warning(f"Invalid category filter: {category}, skipping category filter")
 
                             # Apply search filter if specified
-                            if should_include and search:
+                            if search:
                                 search_lower = search.lower()
                                 title_lower = article.title.lower() if article.title else ""
                                 if search_lower not in title_lower:
                                     should_include = False
-                                    filter_reasons.append(f"title does not contain '{search}'")
 
                             if should_include:
                                 articles.append(article)
                                 logger.debug(f"Article {article.id} ('{article.title}') included in results")
                             else:
-                                reason = "; ".join(filter_reasons) if filter_reasons else "unknown reason"
-                                logger.debug(f"Article {article.id} ('{article.title}') filtered out ({reason})")
+                                logger.debug(f"Article {article.id} ('{article.title}') filtered out (search filter)")
 
                     except Exception as e:
                         logger.warning(f"Failed to extract article metadata: {e}")
@@ -681,7 +685,7 @@ class ScraperService:
 
             context.last_activity = datetime.utcnow()
             logger.debug(f"HTTP request completed for article discovery (login {context.login_id})")
-            logger.info(f"Discovered {len(articles)} articles for login {context.login_id} (tab: {tab}, category: {category}, search: {search})")
+            logger.info(f"Discovered {len(articles)} articles for login {context.login_id} (tab: {tab}, category: {category}, task: {task}, search: {search})")
 
             return articles
 
@@ -821,17 +825,12 @@ class ScraperService:
             visibility_element = card_element.find('div', class_='article-classroom')
             visibility = visibility_element.text.strip() if visibility_element else 'Unknown'
 
-            # Extract category from image filename
-            img_element = card_element.find('div', class_='card-body')
-            img_element = img_element.find('img') if img_element else None
-            img_url = img_element.get('src') if img_element else None
-
-            # Not implemented yet
+            # Category and Task IDs cannot be reliably extracted from article cards in the index view
+            # We rely on server-side filtering via URL parameters (?kategorie=X&aufgabe=Y)
+            # Image-based category extraction is deprecated and inconsistent with task behavior
+            # Both remain None here and are determined via server-side filtering
             category_id = None
-            category_name = None
-
-            if img_url:
-                category_id, category_name = self._extract_category_from_image(img_url)
+            task_id = None
 
             return ArticleMetadata(
                 id=post_id,
@@ -840,7 +839,7 @@ class ScraperService:
                 date=date,
                 status=status,
                 category_id=category_id,
-                category_name=category_name,
+                task_id=task_id,
                 visibility=visibility,
                 url=f"{self.config.base_url}{href}" if href.startswith('/') else href
             )
@@ -921,6 +920,9 @@ class ScraperService:
             else:
                 full_article_html = ''
 
+            # Extract category and task IDs from detail page
+            category_id, task_id = self._extract_category_and_task_from_detail(soup)
+
             # Extract CSRF token for commenting
             csrf_token = None
             comment_form = soup.find('form', {'action': re.compile(r'/article/\d+/comment/')})
@@ -938,6 +940,8 @@ class ScraperService:
                 'author': author,
                 'content': content,
                 'full_html': full_article_html,
+                'category_id': category_id,
+                'task_id': task_id,
                 'csrf_token': csrf_token,
                 'url': article_url
             }
@@ -1017,38 +1021,80 @@ class ScraperService:
             logger.error(f"Failed to post comment to article {article_id}: {e}")
             raise ScrapingError(f"Comment posting failed: {e}")
 
-    def _extract_category_from_image(self, img_url: str) -> Tuple[Optional[int], Optional[str]]:
+    def _lookup_category_id(self, category_name: str) -> Optional[int]:
         """
-        Extract category ID and name from article image URL.
-
-        The myMoment platform uses category keywords in image filenames
-        to indicate the article category. For example:
-        - /media/2025/2/14/unterhalten.png.1500x1500_q85_upscale.png -> (9, "Unterhalten")
-        - /media/2025/2/14/sa-fiktionaler_dialog.png.1500x1500_q85_upscale.png -> (10, "Schreibaufgabe: Fiktionaler Dialog")
+        Look up category ID by name from CATEGORY_MAPPING.
 
         Args:
-            img_url: Image URL/path from article card
+            category_name: Category name extracted from HTML (e.g., "Anleiten")
 
         Returns:
-            Tuple of (category_id, category_name) or (None, None) if not found
+            Category ID or None if not found
         """
-        if not img_url:
-            return None, None
+        for cat_id, cat_name in CATEGORY_MAPPING.items():
+            if cat_name == category_name:
+                return cat_id
+        logger.debug(f"Category '{category_name}' not found in CATEGORY_MAPPING")
+        return None
 
-        # Extract filename from URL (handle both relative and absolute paths)
-        # Example: /media/2025/2/14/unterhalten.png.1500x1500_q85_upscale.png
-        filename = img_url.split('/')[-1]
+    def _lookup_task_id(self, task_name: str) -> Optional[int]:
+        """
+        Look up task ID by name from TASK_MAPPING.
 
-        # Remove image processing suffixes (e.g., .1500x1500_q85_upscale.png)
-        # Extract the base keyword (e.g., unterhalten, sa-fiktionaler_dialog)
-        for keyword in CATEGORY_MAPPING.keys():
-            if keyword in filename.lower():
-                category_id, category_name = CATEGORY_MAPPING[keyword]
-                logger.debug(f"Extracted category from image: {keyword} -> {category_id}: {category_name}")
-                return category_id, category_name
+        Args:
+            task_name: Task name extracted from HTML (e.g., "Wo ist Hugo? (Anleitung schreiben)")
 
-        logger.debug(f"No category keyword found in image URL: {img_url}")
-        return None, None
+        Returns:
+            Task ID or None if not found
+        """
+        for task_id, t_name in TASK_MAPPING.items():
+            if t_name == task_name:
+                return task_id
+        logger.debug(f"Task '{task_name}' not found in TASK_MAPPING")
+        return None
+
+    def _extract_category_and_task_from_detail(self, soup: BeautifulSoup) -> Tuple[Optional[int], Optional[int]]:
+        """
+        Extract category and task IDs from article detail page HTML.
+
+        Looks for the social list items containing "Kategorie:" and "Aufgabe:".
+
+        Example HTML:
+        <ul class="social list-group list-group-horizontal">
+            <li class="list-group-item">Kategorie: Anleiten</li>
+            <li class="list-group-item">Aufgabe: Wo ist Hugo? (Anleitung schreiben)</li>
+        </ul>
+
+        Args:
+            soup: BeautifulSoup object of the article detail page
+
+        Returns:
+            Tuple of (category_id, task_id) or (None, None) if not found
+        """
+        category_id = None
+        task_id = None
+
+        # Find all list items in social list groups
+        list_items = soup.find_all('li', class_='list-group-item')
+
+        for item in list_items:
+            text = item.get_text(strip=True)
+
+            # Extract category
+            if text.startswith('Kategorie:'):
+                category_name = text.replace('Kategorie:', '').strip()
+                category_id = self._lookup_category_id(category_name)
+                if category_id:
+                    logger.debug(f"Extracted category from detail: {category_name} -> {category_id}")
+
+            # Extract task
+            elif text.startswith('Aufgabe:'):
+                task_name = text.replace('Aufgabe:', '').strip()
+                task_id = self._lookup_task_id(task_name)
+                if task_id:
+                    logger.debug(f"Extracted task from detail: {task_name} -> {task_id}")
+
+        return category_id, task_id
 
     async def _rate_limit(self):
         """Apply rate limiting to requests."""
