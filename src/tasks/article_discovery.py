@@ -42,6 +42,7 @@ class ProcessConfig:
     llm_provider_id: Optional[uuid.UUID]
     tab_filter: Optional[str]
     category_filter: Optional[int]
+    task_filter: Optional[int]
     search_filter: Optional[str]
     hide_comments: bool
 
@@ -131,6 +132,7 @@ class ArticleDiscoveryTask(BaseTask):
                 llm_provider_id=llm_provider_id,
                 tab_filter=process.tab_filter,
                 category_filter=process.category_filter,
+                task_filter=process.task_filter,
                 search_filter=process.search_filter,
                 hide_comments=process.hide_comments
             )
@@ -199,6 +201,7 @@ class ArticleDiscoveryTask(BaseTask):
 
                     tab = config_snapshot.tab_filter
                     category = str(config_snapshot.category_filter) if config_snapshot.category_filter else None
+                    task = str(config_snapshot.task_filter) if config_snapshot.task_filter else None
                     search = config_snapshot.search_filter
                     limit = 20  # Default articles per login
 
@@ -206,6 +209,7 @@ class ArticleDiscoveryTask(BaseTask):
                         context=context,
                         tab=tab,
                         category=category,
+                        task=task,
                         search=search,
                         limit=limit
                     )
@@ -268,6 +272,7 @@ class ArticleDiscoveryTask(BaseTask):
                         article_title=article_meta.title,
                         article_author=article_meta.author,
                         article_category=article_meta.category_id,
+                        article_task_id=article_meta.task_id,
                         article_url=article_meta.url,
                         article_edited_at=None,  # Not available from index
                         article_scraped_at=datetime.utcnow(),

@@ -37,6 +37,7 @@ class MonitoringProcess(BaseModel):
 
     # Monitoring criteria
     category_filter = Column(Integer, nullable=True)  # myMoment category ID
+    task_filter = Column(Integer, nullable=True)  # myMoment task/Aufgabe ID
     search_filter = Column(String(200), nullable=True)  # Search terms
     tab_filter = Column(String(50), nullable=True)  # myMoment tab / class id
     sort_option = Column(String(50), nullable=True)  # Sort criteria
@@ -154,6 +155,8 @@ class MonitoringProcess(BaseModel):
         filters = {}
         if self.category_filter is not None:
             filters['category'] = self.category_filter
+        if self.task_filter is not None:
+            filters['task'] = self.task_filter
         if self.search_filter:
             filters['search'] = self.search_filter
         if self.tab_filter:

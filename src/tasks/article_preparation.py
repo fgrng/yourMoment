@@ -188,6 +188,12 @@ class ArticlePreparationTask(BaseTask):
                 if 'title' in content_data:
                     ai_comment.article_title = content_data['title']
 
+                # Update category and task IDs extracted from detail page
+                if 'category_id' in content_data and content_data['category_id'] is not None:
+                    ai_comment.article_category = content_data['category_id']
+                if 'task_id' in content_data and content_data['task_id'] is not None:
+                    ai_comment.article_task_id = content_data['task_id']
+
                 # Note: article_published_at is not available from scraper yet
                 # It would need to be added to ScraperService.get_article_content()
 

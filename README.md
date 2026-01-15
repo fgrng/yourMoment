@@ -4,6 +4,8 @@ AI-powered monitoring and comment automation platform for the myMoment writing c
 
 This software project was developed as [part of the DEEP myMoment research and development project](https://deep-consortium.ch/en/project/deep-mymoment) which itself is a member of the [DEEP research consortium](https://deep-consortium.ch/en/about) that explores how digital transformation can promote equitable and effective learning in Swiss primary education. The development lead was located at [St.Gallen University of teacher education](https://www.phsg.ch/de/forschung-entwicklung/projekte/deep-digital-literacy-participation-writing-platform-mymoment).
 
+This [linked preprint provides a preliminary overview of the yourMoment platform concept](https://www.researchgate.net/publication/399564199_Social_Feedback_and_Simulated_Audiences_A_Proof-of-Concept_for_Persona-Based_LLM_Feedback_in_Writing_Instruction).
+
 (This is also my personal learning project for LLM-driven software engineering tools like Claude Code, spec-kit and alike.)
 
 ## The context of myMoment
