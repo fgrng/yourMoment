@@ -114,6 +114,9 @@ class AIComment(BaseModel):
     # Comment content (nullable to support discovered->generated->posted workflow)
     comment_content = Column(Text, nullable=True)
 
+    # Comment visibility on myMoment
+    is_hidden = Column(Boolean, nullable=False, default=False)  # Whether comment is hidden on myMoment
+
     # Comment status
     status = Column(
         String(20),
@@ -181,6 +184,8 @@ class AIComment(BaseModel):
             kwargs['status'] = 'discovered'
         if 'is_active' not in kwargs:
             kwargs['is_active'] = True
+        if 'is_hidden' not in kwargs:
+            kwargs['is_hidden'] = False
         super().__init__(**kwargs)
 
     def __repr__(self) -> str:
@@ -343,6 +348,7 @@ class AIComment(BaseModel):
             "content": self.comment_content,
             "status": self.status,
             "is_posted": self.is_posted,
+            "is_hidden": self.is_hidden,
             "created_at": self.created_at,
             "posted_at": self.posted_at,
             "ai_model_name": self.ai_model_name,

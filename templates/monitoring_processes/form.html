@@ -130,6 +130,19 @@
                         </div>
                     </div>
 
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="hideCommentsCheckbox">
+                            <label class="form-check-label" for="hideCommentsCheckbox">
+                                <strong>Kommentare auf myMoment verstecken</strong>
+                            </label>
+                            <div class="form-text">
+                                Wenn aktiviert, werden die erzeugten KI-Kommentare auf myMoment versteckt gepostet.
+                                Sie müssen dann aktiv eingeblendet werden, um sie lesen zu können.
+                            </div>
+                        </div>
+                    </div>
+
                     <hr>
 
                     <div class="d-flex gap-2 mt-3">
@@ -328,6 +341,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         const generateOnlyCheckbox = document.getElementById('generateOnlyCheckbox');
         generateOnlyCheckbox.checked = process.generate_only !== undefined ? process.generate_only : true;
 
+        // Set hide_comments checkbox
+        const hideCommentsCheckbox = document.getElementById('hideCommentsCheckbox');
+        hideCommentsCheckbox.checked = process.hide_comments !== undefined ? process.hide_comments : false;
+
         // Pre-populate tab selector with current value if exists
         if (currentTabValue) {
             tabFilter.innerHTML = `<option value="${currentTabValue}" selected>Aktuell: ${currentTabValue}</option>`;
@@ -422,6 +439,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
 
         const generateOnly = document.getElementById('generateOnlyCheckbox').checked;
+        const hideComments = document.getElementById('hideCommentsCheckbox').checked;
 
         const payload = {
             name,
@@ -431,7 +449,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             prompt_template_ids: promptIds,
             mymoment_login_ids: loginIds,
             target_filters: targetFilters,
-            generate_only: generateOnly
+            generate_only: generateOnly,
+            hide_comments: hideComments
         };
 
         return payload;

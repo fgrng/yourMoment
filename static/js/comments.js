@@ -386,6 +386,7 @@ function renderComments(comments) {
                         <span class="badge ${statusBadgeClass}">
                             ${statusLabel}
                         </span>
+                        ${comment.is_hidden ? '<span class="badge bg-secondary ms-1"><i class="bi bi-eye-slash"></i></span>' : ''}
                     </div>
                     <small class="text-muted text-end ms-2">
                         ${formatDate(comment.created_at)}

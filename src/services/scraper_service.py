@@ -951,7 +951,8 @@ class ScraperService:
         context: SessionContext,
         article_id: str,
         comment_content: str,
-        highlight: Optional[str] = None
+        highlight: Optional[str] = None,
+        hide_comment: bool = False
     ) -> bool:
         """
         Post a comment to an article.
@@ -961,6 +962,7 @@ class ScraperService:
             article_id: Article ID to comment on
             comment_content: Comment text (should include German AI prefix)
             highlight: Optional text to highlight in article
+            hide_comment: Whether to hide the comment on myMoment (default: False)
 
         Returns:
             True if comment posted successfully
@@ -992,6 +994,10 @@ class ScraperService:
                 'highlight': highlight or ''
             }
 
+            # Add hide parameter if requested
+            if hide_comment:
+                comment_data['hide'] = 'on'
+
             logger.debug(f"Starting HTTP request to post comment (article_id={article_id}, login={context.login_id})")
             await self._rate_limit()
             async with context.aiohttp_session.post(
@@ -1007,7 +1013,7 @@ class ScraperService:
                 logger.debug(f"HTTP request completed for post comment (article_id={article_id}, login={context.login_id}, status={response.status})")
                 if success:
                     context.last_activity = datetime.utcnow()
-                    logger.info(f"Successfully posted comment to article {article_id} via login {context.login_id}")
+                    logger.info(f"Successfully posted comment to article {article_id} via login {context.login_id} (hidden={hide_comment})")
                 else:
                     logger.warning(f"Comment posting failed with status {response.status}")
 

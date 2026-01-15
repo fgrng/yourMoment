@@ -33,6 +33,7 @@ class MonitoringProcess(BaseModel):
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
     generate_only = Column(Boolean, nullable=False, default=True)
+    hide_comments = Column(Boolean, nullable=False, default=False)  # Whether generated comments should be hidden
 
     # Monitoring criteria
     category_filter = Column(Integer, nullable=True)  # myMoment category ID

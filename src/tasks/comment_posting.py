@@ -36,6 +36,7 @@ class CommentSnapshot:
     comment_content: str
     mymoment_login_id: uuid.UUID
     article_title: str
+    is_hidden: bool
 
 
 @dataclass
@@ -97,7 +98,8 @@ class CommentPostingTask(BaseTask):
                     mymoment_article_id=c.mymoment_article_id,
                     comment_content=c.comment_content,
                     mymoment_login_id=c.mymoment_login_id,
-                    article_title=c.article_title
+                    article_title=c.article_title,
+                    is_hidden=c.is_hidden
                 )
                 for c in ai_comments
             ]
@@ -144,7 +146,8 @@ class CommentPostingTask(BaseTask):
         context: SessionContext,
         article_id: str,
         comment_content: str,
-        scraper: ScraperService
+        scraper: ScraperService,
+        hide_comment: bool = False
     ) -> bool:
         """
         Post a single comment to myMoment.
@@ -157,6 +160,7 @@ class CommentPostingTask(BaseTask):
             article_id: MyMoment article ID
             comment_content: Comment text (with AI prefix)
             scraper: ScraperService instance
+            hide_comment: Whether to hide the comment on myMoment
 
         Returns:
             True if posting succeeded, False otherwise
@@ -165,7 +169,8 @@ class CommentPostingTask(BaseTask):
             success = await scraper.post_comment(
                 context=context,
                 article_id=article_id,
-                comment_content=comment_content
+                comment_content=comment_content,
+                hide_comment=hide_comment
             )
 
             if success:
@@ -375,7 +380,8 @@ class CommentPostingTask(BaseTask):
                                 context=context,
                                 article_id=comment_snapshot.mymoment_article_id,
                                 comment_content=comment_snapshot.comment_content,
-                                scraper=scraper
+                                scraper=scraper,
+                                hide_comment=comment_snapshot.is_hidden
                             )
 
                             if success:

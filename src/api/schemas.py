@@ -140,6 +140,7 @@ class MonitoringProcessCreate(BaseModel):
     prompt_template_ids: list[uuid.UUID] = Field(..., min_items=1, description="List of prompt template IDs to use")
     mymoment_login_ids: list[uuid.UUID] = Field(..., min_items=1, description="List of myMoment login IDs to use")
     generate_only: bool = Field(default=True, description="If true, only generate comments; if false, also post to myMoment")
+    hide_comments: bool = Field(default=False, description="If true, generated comments will be hidden on myMoment")
 
 
 class MonitoringProcessUpdate(BaseModel):
@@ -152,6 +153,7 @@ class MonitoringProcessUpdate(BaseModel):
     prompt_template_ids: Optional[list[uuid.UUID]] = Field(None, min_items=1, description="List of prompt template IDs to use")
     mymoment_login_ids: Optional[list[uuid.UUID]] = Field(None, min_items=1, description="List of myMoment login IDs to use")
     generate_only: Optional[bool] = Field(None, description="If true, only generate comments; if false, also post to myMoment")
+    hide_comments: Optional[bool] = Field(None, description="If true, generated comments will be hidden on myMoment")
 
 
 class MonitoringProcessResponse(BaseModel):
@@ -172,6 +174,7 @@ class MonitoringProcessResponse(BaseModel):
     prompt_template_ids: list[uuid.UUID] = Field(..., description="List of prompt template IDs")
     mymoment_login_ids: list[uuid.UUID] = Field(..., description="List of myMoment login IDs")
     generate_only: bool = Field(..., description="If true, only generate comments; if false, also post to myMoment")
+    hide_comments: bool = Field(..., description="If true, generated comments will be hidden on myMoment")
     created_at: Optional[datetime] = Field(None, description="Creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
 
@@ -400,6 +403,7 @@ class AICommentResponse(BaseModel):
 
     # AI comment fields
     comment_content: Optional[str] = Field(..., description="AI-generated comment content")
+    is_hidden: bool = Field(..., description="Whether comment is hidden on myMoment")
     status: str = Field(..., description="Comment status: generated, posted, failed, deleted")
     ai_model_name: Optional[str] = Field(None, description="LLM model used")
     ai_provider_name: Optional[str] = Field(None, description="LLM provider used")

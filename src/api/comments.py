@@ -101,6 +101,7 @@ async def get_user_ai_comments(
                 article_published_at=comment.article_published_at,
                 article_scraped_at=comment.article_scraped_at,
                 comment_content=comment.comment_content,
+                is_hidden=comment.is_hidden,
                 status=comment.status,
                 ai_model_name=comment.ai_model_name,
                 ai_provider_name=comment.ai_provider_name,
@@ -181,6 +182,7 @@ async def get_ai_comment_detail(
             article_published_at=ai_comment.article_published_at,
             article_scraped_at=ai_comment.article_scraped_at,
             comment_content=ai_comment.comment_content,
+            is_hidden=ai_comment.is_hidden,
             status=ai_comment.status,
             ai_model_name=ai_comment.ai_model_name,
             ai_provider_name=ai_comment.ai_provider_name,
@@ -257,6 +259,7 @@ async def get_ai_comments_by_article(
                 article_published_at=comment.article_published_at,
                 article_scraped_at=comment.article_scraped_at,
                 comment_content=comment.comment_content,
+                is_hidden=comment.is_hidden,
                 status=comment.status,
                 ai_model_name=comment.ai_model_name,
                 ai_provider_name=comment.ai_provider_name,
@@ -302,6 +305,9 @@ async def post_comment_to_mymoment(
     This endpoint uses the associated myMoment login credentials to authenticate
     with the platform and post the comment.
 
+    The comment's visibility (hidden or visible) is determined by the `is_hidden` field
+    on the AIComment record itself.
+
     **Requirements:**
     - Comment must exist and belong to the current user
     - Comment status must be 'generated' (not already 'posted')
@@ -310,7 +316,7 @@ async def post_comment_to_mymoment(
     **Process:**
     1. Validates comment ownership and status
     2. Initializes scraper session with myMoment credentials
-    3. Posts comment using the scraper service
+    3. Posts comment using the scraper service (respects is_hidden field)
     4. Updates comment status to 'posted' on success
 
     Returns the updated AI comment with posted status and timestamp.
@@ -384,7 +390,8 @@ async def post_comment_to_mymoment(
                     context=session_context,
                     article_id=ai_comment.mymoment_article_id,
                     comment_content=ai_comment.comment_content,
-                    highlight=None
+                    highlight=None,
+                    hide_comment=ai_comment.is_hidden
                 )
 
                 if not post_success:
@@ -439,6 +446,7 @@ async def post_comment_to_mymoment(
             article_published_at=ai_comment.article_published_at,
             article_scraped_at=ai_comment.article_scraped_at,
             comment_content=ai_comment.comment_content,
+            is_hidden=ai_comment.is_hidden,
             status=ai_comment.status,
             ai_model_name=ai_comment.ai_model_name,
             ai_provider_name=ai_comment.ai_provider_name,

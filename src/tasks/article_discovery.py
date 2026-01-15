@@ -43,6 +43,7 @@ class ProcessConfig:
     tab_filter: Optional[str]
     category_filter: Optional[int]
     search_filter: Optional[str]
+    hide_comments: bool
 
 
 class ArticleDiscoveryTask(BaseTask):
@@ -130,7 +131,8 @@ class ArticleDiscoveryTask(BaseTask):
                 llm_provider_id=llm_provider_id,
                 tab_filter=process.tab_filter,
                 category_filter=process.category_filter,
-                search_filter=process.search_filter
+                search_filter=process.search_filter,
+                hide_comments=process.hide_comments
             )
 
         # Session closed automatically (< 100ms total)
@@ -288,7 +290,10 @@ class ArticleDiscoveryTask(BaseTask):
                         # Comment fields (will be filled later)
                         comment_content=None,
                         ai_model_name=None,
-                        ai_provider_name=None
+                        ai_provider_name=None,
+
+                        # Visibility
+                        is_hidden=config.hide_comments
                     )
 
                     session.add(ai_comment)

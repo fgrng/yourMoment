@@ -264,6 +264,9 @@ function renderProcesses(list) {
                             ${process.generate_only
                                 ? '<span class="badge bg-warning">Nur erzeugen</span>'
                                 : '<span class="badge bg-danger">Erzeugen & Veröffentlichen</span>'}
+                            ${process.hide_comments
+                                ? '<span class="badge bg-secondary ms-1"><i class="bi bi-eye-slash"></i> Versteckt</span>'
+                                : ''}
                         </span>
                     </div>
                     <div class="mb-2">
