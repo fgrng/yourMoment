@@ -130,7 +130,8 @@ class MonitoringService:
         prompt_template_ids: Optional[List[uuid.UUID]] = None,
         prompt_weights: Optional[Dict[uuid.UUID, float]] = None,
         llm_provider_id: Optional[uuid.UUID] = None,
-        generate_only: bool = True
+        generate_only: bool = True,
+        hide_comments: bool = False
     ) -> MonitoringProcess:
         """
         Create a new monitoring process with all associations.
@@ -201,7 +202,8 @@ class MonitoringService:
                 max_duration_minutes=max_duration_minutes,
                 llm_provider_id=validated_llm_provider_id,
                 status=ProcessStatus.CREATED,
-                generate_only=generate_only
+                generate_only=generate_only,
+                hide_comments=hide_comments
             )
 
             self.db_session.add(process)
@@ -258,7 +260,8 @@ class MonitoringService:
         login_ids: Optional[List[uuid.UUID]] = None,
         prompt_template_ids: Optional[List[uuid.UUID]] = None,
         llm_provider_id: Optional[uuid.UUID] = None,
-        generate_only: Optional[bool] = None
+        generate_only: Optional[bool] = None,
+        hide_comments: Optional[bool] = None
     ) -> MonitoringProcess:
         """
         Update an existing monitoring process.
@@ -305,6 +308,8 @@ class MonitoringService:
                 process.max_duration_minutes = max_duration_minutes
             if generate_only is not None:
                 process.generate_only = generate_only
+            if hide_comments is not None:
+                process.hide_comments = hide_comments
 
             # Update filter fields
             if category_filter is not None:

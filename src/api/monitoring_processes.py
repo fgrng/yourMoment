@@ -83,7 +83,8 @@ async def create_monitoring_process(
             login_ids=process_data.mymoment_login_ids,
             prompt_template_ids=process_data.prompt_template_ids,
             llm_provider_id=process_data.llm_provider_id,
-            generate_only=process_data.generate_only
+            generate_only=process_data.generate_only,
+            hide_comments=process_data.hide_comments
         )
 
         logger.info(f"Created monitoring process {process.id} for user {current_user.id}")
@@ -263,6 +264,8 @@ async def update_monitoring_process(
             update_kwargs['login_ids'] = process_data.mymoment_login_ids
         if process_data.generate_only is not None:
             update_kwargs['generate_only'] = process_data.generate_only
+        if process_data.hide_comments is not None:
+            update_kwargs['hide_comments'] = process_data.hide_comments
 
         # Add filter fields if provided
         if category_filter is not None:
