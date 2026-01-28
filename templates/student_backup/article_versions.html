@@ -1,0 +1,135 @@
+{% extends "simple_base.html" %}
+
+{% block title %}Artikel-Versionen - yourMoment{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/settings/student-backup">Schüler-Backup</a></li>
+                <li class="breadcrumb-item"><a href="/settings/student-backup/{{ student_id }}">Schüler</a></li>
+                <li class="breadcrumb-item active" id="articleTitle">Artikel</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Versionshistorie</h5>
+                <a href="https://www.mymoment.ch/article/{{ article_id }}/" target="_blank" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-box-arrow-up-right me-1"></i>Auf myMoment ansehen
+                </a>
+            </div>
+            <div class="card-body p-0" id="versionsContainer">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Laden...</span>
+                    </div>
+                    <p class="mt-2 text-muted small">Versionen werden geladen...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script type="module">
+    const studentId = '{{ student_id }}';
+    const articleId = '{{ article_id }}';
+    const articleTitleEl = document.getElementById('articleTitle');
+    const versionsContainer = document.getElementById('versionsContainer');
+
+    async function loadVersions() {
+        try {
+            const response = await fetch(
+                `/api/v1/student-backup/tracked-students/${studentId}/versions?mymoment_article_id=${articleId}`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+                    }
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error('Failed to load versions');
+            }
+
+            const data = await response.json();
+
+            if (data.items.length === 0) {
+                versionsContainer.innerHTML = `
+                    <div class="text-center py-4">
+                        <i class="bi bi-clock-history text-muted" style="font-size: 2rem;"></i>
+                        <p class="mt-2 text-muted mb-0">Noch keine Versionen gesichert</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Update title from first version
+            articleTitleEl.textContent = data.items[0].article_title || 'Artikel #' + articleId;
+
+            versionsContainer.innerHTML = `
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Version</th>
+                                <th>Status</th>
+                                <th>Gesichert am</th>
+                                <th>Geändert auf myMoment</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.items.map(version => `
+                                <tr>
+                                    <td>
+                                        <span class="badge bg-primary">v${version.version_number}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-${getStatusBadge(version.article_status)}">
+                                            ${version.article_status || '-'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <small>${new Date(version.scraped_at).toLocaleString('de-DE')}</small>
+                                    </td>
+                                    <td>
+                                        <small>${version.article_last_modified ? new Date(version.article_last_modified).toLocaleString('de-DE') : '-'}</small>
+                                    </td>
+                                    <td>
+                                        <a href="/settings/student-backup/versions/${version.id}"
+                                           class="btn btn-outline-primary btn-sm">
+                                            <i class="bi bi-eye"></i> Ansehen
+                                        </a>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        } catch (error) {
+            console.error('Error loading versions:', error);
+            versionsContainer.innerHTML = '<div class="alert alert-danger m-3 mb-0">Fehler beim Laden der Versionen</div>';
+        }
+    }
+
+    function getStatusBadge(status) {
+        if (!status) return 'secondary';
+        const lower = status.toLowerCase();
+        if (lower.includes('publiziert')) return 'success';
+        if (lower.includes('entwurf')) return 'warning';
+        if (lower.includes('kontrolle')) return 'info';
+        return 'secondary';
+    }
+
+    loadVersions();
+</script>
+{% endblock %}

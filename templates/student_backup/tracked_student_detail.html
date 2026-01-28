@@ -1,0 +1,204 @@
+{% extends "simple_base.html" %}
+
+{% block title %}Schüler-Details - yourMoment{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/settings/student-backup">Schüler-Backup</a></li>
+                <li class="breadcrumb-item active" id="studentName">Schüler</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-person me-2"></i>Schüler-Info</h5>
+            </div>
+            <div class="card-body" id="studentInfo">
+                <div class="text-center py-3">
+                    <div class="spinner-border spinner-border-sm" role="status">
+                        <span class="visually-hidden">Laden...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer">
+                <div class="d-flex gap-2">
+                    <a href="/settings/student-backup/{{ student_id }}/edit" class="btn btn-outline-secondary btn-sm flex-fill">
+                        <i class="bi bi-pencil me-1"></i>Bearbeiten
+                    </a>
+                    <a href="{{ dashboard_url }}" target="_blank" class="btn btn-outline-primary btn-sm flex-fill" id="dashboardLink">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-file-text me-2"></i>Artikel</h5>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="refreshArticles">
+                    <i class="bi bi-arrow-repeat"></i>
+                </button>
+            </div>
+            <div class="card-body p-0" id="articlesContainer">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Laden...</span>
+                    </div>
+                    <p class="mt-2 text-muted small">Artikel werden geladen...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script type="module">
+    const studentId = '{{ student_id }}';
+    const studentNameEl = document.getElementById('studentName');
+    const studentInfoEl = document.getElementById('studentInfo');
+    const articlesContainer = document.getElementById('articlesContainer');
+    const dashboardLink = document.getElementById('dashboardLink');
+    const refreshArticles = document.getElementById('refreshArticles');
+
+    async function loadStudentInfo() {
+        try {
+            const response = await fetch(`/api/v1/student-backup/tracked-students/${studentId}`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to load student');
+            }
+
+            const student = await response.json();
+            studentNameEl.textContent = student.display_name || 'Schüler #' + student.mymoment_student_id;
+            dashboardLink.href = student.dashboard_url || '#';
+
+            studentInfoEl.innerHTML = `
+                <dl class="mb-0">
+                    <dt>myMoment-ID</dt>
+                    <dd><code>${student.mymoment_student_id}</code></dd>
+
+                    <dt>Anzeigename</dt>
+                    <dd>${student.display_name || '-'}</dd>
+
+                    <dt>Status</dt>
+                    <dd><span class="badge ${student.is_active ? 'bg-success' : 'bg-secondary'}">${student.is_active ? 'Aktiv' : 'Inaktiv'}</span></dd>
+
+                    <dt>Letztes Backup</dt>
+                    <dd>${student.last_backup_at ? new Date(student.last_backup_at).toLocaleString('de-DE') : 'Noch keins'}</dd>
+
+                    <dt>Erstellt</dt>
+                    <dd>${new Date(student.created_at).toLocaleDateString('de-DE')}</dd>
+
+                    ${student.notes ? `<dt>Notizen</dt><dd class="text-muted">${student.notes}</dd>` : ''}
+                </dl>
+            `;
+        } catch (error) {
+            console.error('Error loading student:', error);
+            studentInfoEl.innerHTML = '<div class="alert alert-danger mb-0">Fehler beim Laden</div>';
+        }
+    }
+
+    async function loadArticles() {
+        try {
+            const response = await fetch(`/api/v1/student-backup/tracked-students/${studentId}/articles`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to load articles');
+            }
+
+            const data = await response.json();
+
+            if (data.items.length === 0) {
+                articlesContainer.innerHTML = `
+                    <div class="text-center py-4">
+                        <i class="bi bi-file-earmark-x text-muted" style="font-size: 2rem;"></i>
+                        <p class="mt-2 text-muted mb-0">Noch keine Artikel gesichert</p>
+                    </div>
+                `;
+                return;
+            }
+
+            articlesContainer.innerHTML = `
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Titel</th>
+                                <th>Status</th>
+                                <th>Versionen</th>
+                                <th>Zuletzt</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.items.map(article => `
+                                <tr>
+                                    <td>
+                                        <a href="${article.view_url}" target="_blank" class="text-decoration-none">
+                                            ${article.article_title || 'Unbenannt'}
+                                            <i class="bi bi-box-arrow-up-right small"></i>
+                                        </a>
+                                    </td>
+                                    <td><span class="badge bg-${getStatusBadge(article.article_status)}">${article.article_status || '-'}</span></td>
+                                    <td>${article.version_count}</td>
+                                    <td><small>${article.latest_scraped_at ? new Date(article.latest_scraped_at).toLocaleDateString('de-DE') : '-'}</small></td>
+                                    <td>
+                                        <a href="/settings/student-backup/${studentId}/articles/${article.mymoment_article_id}"
+                                           class="btn btn-outline-primary btn-sm">
+                                            <i class="bi bi-clock-history"></i> Versionen
+                                        </a>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        } catch (error) {
+            console.error('Error loading articles:', error);
+            articlesContainer.innerHTML = '<div class="alert alert-danger m-3 mb-0">Fehler beim Laden der Artikel</div>';
+        }
+    }
+
+    function getStatusBadge(status) {
+        if (!status) return 'secondary';
+        const lower = status.toLowerCase();
+        if (lower.includes('publiziert')) return 'success';
+        if (lower.includes('entwurf')) return 'warning';
+        if (lower.includes('kontrolle')) return 'info';
+        return 'secondary';
+    }
+
+    refreshArticles.addEventListener('click', () => {
+        articlesContainer.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Laden...</span>
+                </div>
+            </div>
+        `;
+        loadArticles();
+    });
+
+    loadStudentInfo();
+    loadArticles();
+</script>
+{% endblock %}

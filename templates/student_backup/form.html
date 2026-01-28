@@ -1,0 +1,225 @@
+{% extends "simple_base.html" %}
+
+{% block title %}{{ 'Schüler bearbeiten' if student_id else 'Schüler hinzufügen' }} - yourMoment{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/settings/student-backup">Schüler-Backup</a></li>
+                <li class="breadcrumb-item active">{{ 'Bearbeiten' if student_id else 'Hinzufügen' }}</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-{{ 'pencil' if student_id else 'plus-circle' }} me-2"></i>
+                    {{ 'Schüler bearbeiten' if student_id else 'Neuen Schüler hinzufügen' }}
+                </h5>
+            </div>
+            <div class="card-body">
+                <form id="studentForm">
+                    {% if not student_id %}
+                    <div class="mb-3">
+                        <label for="mymoment_student_id" class="form-label">myMoment Schüler-ID *</label>
+                        <input type="number" class="form-control" id="mymoment_student_id" name="mymoment_student_id"
+                               min="1" required placeholder="z.B. 1417">
+                        <div class="form-text">
+                            Die Schüler-ID findest du in der URL des Schüler-Dashboards:
+                            <code>https://www.mymoment.ch/dashboard/user/<strong>1417</strong>/</code>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label for="mymoment_login_id" class="form-label">Admin-Login für Scraping *</label>
+                        <select class="form-select" id="mymoment_login_id" name="mymoment_login_id" required>
+                            <option value="">Bitte wählen...</option>
+                        </select>
+                        <div class="form-text">
+                            Nur Admin-Logins können auf Schüler-Dashboards zugreifen.
+                            <a href="/settings/mymoment-credentials">Logins verwalten</a>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="display_name" class="form-label">Anzeigename</label>
+                        <input type="text" class="form-control" id="display_name" name="display_name"
+                               maxlength="255" placeholder="z.B. Max Mustermann">
+                        <div class="form-text">Optional: Ein freundlicher Name zur Identifikation</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Notizen</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3"
+                                  placeholder="Optionale Notizen zu diesem Schüler"></textarea>
+                    </div>
+
+                    {% if student_id %}
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_active" name="is_active" checked>
+                            <label class="form-check-label" for="is_active">
+                                Tracking aktiv
+                            </label>
+                        </div>
+                        <div class="form-text">Deaktivierte Schüler werden nicht mehr gesichert.</div>
+                    </div>
+                    {% endif %}
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary" id="submitBtn">
+                            <i class="bi bi-check-lg me-2"></i>{{ 'Speichern' if student_id else 'Hinzufügen' }}
+                        </button>
+                        <a href="/settings/student-backup" class="btn btn-outline-secondary">Abbrechen</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>Hinweise</h6>
+            </div>
+            <div class="card-body small">
+                <p><strong>Admin-Logins:</strong> Um auf das Schüler-Dashboard zugreifen zu können, benötigst du einen myMoment-Account mit Admin-Rechten.</p>
+                <p><strong>Schüler-ID:</strong> Die ID wird aus der Dashboard-URL extrahiert. Diese findest du, wenn du als Admin das Dashboard eines Schülers aufrufst.</p>
+                <p class="mb-0"><strong>Backup-Intervall:</strong> Texte werden automatisch alle {{ backup_interval_minutes }} Minuten gesichert, wenn sich der Inhalt geändert hat.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script type="module">
+    const studentId = '{{ student_id or "" }}';
+    const isEdit = Boolean(studentId);
+    const form = document.getElementById('studentForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const loginSelect = document.getElementById('mymoment_login_id');
+
+    // Load admin logins
+    async function loadAdminLogins() {
+        try {
+            const response = await fetch('/api/v1/mymoment-credentials/index?is_admin=true', {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to load logins');
+            }
+
+            const logins = await response.json();
+
+            if (logins.length === 0) {
+                loginSelect.innerHTML = '<option value="">Keine Admin-Logins vorhanden</option>';
+                showAlert('Du hast noch keine Admin-Logins angelegt. <a href="/settings/mymoment-credentials/new">Jetzt erstellen</a>', 'warning');
+                return;
+            }
+
+            loginSelect.innerHTML = '<option value="">Bitte wählen...</option>' +
+                logins.map(login => `<option value="${login.id}">${login.name} (${login.username})</option>`).join('');
+        } catch (error) {
+            console.error('Error loading logins:', error);
+            showAlert('Fehler beim Laden der Admin-Logins', 'danger');
+        }
+    }
+
+    // Load existing student data if editing
+    async function loadStudentData() {
+        if (!isEdit) return;
+
+        try {
+            const response = await fetch(`/api/v1/student-backup/tracked-students/${studentId}`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to load student');
+            }
+
+            const student = await response.json();
+
+            if (student.mymoment_login_id) {
+                loginSelect.value = student.mymoment_login_id;
+            }
+            document.getElementById('display_name').value = student.display_name || '';
+            document.getElementById('notes').value = student.notes || '';
+            document.getElementById('is_active').checked = student.is_active;
+        } catch (error) {
+            console.error('Error loading student:', error);
+            showAlert('Fehler beim Laden der Schülerdaten', 'danger');
+        }
+    }
+
+    // Handle form submission
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Speichern...';
+
+        const formData = {
+            mymoment_login_id: loginSelect.value || null,
+            display_name: document.getElementById('display_name').value || null,
+            notes: document.getElementById('notes').value || null
+        };
+
+        if (!isEdit) {
+            formData.mymoment_student_id = parseInt(document.getElementById('mymoment_student_id').value);
+        } else {
+            formData.is_active = document.getElementById('is_active').checked;
+        }
+
+        try {
+            const url = isEdit
+                ? `/api/v1/student-backup/tracked-students/${studentId}`
+                : '/api/v1/student-backup/tracked-students/create';
+
+            const response = await fetch(url, {
+                method: isEdit ? 'PATCH' : 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formData)
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail?.message || error.message || 'Request failed');
+            }
+
+            showAlert(isEdit ? 'Schüler erfolgreich aktualisiert.' : 'Schüler erfolgreich hinzugefügt.', 'success');
+            setTimeout(() => {
+                window.location.href = '/settings/student-backup';
+            }, 1500);
+        } catch (error) {
+            console.error('Error saving student:', error);
+            showAlert('Fehler beim Speichern: ' + error.message, 'danger');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = `<i class="bi bi-check-lg me-2"></i>${isEdit ? 'Speichern' : 'Hinzufügen'}`;
+        }
+    });
+
+    // Initialize
+    loadAdminLogins().then(() => {
+        if (isEdit) {
+            loadStudentData();
+        }
+    });
+</script>
+{% endblock %}

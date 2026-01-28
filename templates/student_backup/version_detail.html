@@ -1,0 +1,169 @@
+{% extends "simple_base.html" %}
+
+{% block title %}Version ansehen - yourMoment{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/settings/student-backup">Schüler-Backup</a></li>
+                <li class="breadcrumb-item active" id="versionTitle">Version</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div id="loadingState" class="text-center my-5">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Laden...</span>
+    </div>
+    <p class="mt-2 text-muted">Version wird geladen...</p>
+</div>
+
+<div id="contentContainer" style="display: none;">
+    <div class="row mt-3">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Version-Info</h5>
+                </div>
+                <div class="card-body" id="versionInfo"></div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-file-text me-2"></i>Inhalt</h5>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-primary active" data-view="text">
+                            <i class="bi bi-file-text"></i> Text
+                        </button>
+                        <button type="button" class="btn btn-outline-primary" data-view="html">
+                            <i class="bi bi-code"></i> HTML
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="textContent" class="article-content" style="white-space: pre-wrap;"></div>
+                    <div id="htmlContent" style="display: none;">
+                        <pre class="bg-light p-3 rounded" style="max-height: 500px; overflow: auto;"><code></code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .article-content {
+        line-height: 1.8;
+        font-size: 1.1em;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script type="module">
+    const versionId = '{{ version_id }}';
+    const loadingState = document.getElementById('loadingState');
+    const contentContainer = document.getElementById('contentContainer');
+    const versionTitleEl = document.getElementById('versionTitle');
+    const versionInfo = document.getElementById('versionInfo');
+    const textContent = document.getElementById('textContent');
+    const htmlContent = document.getElementById('htmlContent');
+
+    async function loadVersion() {
+        try {
+            const response = await fetch(`/api/v1/student-backup/versions/${versionId}`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to load version');
+            }
+
+            const version = await response.json();
+
+            loadingState.style.display = 'none';
+            contentContainer.style.display = 'block';
+
+            // Update title
+            versionTitleEl.textContent = `v${version.version_number} - ${version.article_title || 'Unbenannt'}`;
+
+            // Update info panel
+            versionInfo.innerHTML = `
+                <dl class="mb-0">
+                    <dt>Artikel-ID</dt>
+                    <dd><code>${version.mymoment_article_id}</code></dd>
+
+                    <dt>Version</dt>
+                    <dd><span class="badge bg-primary">v${version.version_number}</span></dd>
+
+                    <dt>Titel</dt>
+                    <dd>${version.article_title || '-'}</dd>
+
+                    <dt>Status</dt>
+                    <dd><span class="badge bg-${getStatusBadge(version.article_status)}">${version.article_status || '-'}</span></dd>
+
+                    <dt>Kategorie</dt>
+                    <dd>${version.article_category || '-'}</dd>
+
+                    <dt>Sichtbarkeit</dt>
+                    <dd>${version.article_visibility || '-'}</dd>
+
+                    <dt>Gesichert am</dt>
+                    <dd>${new Date(version.scraped_at).toLocaleString('de-DE')}</dd>
+
+                    <dt>Geändert auf myMoment</dt>
+                    <dd>${version.article_last_modified ? new Date(version.article_last_modified).toLocaleString('de-DE') : '-'}</dd>
+
+                    <dt>Content-Hash</dt>
+                    <dd><code class="small">${version.content_hash ? version.content_hash.substring(0, 16) + '...' : '-'}</code></dd>
+                </dl>
+
+                <hr>
+
+                <a href="https://www.mymoment.ch/article/${version.mymoment_article_id}/" target="_blank" class="btn btn-outline-primary btn-sm w-100">
+                    <i class="bi bi-box-arrow-up-right me-1"></i>Auf myMoment ansehen
+                </a>
+            `;
+
+            // Update content panels
+            textContent.textContent = version.article_content || '(Kein Inhalt)';
+            htmlContent.querySelector('code').textContent = version.article_raw_html || '(Kein HTML)';
+        } catch (error) {
+            console.error('Error loading version:', error);
+            loadingState.innerHTML = '<div class="alert alert-danger">Fehler beim Laden der Version</div>';
+        }
+    }
+
+    function getStatusBadge(status) {
+        if (!status) return 'secondary';
+        const lower = status.toLowerCase();
+        if (lower.includes('publiziert')) return 'success';
+        if (lower.includes('entwurf')) return 'warning';
+        if (lower.includes('kontrolle')) return 'info';
+        return 'secondary';
+    }
+
+    // Toggle between text and HTML view
+    document.querySelectorAll('[data-view]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('[data-view]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            const view = btn.dataset.view;
+            textContent.style.display = view === 'text' ? 'block' : 'none';
+            htmlContent.style.display = view === 'html' ? 'block' : 'none';
+        });
+    });
+
+    loadVersion();
+</script>
+{% endblock %}
