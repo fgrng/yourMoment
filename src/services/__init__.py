@@ -14,7 +14,7 @@ from .mymoment_credentials_service import (
 )
 from .mymoment_session_service import MyMomentSessionService
 from .llm_service import LLMProviderService, LLMProviderError
-from .scraper_service import ScraperService, ScrapingError, SessionContext
+from .scraper_service import ScraperService, ScrapingError, SessionContext, StudentArticleInfo
 from .monitoring_service import MonitoringService
 from .comment_service import CommentService, CommentGenerationError
 from .prompt_service import (
@@ -57,6 +57,7 @@ __all__ = [
     "ScraperService",
     "ScrapingError",
     "SessionContext",
+    "StudentArticleInfo",
 
     # Monitoring
     "MonitoringService",
