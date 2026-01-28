@@ -25,6 +25,14 @@ from .prompt_service import (
     TemplateAccessError,
     TemplatePreviewRequest
 )
+from .student_backup_service import (
+    StudentBackupService,
+    StudentBackupServiceError,
+    StudentBackupValidationError,
+    StudentBackupNotFoundError,
+    StudentBackupDisabledError,
+    StudentBackupLimitError
+)
 
 __all__ = [
     # Authentication
@@ -63,5 +71,13 @@ __all__ = [
     "TemplateNotFoundError",
     "TemplateValidationError",
     "TemplateAccessError",
-    "TemplatePreviewRequest"
+    "TemplatePreviewRequest",
+
+    # Student Backup
+    "StudentBackupService",
+    "StudentBackupServiceError",
+    "StudentBackupValidationError",
+    "StudentBackupNotFoundError",
+    "StudentBackupDisabledError",
+    "StudentBackupLimitError"
 ]
