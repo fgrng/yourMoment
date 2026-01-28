@@ -16,6 +16,9 @@ from src.models.prompt_template import PromptTemplate
 from src.models.monitoring_process_prompt import MonitoringProcessPrompt
 from src.models.user_session import UserSession
 from src.models.ai_comment import AIComment
+# Student Backup feature models
+from src.models.tracked_student import TrackedStudent
+from src.models.article_version import ArticleVersion
 
 # Export all models for easy importing
 __all__ = [
@@ -31,4 +34,7 @@ __all__ = [
     "MonitoringProcessPrompt",
     "UserSession",
     "AIComment",
+    # Student Backup feature
+    "TrackedStudent",
+    "ArticleVersion",
 ]

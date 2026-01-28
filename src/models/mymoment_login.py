@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from src.models.user import User
     from src.models.mymoment_session import MyMomentSession
     from src.models.monitoring_process_login import MonitoringProcessLogin
+    from src.models.tracked_student import TrackedStudent
 
 
 class MyMomentLogin(Base):
@@ -138,6 +139,13 @@ class MyMomentLogin(Base):
         "AIComment",
         back_populates="mymoment_login",
         doc="AI comments posted using this login"
+    )
+
+    # Tracked students using this admin login (Student Backup feature)
+    tracked_students = relationship(
+        "TrackedStudent",
+        back_populates="mymoment_login",
+        doc="Tracked students using this admin login for backup"
     )
 
     def __repr__(self) -> str:

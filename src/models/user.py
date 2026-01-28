@@ -22,6 +22,8 @@ if TYPE_CHECKING:
     from src.models.mymoment_login import MyMomentLogin
     from src.models.user_session import UserSession
     from src.models.prompt_template import PromptTemplate
+    from src.models.tracked_student import TrackedStudent
+    from src.models.article_version import ArticleVersion
 
 
 class User(Base):
@@ -133,6 +135,21 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
         doc="User's AI-generated comments with article snapshots"
+    )
+
+    # Student Backup feature relationships
+    tracked_students = relationship(
+        "TrackedStudent",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        doc="User's tracked students for backup"
+    )
+
+    article_versions = relationship(
+        "ArticleVersion",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        doc="User's backed up article versions"
     )
 
     def __repr__(self) -> str:
