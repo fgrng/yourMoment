@@ -81,6 +81,15 @@ class MyMomentLogin(Base):
         doc="Whether this login is active and usable"
     )
 
+    # Admin flag for Student Backup feature
+    # Admin logins can access student dashboards but cannot be used in MonitoringProcesses
+    is_admin = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        doc="Whether this is an admin account (for Student Backup feature)"
+    )
+
     # Timestamp fields
     created_at = Column(
         DateTime(timezone=True),
@@ -226,6 +235,7 @@ class MyMomentLogin(Base):
             "user_id": str(self.user_id),
             "username": self.username,  # Safe to include username
             "is_active": self.is_active,
+            "is_admin": self.is_admin,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_used": self.last_used.isoformat() if self.last_used else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
@@ -291,3 +301,29 @@ class MyMomentLogin(Base):
             Logins with active sessions or monitoring processes cannot be deleted.
         """
         return not (self.has_active_sessions() or self.is_used_in_monitoring())
+
+    def can_be_used_for_monitoring(self) -> bool:
+        """
+        Check if this login can be used for monitoring processes.
+
+        Returns:
+            True if login can be used for monitoring, False otherwise
+
+        Note:
+            Admin logins (is_admin=True) cannot be used for monitoring processes.
+            They are reserved for the Student Backup feature.
+        """
+        return self.is_active and not self.is_admin
+
+    def can_be_used_for_student_backup(self) -> bool:
+        """
+        Check if this login can be used for student backup.
+
+        Returns:
+            True if login can be used for student backup, False otherwise
+
+        Note:
+            Only admin logins (is_admin=True) can be used for student backup.
+            They have access to student dashboards on myMoment.
+        """
+        return self.is_active and self.is_admin

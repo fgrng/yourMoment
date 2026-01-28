@@ -56,7 +56,8 @@ class MyMomentCredentialsService(BaseService):
         user_id: uuid.UUID,
         username: str,
         password: str,
-        name: str
+        name: str,
+        is_admin: bool = False
     ) -> MyMomentLogin:
         """
         Create new myMoment credentials for a user.
@@ -66,6 +67,7 @@ class MyMomentCredentialsService(BaseService):
             username: myMoment username
             password: myMoment password (will be encrypted)
             name: Friendly name for these credentials
+            is_admin: Whether this is an admin account (for Student Backup feature)
 
         Returns:
             Created MyMomentLogin object
@@ -99,7 +101,8 @@ class MyMomentCredentialsService(BaseService):
         credentials = MyMomentLogin(
             user_id=user_id,
             name=name.strip(),
-            is_active=True
+            is_active=True,
+            is_admin=is_admin
         )
 
         # Set both username and password using the model's encryption method
@@ -148,22 +151,33 @@ class MyMomentCredentialsService(BaseService):
 
     async def get_user_credentials(
         self,
-        user_id: uuid.UUID
+        user_id: uuid.UUID,
+        is_admin: Optional[bool] = None
     ) -> List[MyMomentLogin]:
         """
         Get all active credentials for a user.
 
         Args:
             user_id: ID of the user whose credentials to retrieve
+            is_admin: Optional filter for admin status.
+                      True = only admin logins (for Student Backup)
+                      False = only non-admin logins (for Monitoring)
+                      None = all logins
 
         Returns:
             List of active MyMomentLogin objects
         """
+        conditions = [
+            MyMomentLogin.user_id == user_id,
+            MyMomentLogin.is_active == True
+        ]
+
+        # Add is_admin filter if specified
+        if is_admin is not None:
+            conditions.append(MyMomentLogin.is_admin == is_admin)
+
         stmt = select(MyMomentLogin).where(
-            and_(
-                MyMomentLogin.user_id == user_id,
-                MyMomentLogin.is_active == True
-            )
+            and_(*conditions)
         ).order_by(MyMomentLogin.created_at)
 
         result = await self.db_session.execute(stmt)
@@ -175,7 +189,8 @@ class MyMomentCredentialsService(BaseService):
         user_id: Optional[uuid.UUID] = None,
         username: Optional[str] = None,
         password: Optional[str] = None,
-        name: Optional[str] = None
+        name: Optional[str] = None,
+        is_admin: Optional[bool] = None
     ) -> Optional[MyMomentLogin]:
         """
         Update existing credentials.
@@ -186,6 +201,7 @@ class MyMomentCredentialsService(BaseService):
             username: New username (optional)
             password: New password (optional, will be encrypted)
             name: New friendly name (optional)
+            is_admin: New admin status (optional)
 
         Returns:
             Updated MyMomentLogin object if successful, None if not found
@@ -229,6 +245,10 @@ class MyMomentCredentialsService(BaseService):
                 raise MyMomentCredentialsValidationError(f"Credentials with name '{name}' already exist")
 
             credentials.name = name.strip()
+
+        # Update is_admin if provided
+        if is_admin is not None:
+            credentials.is_admin = is_admin
 
         try:
             await self.db_session.commit()

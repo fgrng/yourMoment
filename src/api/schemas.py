@@ -78,6 +78,7 @@ class MyMomentCredentialsRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=100, description="myMoment username")
     password: str = Field(..., min_length=1, description="myMoment password")
     name: str = Field(..., min_length=1, max_length=100, description="Friendly name for this login")
+    is_admin: bool = Field(False, description="Whether this is an admin account (for Student Backup feature)")
 
 
 class MyMomentCredentialsResponse(BaseModel):
@@ -88,6 +89,7 @@ class MyMomentCredentialsResponse(BaseModel):
     name: str = Field(..., description="Friendly name for this login")
     username: str = Field(..., description="myMoment username")
     is_active: bool = Field(..., description="Whether credentials are active")
+    is_admin: bool = Field(False, description="Whether this is an admin account (for Student Backup feature)")
     created_at: datetime = Field(..., description="Creation timestamp")
     last_used: Optional[datetime] = Field(None, description="Last time credentials were used")
 

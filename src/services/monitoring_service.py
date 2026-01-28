@@ -886,15 +886,40 @@ class MonitoringService:
         user_id: uuid.UUID,
         login_ids: List[uuid.UUID]
     ) -> List[uuid.UUID]:
-        """Validate myMoment login associations belong to user."""
+        """
+        Validate myMoment login associations belong to user.
+
+        Admin logins (is_admin=True) are not allowed for monitoring processes.
+        They are reserved for the Student Backup feature.
+        """
         if not login_ids:
             return []
 
+        # First check if any of the provided logins are admin logins
+        admin_check_stmt = select(MyMomentLogin).where(
+            and_(
+                MyMomentLogin.id.in_(login_ids),
+                MyMomentLogin.user_id == user_id,
+                MyMomentLogin.is_admin == True
+            )
+        )
+        admin_result = await self.db_session.execute(admin_check_stmt)
+        admin_logins = admin_result.scalars().all()
+
+        if admin_logins:
+            admin_names = [login.name for login in admin_logins]
+            raise ProcessValidationError(
+                f"Admin logins cannot be used for monitoring processes: {admin_names}. "
+                f"Admin logins are reserved for the Student Backup feature."
+            )
+
+        # Now validate that all logins exist, belong to user, are active, and NOT admin
         login_stmt = select(MyMomentLogin).where(
             and_(
                 MyMomentLogin.id.in_(login_ids),
                 MyMomentLogin.user_id == user_id,
-                MyMomentLogin.is_active == True
+                MyMomentLogin.is_active == True,
+                MyMomentLogin.is_admin == False
             )
         )
 

@@ -111,6 +111,21 @@
                         </label>
                     </div>
 
+                    <!-- Admin Status -->
+                    <div class="mb-3 form-check form-switch">
+                        <input type="checkbox"
+                               class="form-check-input"
+                               id="is_admin"
+                               name="is_admin">
+                        <label class="form-check-label" for="is_admin">
+                            <strong>Admin-Konto</strong>
+                            <div class="form-text">
+                                Admin-Konten haben Zugriff auf Schüler-Dashboards und werden für das Schüler-Backup-Feature verwendet.
+                                <strong>Admin-Konten können nicht für Überwachungsprozesse verwendet werden.</strong>
+                            </div>
+                        </label>
+                    </div>
+
                     <!-- Security Notice -->
                     <div class="alert alert-info">
                         <i class="bi bi-shield-lock me-2"></i>
@@ -199,6 +214,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             document.getElementById('name').value = credential.name || '';
             document.getElementById('username').value = credential.username || '';
             document.getElementById('is_active').checked = credential.is_active !== false;
+            document.getElementById('is_admin').checked = credential.is_admin === true;
 
             // Password is not returned for security, keep it empty
         } catch (error) {
@@ -222,7 +238,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         const formData = {
             name: document.getElementById('name').value,
             username: document.getElementById('username').value,
-            is_active: document.getElementById('is_active').checked
+            is_active: document.getElementById('is_active').checked,
+            is_admin: document.getElementById('is_admin').checked
         };
 
         // Only include password if provided

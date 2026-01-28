@@ -4,7 +4,7 @@ import uuid
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.auth import get_current_user
@@ -169,7 +169,8 @@ async def create_credentials(
             user_id=current_user.id,
             username=request.username,
             password=request.password,
-            name=request.name
+            name=request.name,
+            is_admin=request.is_admin
         )
 
         return MyMomentCredentialsResponse.model_validate(credentials)
@@ -186,6 +187,10 @@ async def create_credentials(
     }
 )
 async def get_credentials(
+    is_admin: Optional[bool] = Query(
+        default=None,
+        description="Filter by admin status. True=admin logins only, False=non-admin only, None=all"
+    ),
     current_user: User = Depends(get_current_user),
     service: MyMomentCredentialsService = Depends(get_credentials_service)
 ):
@@ -194,8 +199,13 @@ async def get_credentials(
 
     Returns a list of all active credentials owned by the authenticated user.
     Passwords are not included in the response for security reasons.
+
+    Query parameters:
+        is_admin: Optional filter. If True, returns only admin logins.
+                  If False, returns only non-admin logins (for monitoring).
+                  If not specified, returns all logins.
     """
-    credentials_list = await service.get_user_credentials(current_user.id)
+    credentials_list = await service.get_user_credentials(current_user.id, is_admin=is_admin)
     return [MyMomentCredentialsResponse.model_validate(creds) for creds in credentials_list]
 
 
@@ -254,7 +264,8 @@ async def update_credentials(
             credentials_id=credentials_id,
             username=request.username,
             password=request.password,
-            name=request.name
+            name=request.name,
+            is_admin=request.is_admin
         )
 
         if not credentials:
@@ -294,7 +305,8 @@ async def patch_credentials(
             credentials_id=credentials_id,
             username=request.username,
             password=request.password,
-            name=request.name
+            name=request.name,
+            is_admin=request.is_admin
         )
 
         if not credentials:

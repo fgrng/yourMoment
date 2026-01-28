@@ -291,10 +291,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
 
     async function loadSupportingData() {
+        // Note: Only fetch non-admin logins (is_admin=false) for monitoring processes
+        // Admin logins are reserved for the Student Backup feature
         const [providersResp, templatesResp, loginsResp] = await Promise.all([
             fetch('/api/v1/llm-providers/index', fetchOptions()),
             fetch('/api/v1/prompt-templates/index?limit=100', fetchOptions()),
-            fetch('/api/v1/mymoment-credentials/index', fetchOptions())
+            fetch('/api/v1/mymoment-credentials/index?is_admin=false', fetchOptions())
         ]);
 
         await assertOk(providersResp, 'LLM-Anbieter konnten nicht geladen werden.');
