@@ -498,3 +498,111 @@ class AICommentStatisticsResponse(BaseModel):
     # Recent activity
     last_comment_at: Optional[datetime] = Field(None, description="Most recent comment timestamp")
     last_posted_at: Optional[datetime] = Field(None, description="Most recent successful posting")
+
+
+# === Student Backup Schemas ===
+
+class TrackedStudentCreate(BaseModel):
+    """Request model for creating a tracked student."""
+    mymoment_student_id: int = Field(..., gt=0, description="Student's user ID on myMoment platform")
+    mymoment_login_id: uuid.UUID = Field(..., description="Admin login ID to use for scraping")
+    display_name: Optional[str] = Field(None, max_length=255, description="Optional friendly name")
+    notes: Optional[str] = Field(None, description="Optional notes about the student")
+
+
+class TrackedStudentUpdate(BaseModel):
+    """Request model for updating a tracked student."""
+    mymoment_login_id: Optional[uuid.UUID] = Field(None, description="Admin login ID to use for scraping")
+    display_name: Optional[str] = Field(None, max_length=255, description="Optional friendly name")
+    notes: Optional[str] = Field(None, description="Optional notes about the student")
+    is_active: Optional[bool] = Field(None, description="Whether tracking is active")
+
+
+class TrackedStudentResponse(BaseModel):
+    """Response model for a tracked student."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID = Field(..., description="Tracked student unique identifier")
+    user_id: uuid.UUID = Field(..., description="User who owns this tracking")
+    mymoment_login_id: Optional[uuid.UUID] = Field(None, description="Admin login used for scraping")
+    mymoment_student_id: int = Field(..., description="Student's user ID on myMoment")
+    display_name: Optional[str] = Field(None, description="Friendly name for the student")
+    notes: Optional[str] = Field(None, description="Notes about the student")
+    is_active: bool = Field(..., description="Whether tracking is active")
+    created_at: datetime = Field(..., description="When tracking was created")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+    last_backup_at: Optional[datetime] = Field(None, description="Last successful backup timestamp")
+    dashboard_url: Optional[str] = Field(None, description="URL to student's myMoment dashboard")
+    article_count: Optional[int] = Field(None, description="Number of unique articles tracked")
+    total_versions: Optional[int] = Field(None, description="Total number of article versions")
+
+
+class TrackedStudentListResponse(BaseModel):
+    """Response model for listing tracked students."""
+    items: List[TrackedStudentResponse] = Field(..., description="List of tracked students")
+    total: int = Field(..., description="Total number of tracked students")
+
+
+class ArticleVersionResponse(BaseModel):
+    """Response model for an article version."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID = Field(..., description="Version unique identifier")
+    tracked_student_id: uuid.UUID = Field(..., description="Tracked student this belongs to")
+    mymoment_article_id: int = Field(..., description="Article ID on myMoment")
+    version_number: int = Field(..., description="Sequential version number")
+    article_title: Optional[str] = Field(None, description="Article title")
+    article_url: Optional[str] = Field(None, description="Article view URL")
+    article_status: Optional[str] = Field(None, description="Publication status")
+    article_visibility: Optional[str] = Field(None, description="Visibility/class info")
+    article_category: Optional[str] = Field(None, description="Article category")
+    article_task: Optional[str] = Field(None, description="Writing task if assigned")
+    article_last_modified: Optional[datetime] = Field(None, description="Last modified on myMoment")
+    scraped_at: datetime = Field(..., description="When this version was captured")
+    content_hash: Optional[str] = Field(None, description="SHA-256 hash of content")
+    is_active: bool = Field(..., description="Whether version is active")
+
+
+class ArticleVersionDetailResponse(ArticleVersionResponse):
+    """Detailed response model for an article version including content."""
+    article_content: Optional[str] = Field(None, description="Plain text content")
+    article_raw_html: Optional[str] = Field(None, description="Raw HTML content")
+    extra_metadata: Optional[dict] = Field(None, description="Additional metadata")
+
+
+class ArticleVersionListResponse(BaseModel):
+    """Response model for listing article versions."""
+    items: List[ArticleVersionResponse] = Field(..., description="List of article versions")
+    total: int = Field(..., description="Total number of versions")
+
+
+class ArticleSummaryResponse(BaseModel):
+    """Summary response for an article with version count."""
+    mymoment_article_id: int = Field(..., description="Article ID on myMoment")
+    article_title: Optional[str] = Field(None, description="Latest article title")
+    version_count: int = Field(..., description="Number of versions for this article")
+    latest_scraped_at: Optional[datetime] = Field(None, description="Most recent backup timestamp")
+    article_status: Optional[str] = Field(None, description="Latest status")
+    view_url: str = Field(..., description="URL to view article on myMoment")
+
+
+class ArticleSummaryListResponse(BaseModel):
+    """Response model for listing article summaries."""
+    items: List[ArticleSummaryResponse] = Field(..., description="List of article summaries")
+    total: int = Field(..., description="Total number of unique articles")
+
+
+class BackupTriggerRequest(BaseModel):
+    """Request model for triggering a backup."""
+    tracked_student_ids: Optional[List[uuid.UUID]] = Field(
+        None,
+        description="Optional list of specific student IDs to backup. If empty, backs up all."
+    )
+
+
+class BackupTriggerResponse(BaseModel):
+    """Response model for backup trigger."""
+    status: str = Field(..., description="Status of the trigger operation")
+    task_id: Optional[str] = Field(None, description="Celery task ID for full backup")
+    tasks: Optional[List[dict]] = Field(None, description="List of dispatched tasks")
+    message: Optional[str] = Field(None, description="Additional message")

@@ -32,6 +32,7 @@ from src.api.monitoring_processes import router as monitoring_processes_router
 from src.api.prompt_templates import router as prompt_templates_router
 from src.api.mymoment_articles import router as mymoment_articles_router
 from src.api.comments import router as comments_router
+from src.api.student_backup import router as student_backup_router
 from src.api.web import router as web_router
 from src.config.database import get_database_manager
 from src.lib.health import (
@@ -139,6 +140,7 @@ def create_app() -> FastAPI:
     app.include_router(comments_router, prefix="/api/v1")
     app.include_router(llm_providers_router, prefix="/api/v1")
     app.include_router(monitoring_processes_router, prefix="/api/v1")
+    app.include_router(student_backup_router, prefix="/api/v1")
 
     # Include web interface router (no prefix - serves at root)
     app.include_router(web_router)
