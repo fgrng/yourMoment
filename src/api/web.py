@@ -12,7 +12,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc
 
-from src.api.auth import get_current_user, get_optional_user, get_current_web_user
+from src.api.auth import get_optional_user, get_current_web_user
 from src.models.user import User
 from src.config.database import get_session
 from src.config.settings import get_settings
@@ -209,7 +209,7 @@ async def register_submit(
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request, user: User = Depends(get_current_user)):
+async def dashboard(request: Request, user: User = Depends(get_current_web_user)):
     """Main dashboard - requires authentication via cookie or header."""
     return templates.TemplateResponse("simple_dashboard.html", {
         "request": request,
@@ -220,7 +220,7 @@ async def dashboard(request: Request, user: User = Depends(get_current_user)):
 
 
 @router.get("/profile", response_class=HTMLResponse)
-async def profile(request: Request, user: User = Depends(get_current_user)):
+async def profile(request: Request, user: User = Depends(get_current_web_user)):
     """User profile page."""
     return templates.TemplateResponse("simple_profile.html", {
         "request": request,
@@ -231,7 +231,7 @@ async def profile(request: Request, user: User = Depends(get_current_user)):
 
 
 @router.get("/processes", response_class=HTMLResponse)
-async def processes(request: Request, user: User = Depends(get_current_user)):
+async def processes(request: Request, user: User = Depends(get_current_web_user)):
     """Monitoring processes page."""
     return templates.TemplateResponse("monitoring_processes/index.html", {
         "request": request,
@@ -242,7 +242,7 @@ async def processes(request: Request, user: User = Depends(get_current_user)):
 
 
 @router.get("/processes/new", response_class=HTMLResponse)
-async def new_process(request: Request, user: User = Depends(get_current_user)):
+async def new_process(request: Request, user: User = Depends(get_current_web_user)):
     """Create new monitoring process page."""
     return templates.TemplateResponse("monitoring_processes/form.html", {
         "request": request,
@@ -254,7 +254,7 @@ async def new_process(request: Request, user: User = Depends(get_current_user)):
 
 
 @router.get("/processes/{process_id}/edit", response_class=HTMLResponse)
-async def edit_process(request: Request, process_id: str, user: User = Depends(get_current_user)):
+async def edit_process(request: Request, process_id: str, user: User = Depends(get_current_web_user)):
     """Edit monitoring process page."""
     return templates.TemplateResponse("monitoring_processes/form.html", {
         "request": request,
@@ -266,7 +266,7 @@ async def edit_process(request: Request, process_id: str, user: User = Depends(g
 
 
 @router.get("/articles", response_class=HTMLResponse)
-async def articles(request: Request, user: User = Depends(get_current_user)):
+async def articles(request: Request, user: User = Depends(get_current_web_user)):
     """Articles browsing page."""
     return templates.TemplateResponse("articles/index.html", {
         "request": request,
@@ -275,7 +275,7 @@ async def articles(request: Request, user: User = Depends(get_current_user)):
 
 
 @router.get("/articles/{article_id}", response_class=HTMLResponse)
-async def article_detail(request: Request, article_id: str, user: User = Depends(get_current_user)):
+async def article_detail(request: Request, article_id: str, user: User = Depends(get_current_web_user)):
     """Article detail page."""
     return templates.TemplateResponse("articles/detail.html", {
         "request": request,
@@ -285,7 +285,7 @@ async def article_detail(request: Request, article_id: str, user: User = Depends
 
 
 @router.get("/articles/{article_id}/comments", response_class=HTMLResponse)
-async def article_comments(request: Request, article_id: str, user: User = Depends(get_current_user)):
+async def article_comments(request: Request, article_id: str, user: User = Depends(get_current_web_user)):
     """Article comments page."""
     return templates.TemplateResponse("articles/comments.html", {
         "request": request,
@@ -297,7 +297,7 @@ async def article_comments(request: Request, article_id: str, user: User = Depen
 @router.get("/ai-comments", response_class=HTMLResponse)
 async def ai_comments_index(
     request: Request,
-    user: User = Depends(get_current_user)
+    user: User = Depends(get_current_web_user)
 ):
     """AI comments archive page (client-side rendered)."""
     return templates.TemplateResponse("ai_comments/index.html", {
@@ -312,7 +312,7 @@ async def ai_comments_index(
 async def process_ai_comments(
     request: Request,
     process_id: str,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_web_user),
     session: AsyncSession = Depends(get_session)
 ):
     """AI comments for a specific monitoring process (client-side rendered)."""
@@ -345,7 +345,7 @@ async def process_ai_comments(
 
 
 @router.get("/ai-comments/{comment_id}", response_class=HTMLResponse)
-async def ai_comment_detail(request: Request, comment_id: str, user: User = Depends(get_current_user)):
+async def ai_comment_detail(request: Request, comment_id: str, user: User = Depends(get_current_web_user)):
     """AI comment detail page."""
     return templates.TemplateResponse("ai_comments/detail.html", {
         "request": request,
@@ -358,13 +358,13 @@ async def ai_comment_detail(request: Request, comment_id: str, user: User = Depe
 
 # Settings pages
 @router.get("/settings", response_class=HTMLResponse)
-async def settings(request: Request, user: User = Depends(get_current_user)):
+async def settings(request: Request, user: User = Depends(get_current_web_user)):
     """Settings page - redirect to profile."""
     return RedirectResponse(url="/profile")
 
 
 @router.get("/settings/llm-providers", response_class=HTMLResponse)
-async def llm_providers_index(request: Request, user: User = Depends(get_current_user)):
+async def llm_providers_index(request: Request, user: User = Depends(get_current_web_user)):
     """LLM providers listing page."""
     return templates.TemplateResponse("llm_providers/index.html", {
         "request": request,
@@ -375,7 +375,7 @@ async def llm_providers_index(request: Request, user: User = Depends(get_current
 
 
 @router.get("/settings/llm-providers/new", response_class=HTMLResponse)
-async def llm_providers_new(request: Request, user: User = Depends(get_current_user)):
+async def llm_providers_new(request: Request, user: User = Depends(get_current_web_user)):
     """Create LLM provider page."""
     return templates.TemplateResponse("llm_providers/form.html", {
         "request": request,
@@ -387,7 +387,7 @@ async def llm_providers_new(request: Request, user: User = Depends(get_current_u
 
 
 @router.get("/settings/llm-providers/{provider_id}/edit", response_class=HTMLResponse)
-async def llm_providers_edit(request: Request, provider_id: str, user: User = Depends(get_current_user)):
+async def llm_providers_edit(request: Request, provider_id: str, user: User = Depends(get_current_web_user)):
     """Edit LLM provider page."""
     return templates.TemplateResponse("llm_providers/form.html", {
         "request": request,
@@ -401,7 +401,7 @@ async def llm_providers_edit(request: Request, provider_id: str, user: User = De
 @router.get("/settings/mymoment-credentials", response_class=HTMLResponse)
 async def mymoment_credentials_settings(
     request: Request,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_web_user),
     session: AsyncSession = Depends(get_session)
 ):
     """myMoment credentials settings page."""
@@ -434,7 +434,7 @@ async def mymoment_credentials_settings(
 
 
 @router.get("/settings/mymoment-credentials/new", response_class=HTMLResponse)
-async def new_mymoment_credential(request: Request, user: User = Depends(get_current_user)):
+async def new_mymoment_credential(request: Request, user: User = Depends(get_current_web_user)):
     """Add new myMoment credential page."""
     return templates.TemplateResponse("mymoment_credentials/form.html", {
         "request": request,
@@ -446,7 +446,7 @@ async def new_mymoment_credential(request: Request, user: User = Depends(get_cur
 
 
 @router.get("/settings/mymoment-credentials/{credential_id}/edit", response_class=HTMLResponse)
-async def edit_mymoment_credential(request: Request, credential_id: str, user: User = Depends(get_current_user)):
+async def edit_mymoment_credential(request: Request, credential_id: str, user: User = Depends(get_current_web_user)):
     """Edit myMoment credential page."""
     return templates.TemplateResponse("mymoment_credentials/form.html", {
         "request": request,
@@ -459,7 +459,7 @@ async def edit_mymoment_credential(request: Request, credential_id: str, user: U
 @router.get("/settings/prompt-templates", response_class=HTMLResponse)
 async def prompt_templates_index(
     request: Request,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_web_user),
     session: AsyncSession = Depends(get_session)
 ):
     """Prompt templates listing page."""
@@ -507,7 +507,7 @@ async def prompt_templates_index(
 
 
 @router.get("/settings/prompt-templates/new", response_class=HTMLResponse)
-async def prompt_templates_new(request: Request, user: User = Depends(get_current_user)):
+async def prompt_templates_new(request: Request, user: User = Depends(get_current_web_user)):
     """Create prompt template page."""
     placeholders = list(SUPPORTED_PLACEHOLDERS.values())
 
@@ -522,7 +522,7 @@ async def prompt_templates_new(request: Request, user: User = Depends(get_curren
 
 
 @router.get("/settings/prompt-templates/{template_id}/edit", response_class=HTMLResponse)
-async def prompt_templates_edit(request: Request, template_id: str, user: User = Depends(get_current_user)):
+async def prompt_templates_edit(request: Request, template_id: str, user: User = Depends(get_current_web_user)):
     """Edit prompt template page."""
     placeholders = list(SUPPORTED_PLACEHOLDERS.values())
 
@@ -541,7 +541,7 @@ async def prompt_templates_edit(request: Request, template_id: str, user: User =
 # =========================================================================
 
 @router.get("/settings/student-backup", response_class=HTMLResponse)
-async def student_backup_index(request: Request, user: User = Depends(get_current_user)):
+async def student_backup_index(request: Request, user: User = Depends(get_current_web_user)):
     """Student backup listing page."""
     return templates.TemplateResponse("student_backup/tracked_students.html", {
         "request": request,
@@ -552,7 +552,7 @@ async def student_backup_index(request: Request, user: User = Depends(get_curren
 
 
 @router.get("/settings/student-backup/create", response_class=HTMLResponse)
-async def student_backup_create(request: Request, user: User = Depends(get_current_user)):
+async def student_backup_create(request: Request, user: User = Depends(get_current_web_user)):
     """Add new tracked student page."""
     settings = get_settings()
     return templates.TemplateResponse("student_backup/form.html", {
@@ -566,7 +566,7 @@ async def student_backup_create(request: Request, user: User = Depends(get_curre
 
 
 @router.get("/settings/student-backup/{student_id}", response_class=HTMLResponse)
-async def student_backup_detail(request: Request, student_id: str, user: User = Depends(get_current_user)):
+async def student_backup_detail(request: Request, student_id: str, user: User = Depends(get_current_web_user)):
     """Tracked student detail page."""
     return templates.TemplateResponse("student_backup/tracked_student_detail.html", {
         "request": request,
@@ -579,7 +579,7 @@ async def student_backup_detail(request: Request, student_id: str, user: User = 
 
 
 @router.get("/settings/student-backup/{student_id}/edit", response_class=HTMLResponse)
-async def student_backup_edit(request: Request, student_id: str, user: User = Depends(get_current_user)):
+async def student_backup_edit(request: Request, student_id: str, user: User = Depends(get_current_web_user)):
     """Edit tracked student page."""
     settings = get_settings()
     return templates.TemplateResponse("student_backup/form.html", {
@@ -597,7 +597,7 @@ async def student_backup_article_versions(
     request: Request,
     student_id: str,
     article_id: str,
-    user: User = Depends(get_current_user)
+    user: User = Depends(get_current_web_user)
 ):
     """Article versions page."""
     return templates.TemplateResponse("student_backup/article_versions.html", {
@@ -614,7 +614,7 @@ async def student_backup_article_versions(
 async def student_backup_version_detail(
     request: Request,
     version_id: str,
-    user: User = Depends(get_current_user)
+    user: User = Depends(get_current_web_user)
 ):
     """Version detail page."""
     return templates.TemplateResponse("student_backup/version_detail.html", {
