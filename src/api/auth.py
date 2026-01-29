@@ -67,31 +67,48 @@ async def get_current_user(
 
         if not token:
             raise HTTPException(
-                # status_code=status.HTTP_401_UNAUTHORIZED,
-                status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+                status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="No authentication token provided",
-                headers={"WWW-Authenticate": "Bearer", "Location": "/login"}
+                headers={"WWW-Authenticate": "Bearer"}
             )
 
         # Validate token and get user
         user = await auth_service.validate_token(token)
         if not user:
             raise HTTPException(
-                # status_code=status.HTTP_401_UNAUTHORIZED,
-                status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+                status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired token",
-                headers={"WWW-Authenticate": "Bearer", "Location": "/login"}
+                headers={"WWW-Authenticate": "Bearer"}
             )
         return user
     except HTTPException:
         raise
     except Exception:
         raise HTTPException(
-            # status_code=status.HTTP_401_UNAUTHORIZED,
-            status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer", "Location": "/login"}
+            headers={"WWW-Authenticate": "Bearer"}
         )
+
+async def get_current_web_user(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    auth_service: AuthService = Depends(get_auth_service),
+    access_token: Optional[str] = Cookie(None)
+) -> User:
+    """
+    Dependency for web routes that redirects to /login if not authenticated.
+    """
+    try:
+        return await get_current_user(request, credentials, auth_service, access_token)
+    except HTTPException as e:
+        if e.status_code == status.HTTP_401_UNAUTHORIZED:
+            raise HTTPException(
+                status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+                detail=e.detail,
+                headers={"Location": "/login"}
+            )
+        raise e
 
 async def get_optional_user(
     request: Request,

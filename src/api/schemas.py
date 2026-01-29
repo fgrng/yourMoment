@@ -580,6 +580,8 @@ class ArticleSummaryResponse(BaseModel):
     """Summary response for an article with version count."""
     mymoment_article_id: int = Field(..., description="Article ID on myMoment")
     article_title: Optional[str] = Field(None, description="Latest article title")
+    article_category: Optional[str] = Field(None, description="Latest category")
+    article_task: Optional[str] = Field(None, description="Latest writing task")
     version_count: int = Field(..., description="Number of versions for this article")
     latest_scraped_at: Optional[datetime] = Field(None, description="Most recent backup timestamp")
     article_status: Optional[str] = Field(None, description="Latest status")

@@ -184,6 +184,9 @@ class TrackedStudent(Base):
         Returns:
             Number of unique mymoment_article_ids
         """
+        if 'article_versions' not in self.__dict__:
+            return 0
+
         if not self.article_versions:
             return 0
 
@@ -199,6 +202,9 @@ class TrackedStudent(Base):
         Returns:
             Total number of active article versions
         """
+        if 'article_versions' not in self.__dict__:
+            return 0
+
         if not self.article_versions:
             return 0
 

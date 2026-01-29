@@ -7,18 +7,18 @@
     <div class="col-12">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="/settings/student-backup">Schüler-Backup</a></li>
-                <li class="breadcrumb-item active" id="studentName">Schüler</li>
+                <li class="breadcrumb-item"><a href="/settings/student-backup">Revision-Historien</a></li>
+                <li class="breadcrumb-item active" id="studentName">Schüler:in</li>
             </ol>
         </nav>
     </div>
 </div>
 
 <div class="row mt-3">
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-person me-2"></i>Schüler-Info</h5>
+                <h5 class="mb-0"><i class="bi bi-person me-2"></i>Schüler:in-Information</h5>
             </div>
             <div class="card-body" id="studentInfo">
                 <div class="text-center py-3">
@@ -40,7 +40,7 @@
         </div>
     </div>
 
-    <div class="col-md-8">
+    <div class="col-md-9">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-file-text me-2"></i>Artikel</h5>
@@ -71,12 +71,9 @@
     const refreshArticles = document.getElementById('refreshArticles');
 
     async function loadStudentInfo() {
+        const { fetchOptions } = window.YM.utils;
         try {
-            const response = await fetch(`/api/v1/student-backup/tracked-students/${studentId}`, {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-                }
-            });
+            const response = await fetch(`/api/v1/student-backup/tracked-students/${studentId}`, fetchOptions('GET'));
 
             if (!response.ok) {
                 throw new Error('Failed to load student');
@@ -101,7 +98,7 @@
                     <dd>${student.last_backup_at ? new Date(student.last_backup_at).toLocaleString('de-DE') : 'Noch keins'}</dd>
 
                     <dt>Erstellt</dt>
-                    <dd>${new Date(student.created_at).toLocaleDateString('de-DE')}</dd>
+                    <dd>${new Date(student.created_at).toLocaleString('de-DE')}</dd>
 
                     ${student.notes ? `<dt>Notizen</dt><dd class="text-muted">${student.notes}</dd>` : ''}
                 </dl>
@@ -113,12 +110,9 @@
     }
 
     async function loadArticles() {
+        const { fetchOptions } = window.YM.utils;
         try {
-            const response = await fetch(`/api/v1/student-backup/tracked-students/${studentId}/articles`, {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-                }
-            });
+            const response = await fetch(`/api/v1/student-backup/tracked-students/${studentId}/articles`, fetchOptions('GET'));
 
             if (!response.ok) {
                 throw new Error('Failed to load articles');
@@ -142,6 +136,8 @@
                         <thead class="table-light">
                             <tr>
                                 <th>Titel</th>
+                                <th>Kategorie</th>
+                                <th>Aufgabe</th>
                                 <th>Status</th>
                                 <th>Versionen</th>
                                 <th>Zuletzt</th>
@@ -157,9 +153,11 @@
                                             <i class="bi bi-box-arrow-up-right small"></i>
                                         </a>
                                     </td>
+                                    <td><small>${article.article_category || '-'}</small></td>
+                                    <td><small>${article.article_task || '-'}</small></td>
                                     <td><span class="badge bg-${getStatusBadge(article.article_status)}">${article.article_status || '-'}</span></td>
-                                    <td>${article.version_count}</td>
-                                    <td><small>${article.latest_scraped_at ? new Date(article.latest_scraped_at).toLocaleDateString('de-DE') : '-'}</small></td>
+                                    <td><span class="badge bg-light text-dark border">${article.version_count}</span></td>
+                                    <td><small>${article.latest_scraped_at ? new Date(article.latest_scraped_at).toLocaleString('de-DE') : '-'}</small></td>
                                     <td>
                                         <a href="/settings/student-backup/${studentId}/articles/${article.mymoment_article_id}"
                                            class="btn btn-outline-primary btn-sm">

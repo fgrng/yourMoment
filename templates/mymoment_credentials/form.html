@@ -112,6 +112,7 @@
                     </div>
 
                     <!-- Admin Status -->
+                    {% if student_backup_enabled %}
                     <div class="mb-3 form-check form-switch">
                         <input type="checkbox"
                                class="form-check-input"
@@ -125,6 +126,9 @@
                             </div>
                         </label>
                     </div>
+                    {% else %}
+                    <input type="hidden" id="is_admin" name="is_admin" value="false">
+                    {% endif %}
 
                     <!-- Security Notice -->
                     <div class="alert alert-info">

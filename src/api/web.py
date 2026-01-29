@@ -12,7 +12,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc
 
-from src.api.auth import get_current_user, get_optional_user
+from src.api.auth import get_current_user, get_optional_user, get_current_web_user
 from src.models.user import User
 from src.config.database import get_session
 from src.config.settings import get_settings
@@ -25,6 +25,15 @@ from src.services.prompt_placeholders import SUPPORTED_PLACEHOLDERS
 # Configure templates
 templates_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "templates")
 templates = Jinja2Templates(directory=templates_dir)
+
+# Add global context variables to templates
+def get_global_settings():
+    settings = get_settings()
+    return {
+        "student_backup_enabled": settings.student_backup.STUDENT_BACKUP_ENABLED
+    }
+
+templates.env.globals.update(get_global_settings())
 
 router = APIRouter(
     tags=["Web Interface"],

@@ -106,15 +106,12 @@
     const form = document.getElementById('studentForm');
     const submitBtn = document.getElementById('submitBtn');
     const loginSelect = document.getElementById('mymoment_login_id');
+    const { fetchOptions } = window.YM.utils;
 
     // Load admin logins
     async function loadAdminLogins() {
         try {
-            const response = await fetch('/api/v1/mymoment-credentials/index?is_admin=true', {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-                }
-            });
+            const response = await fetch('/api/v1/mymoment-credentials/index?is_admin=true', fetchOptions('GET'));
 
             if (!response.ok) {
                 throw new Error('Failed to load logins');
@@ -141,11 +138,7 @@
         if (!isEdit) return;
 
         try {
-            const response = await fetch(`/api/v1/student-backup/tracked-students/${studentId}`, {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-                }
-            });
+            const response = await fetch(`/api/v1/student-backup/tracked-students/${studentId}`, fetchOptions('GET'));
 
             if (!response.ok) {
                 throw new Error('Failed to load student');
@@ -189,14 +182,7 @@
                 ? `/api/v1/student-backup/tracked-students/${studentId}`
                 : '/api/v1/student-backup/tracked-students/create';
 
-            const response = await fetch(url, {
-                method: isEdit ? 'PATCH' : 'POST',
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(formData)
-            });
+            const response = await fetch(url, fetchOptions(isEdit ? 'PATCH' : 'POST', formData));
 
             if (!response.ok) {
                 const error = await response.json();

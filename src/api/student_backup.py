@@ -11,6 +11,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import inspect
 
 from src.api.auth import get_current_user
 from src.api.schemas import (
@@ -475,6 +476,11 @@ async def trigger_backup(
 
 def _build_tracked_student_response(student) -> TrackedStudentResponse:
     """Build a TrackedStudentResponse from a TrackedStudent model."""
+    # Check if article_versions relationship is loaded to avoid MissingGreenlet error
+    # in async context. Accessing a lazy relationship triggers a sync IO attempt.
+    state = inspect(student)
+    article_versions_loaded = 'article_versions' not in state.unloaded
+
     return TrackedStudentResponse(
         id=student.id,
         user_id=student.user_id,
@@ -487,8 +493,8 @@ def _build_tracked_student_response(student) -> TrackedStudentResponse:
         updated_at=student.updated_at,
         last_backup_at=student.last_backup_at,
         dashboard_url=student.dashboard_url,
-        article_count=student.get_article_count() if hasattr(student, 'article_versions') and student.article_versions else None,
-        total_versions=student.get_total_versions_count() if hasattr(student, 'article_versions') and student.article_versions else None
+        article_count=student.get_article_count() if article_versions_loaded else None,
+        total_versions=student.get_total_versions_count() if article_versions_loaded else None
     )
 
 

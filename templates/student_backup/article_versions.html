@@ -1,14 +1,14 @@
 {% extends "simple_base.html" %}
 
-{% block title %}Artikel-Versionen - yourMoment{% endblock %}
+{% block title %}Artikel-Revisionen - yourMoment{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-12">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="/settings/student-backup">Schüler-Backup</a></li>
-                <li class="breadcrumb-item"><a href="/settings/student-backup/{{ student_id }}">Schüler</a></li>
+                <li class="breadcrumb-item"><a href="/settings/student-backup">Revision-Historien</a></li>
+                <li class="breadcrumb-item"><a href="/settings/student-backup/{{ student_id }}">Schüler:in</a></li>
                 <li class="breadcrumb-item active" id="articleTitle">Artikel</li>
             </ol>
         </nav>
@@ -19,7 +19,7 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Versionshistorie</h5>
+                <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Revisionen-Historie</h5>
                 <a href="https://www.mymoment.ch/article/{{ article_id }}/" target="_blank" class="btn btn-outline-primary btn-sm">
                     <i class="bi bi-box-arrow-up-right me-1"></i>Auf myMoment ansehen
                 </a>
@@ -45,14 +45,11 @@
     const versionsContainer = document.getElementById('versionsContainer');
 
     async function loadVersions() {
+        const { fetchOptions } = window.YM.utils;
         try {
             const response = await fetch(
                 `/api/v1/student-backup/tracked-students/${studentId}/versions?mymoment_article_id=${articleId}`,
-                {
-                    headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-                    }
-                }
+                fetchOptions('GET')
             );
 
             if (!response.ok) {
@@ -79,7 +76,9 @@
                     <table class="table table-hover mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th>Version</th>
+                                <th>Revision</th>
+                                <th>Kategorie</th>
+                                <th>Aufgabe</th>
                                 <th>Status</th>
                                 <th>Gesichert am</th>
                                 <th>Geändert auf myMoment</th>
@@ -92,6 +91,8 @@
                                     <td>
                                         <span class="badge bg-primary">v${version.version_number}</span>
                                     </td>
+                                    <td><small>${version.article_category || '-'}</small></td>
+                                    <td><small>${version.article_task || '-'}</small></td>
                                     <td>
                                         <span class="badge bg-${getStatusBadge(version.article_status)}">
                                             ${version.article_status || '-'}

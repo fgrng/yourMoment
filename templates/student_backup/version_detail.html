@@ -7,7 +7,9 @@
     <div class="col-12">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="/settings/student-backup">Schüler-Backup</a></li>
+                <li class="breadcrumb-item"><a href="/settings/student-backup">Revision-Historien</a></li>
+                <li class="breadcrumb-item"><a href="#" id="studentLink">Schüler:in</a></li>
+                <li class="breadcrumb-item"><a href="#" id="articleLink">Artikel</a></li>
                 <li class="breadcrumb-item active" id="versionTitle">Version</li>
             </ol>
         </nav>
@@ -75,14 +77,13 @@
     const versionInfo = document.getElementById('versionInfo');
     const textContent = document.getElementById('textContent');
     const htmlContent = document.getElementById('htmlContent');
+    const studentLink = document.getElementById('studentLink');
+    const articleLink = document.getElementById('articleLink');
 
     async function loadVersion() {
+        const { fetchOptions } = window.YM.utils;
         try {
-            const response = await fetch(`/api/v1/student-backup/versions/${versionId}`, {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-                }
-            });
+            const response = await fetch(`/api/v1/student-backup/versions/${versionId}`, fetchOptions('GET'));
 
             if (!response.ok) {
                 throw new Error('Failed to load version');
@@ -92,6 +93,10 @@
 
             loadingState.style.display = 'none';
             contentContainer.style.display = 'block';
+
+            // Update breadcrumbs
+            studentLink.href = `/settings/student-backup/${version.tracked_student_id}`;
+            articleLink.href = `/settings/student-backup/${version.tracked_student_id}/articles/${version.mymoment_article_id}`;
 
             // Update title
             versionTitleEl.textContent = `v${version.version_number} - ${version.article_title || 'Unbenannt'}`;

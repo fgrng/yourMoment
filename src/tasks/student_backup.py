@@ -141,7 +141,10 @@ class StudentBackupTask(BaseTask):
         scraper = ScraperService(session)
 
         try:
-            context = await scraper.get_or_create_session(login_id)
+            # Use initialize_session_for_login with the user_id from the first student
+            context = await scraper.initialize_session_for_login(
+                login_id, students[0].user_id
+            )
             if not context.is_authenticated:
                 raise Exception(f"Failed to authenticate with login {login_id}")
 
@@ -161,7 +164,7 @@ class StudentBackupTask(BaseTask):
 
         finally:
             # Clean up the scraper session
-            await scraper.close_session(login_id)
+            await scraper.cleanup_session(login_id)
 
     async def _backup_single_student(
         self,
@@ -290,8 +293,9 @@ class StudentBackupTask(BaseTask):
                 scraper = ScraperService(session)
 
                 try:
-                    context = await scraper.get_or_create_session(
-                        student.mymoment_login_id
+                    context = await scraper.initialize_session_for_login(
+                        student.mymoment_login_id,
+                        student.user_id
                     )
                     if not context.is_authenticated:
                         raise Exception("Authentication failed")
@@ -304,7 +308,7 @@ class StudentBackupTask(BaseTask):
                     stats["status"] = "completed"
 
                 finally:
-                    await scraper.close_session(student.mymoment_login_id)
+                    await scraper.cleanup_session(student.mymoment_login_id)
 
             except StudentBackupDisabledError:
                 stats["status"] = "disabled"

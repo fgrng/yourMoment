@@ -396,17 +396,36 @@ class StudentBackupService(BaseService):
         # Compute content hash
         content_hash = ArticleVersion.compute_content_hash(article_content or "")
 
-        # Check if we should skip creating a new version (content unchanged)
+        # Check if we should skip creating a new version
         if self.settings.STUDENT_BACKUP_CONTENT_CHANGES_ONLY:
             latest_version = await self._get_latest_article_version(
                 tracked_student_id, mymoment_article_id
             )
-            if latest_version and latest_version.content_hash == content_hash:
-                self.logger.debug(
-                    f"Skipping version creation for article {mymoment_article_id}: "
-                    f"content unchanged"
+            
+            if latest_version:
+                # Check for changes in content OR metadata
+                content_changed = latest_version.content_hash != content_hash
+                
+                # Check metadata changes
+                metadata_changed = (
+                    latest_version.article_title != article_title or
+                    latest_version.article_status != article_status or
+                    latest_version.article_visibility != article_visibility or
+                    latest_version.article_category != article_category or
+                    latest_version.article_task != article_task
                 )
-                return None
+                
+                if not (content_changed or metadata_changed):
+                    self.logger.debug(
+                        f"Skipping version creation for article {mymoment_article_id}: "
+                        f"content and metadata unchanged"
+                    )
+                    return None
+                
+                if metadata_changed and not content_changed:
+                    self.logger.info(
+                        f"Creating new version for article {mymoment_article_id} due to metadata change"
+                    )
 
         # Determine version number
         version_number = await self._get_next_version_number(
@@ -574,6 +593,8 @@ class StudentBackupService(BaseService):
             select(
                 ArticleVersion.mymoment_article_id,
                 func.max(ArticleVersion.article_title).label("article_title"),
+                func.max(ArticleVersion.article_category).label("article_category"),
+                func.max(ArticleVersion.article_task).label("article_task"),
                 func.count(ArticleVersion.id).label("version_count"),
                 func.max(ArticleVersion.scraped_at).label("latest_scraped_at"),
                 func.max(ArticleVersion.article_status).label("article_status")
@@ -596,6 +617,8 @@ class StudentBackupService(BaseService):
             {
                 "mymoment_article_id": row.mymoment_article_id,
                 "article_title": row.article_title,
+                "article_category": row.article_category,
+                "article_task": row.article_task,
                 "version_count": row.version_count,
                 "latest_scraped_at": row.latest_scraped_at.isoformat() if row.latest_scraped_at else None,
                 "article_status": row.article_status,
