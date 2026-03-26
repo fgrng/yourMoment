@@ -12,7 +12,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc
 
-from src.api.auth import get_current_user, get_optional_user
+from src.api.auth import get_current_user, get_optional_user, get_current_web_user
 from src.models.user import User
 from src.config.database import get_session
 from src.config.settings import get_settings
@@ -25,6 +25,15 @@ from src.services.prompt_placeholders import SUPPORTED_PLACEHOLDERS
 # Configure templates
 templates_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "templates")
 templates = Jinja2Templates(directory=templates_dir)
+
+# Add global context variables to templates
+def get_global_settings():
+    settings = get_settings()
+    return {
+        "student_backup_enabled": settings.student_backup.STUDENT_BACKUP_ENABLED
+    }
+
+templates.env.globals.update(get_global_settings())
 
 router = APIRouter(
     tags=["Web Interface"],
@@ -525,6 +534,97 @@ async def prompt_templates_edit(request: Request, template_id: str, user: User =
         "template_id": template_id,
         "placeholders": placeholders
     })
+
+
+# =========================================================================
+# Student Backup Routes
+# =========================================================================
+
+@router.get("/settings/student-backup", response_class=HTMLResponse)
+async def student_backup_index(request: Request, user: User = Depends(get_current_user)):
+    """Student backup listing page."""
+    return templates.TemplateResponse("student_backup/tracked_students.html", {
+        "request": request,
+        "user": user,
+        "current_user": user,
+        "is_authenticated": True
+    })
+
+
+@router.get("/settings/student-backup/create", response_class=HTMLResponse)
+async def student_backup_create(request: Request, user: User = Depends(get_current_user)):
+    """Add new tracked student page."""
+    settings = get_settings()
+    return templates.TemplateResponse("student_backup/form.html", {
+        "request": request,
+        "user": user,
+        "current_user": user,
+        "is_authenticated": True,
+        "student_id": None,
+        "backup_interval_minutes": settings.student_backup.STUDENT_BACKUP_INTERVAL_MINUTES
+    })
+
+
+@router.get("/settings/student-backup/{student_id}", response_class=HTMLResponse)
+async def student_backup_detail(request: Request, student_id: str, user: User = Depends(get_current_user)):
+    """Tracked student detail page."""
+    return templates.TemplateResponse("student_backup/tracked_student_detail.html", {
+        "request": request,
+        "user": user,
+        "current_user": user,
+        "is_authenticated": True,
+        "student_id": student_id,
+        "dashboard_url": f"https://www.mymoment.ch/dashboard/user/{student_id}/"
+    })
+
+
+@router.get("/settings/student-backup/{student_id}/edit", response_class=HTMLResponse)
+async def student_backup_edit(request: Request, student_id: str, user: User = Depends(get_current_user)):
+    """Edit tracked student page."""
+    settings = get_settings()
+    return templates.TemplateResponse("student_backup/form.html", {
+        "request": request,
+        "user": user,
+        "current_user": user,
+        "is_authenticated": True,
+        "student_id": student_id,
+        "backup_interval_minutes": settings.student_backup.STUDENT_BACKUP_INTERVAL_MINUTES
+    })
+
+
+@router.get("/settings/student-backup/{student_id}/articles/{article_id}", response_class=HTMLResponse)
+async def student_backup_article_versions(
+    request: Request,
+    student_id: str,
+    article_id: str,
+    user: User = Depends(get_current_user)
+):
+    """Article versions page."""
+    return templates.TemplateResponse("student_backup/article_versions.html", {
+        "request": request,
+        "user": user,
+        "current_user": user,
+        "is_authenticated": True,
+        "student_id": student_id,
+        "article_id": article_id
+    })
+
+
+@router.get("/settings/student-backup/versions/{version_id}", response_class=HTMLResponse)
+async def student_backup_version_detail(
+    request: Request,
+    version_id: str,
+    user: User = Depends(get_current_user)
+):
+    """Version detail page."""
+    return templates.TemplateResponse("student_backup/version_detail.html", {
+        "request": request,
+        "user": user,
+        "current_user": user,
+        "is_authenticated": True,
+        "version_id": version_id
+    })
+
 
 # Error pages
 @router.get("/error", response_class=HTMLResponse)

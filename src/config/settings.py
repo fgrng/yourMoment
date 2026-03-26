@@ -313,6 +313,56 @@ class MonitoringSettings(BaseSettings):
     )
 
 
+class StudentBackupSettings(BaseSettings):
+    """
+    Student Backup feature settings.
+
+    This feature allows backing up and versioning student texts from myMoment
+    for tracking revision activity over time. Requires admin accounts on myMoment
+    that have access to student dashboards.
+
+    The feature is disabled by default and must be explicitly enabled per instance.
+    """
+
+    STUDENT_BACKUP_ENABLED: bool = Field(
+        default=False,
+        description="Enable the Student Backup feature (default: disabled)"
+    )
+
+    STUDENT_BACKUP_INTERVAL_MINUTES: int = Field(
+        default=60,
+        ge=5,
+        le=1440,
+        description="Interval between backup runs in minutes"
+    )
+
+    STUDENT_BACKUP_MAX_TRACKED_STUDENTS_PER_USER: int = Field(
+        default=50,
+        ge=1,
+        le=500,
+        description="Maximum number of students a user can track"
+    )
+
+    STUDENT_BACKUP_MAX_VERSIONS_PER_ARTICLE: int = Field(
+        default=100,
+        ge=10,
+        le=1000,
+        description="Maximum number of versions to keep per article (oldest get soft-deleted)"
+    )
+
+    STUDENT_BACKUP_CONTENT_CHANGES_ONLY: bool = Field(
+        default=True,
+        description="Only create new version if content has changed (uses SHA-256 hash)"
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="",
+        case_sensitive=False,
+        env_file=".env",
+        extra="ignore"
+    )
+
+
 class Settings:
     """
     Unified settings container with environment-specific defaults.
@@ -329,6 +379,7 @@ class Settings:
         self.celery = self._get_celery_settings()
         self.scraper = ScraperSettings()
         self.monitoring = MonitoringSettings()
+        self.student_backup = StudentBackupSettings()
 
     def _get_database_settings(self) -> DatabaseSettings:
         """
@@ -455,3 +506,8 @@ def get_scraper_settings() -> ScraperSettings:
 def get_monitoring_settings() -> MonitoringSettings:
     """Get monitoring settings."""
     return get_settings().monitoring
+
+
+def get_student_backup_settings() -> StudentBackupSettings:
+    """Get student backup settings."""
+    return get_settings().student_backup

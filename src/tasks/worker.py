@@ -27,6 +27,7 @@ TASK_MODULES: Iterable[str] = (
     'src.tasks.article_preparation',
     'src.tasks.comment_generation',
     'src.tasks.comment_posting',
+    'src.tasks.student_backup',
 )
 
 # Configure logging for Celery
@@ -50,6 +51,7 @@ class CeleryConfig:
         'src.tasks.article_preparation.*': {'queue': 'preparation'},
         'src.tasks.comment_generation.*': {'queue': 'generation'},
         'src.tasks.comment_posting.*': {'queue': 'posting'},
+        'src.tasks.student_backup.*': {'queue': 'backup'},
     }
 
     # Define queues
@@ -61,6 +63,7 @@ class CeleryConfig:
         Queue('preparation', routing_key='preparation'),
         Queue('generation', routing_key='generation'),
         Queue('posting', routing_key='posting'),
+        Queue('backup', routing_key='backup'),  # Student Backup feature
         Queue('celery', routing_key='celery'),  # default queue
     )
 
@@ -104,6 +107,11 @@ class CeleryConfig:
         'trigger-monitoring-pipeline': {
             'task': 'src.tasks.scheduler.trigger_monitoring_pipeline',
             'schedule': settings.monitoring.ARTICLE_DISCOVERY_INTERVAL_SECONDS,
+        },
+        # Student Backup feature - task checks STUDENT_BACKUP_ENABLED internally
+        'backup-tracked-students': {
+            'task': 'src.tasks.student_backup.backup_all_tracked_students',
+            'schedule': settings.student_backup.STUDENT_BACKUP_INTERVAL_MINUTES * 60,
         },
     }
     beat_scheduler = 'celery.beat:PersistentScheduler'

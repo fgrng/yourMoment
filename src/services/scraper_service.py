@@ -127,6 +127,24 @@ class SessionContext:
     is_authenticated: bool = False
 
 
+@dataclass
+class StudentArticleInfo:
+    """
+    Article information extracted from a student's dashboard on myMoment.
+
+    Used by the Student Backup feature to list all articles belonging to
+    a tracked student before fetching their full content.
+    """
+    article_id: int
+    title: str
+    visibility: str  # e.g., "3. Klasse (Primarschule Schachen)"
+    category: str    # e.g., "Unterhalten"
+    status: str      # "Publiziert", "Entwurf", "Lehrpersonenkontrolle"
+    last_modified: Optional[datetime]
+    edit_url: str    # /article/edit/{id}/
+    view_url: str    # /article/{id}/
+
+
 class ScrapingError(Exception):
     """Base exception for scraping operations."""
     pass
@@ -1170,3 +1188,211 @@ class ScraperService:
                 status['sessions'].append(session_info)
 
             return status
+
+    # =========================================================================
+    # Student Backup Feature - Dashboard Scraping
+    # =========================================================================
+
+    async def get_student_articles_from_dashboard(
+        self,
+        context: SessionContext,
+        student_id: int
+    ) -> List[StudentArticleInfo]:
+        """
+        Get list of articles from a student's dashboard on myMoment.
+
+        This method requires an admin account session to access the student dashboard.
+        The dashboard URL is: https://www.mymoment.ch/dashboard/user/{student_id}/
+
+        Args:
+            context: Authenticated session context (must be admin account)
+            student_id: myMoment student user ID
+
+        Returns:
+            List of StudentArticleInfo objects containing article metadata
+
+        Raises:
+            ScrapingError: If dashboard access fails or parsing fails
+        """
+        try:
+            if not context.is_authenticated:
+                raise ScrapingError(f"Session not authenticated for login {context.login_id}")
+
+            dashboard_url = f"{self.config.base_url}/dashboard/user/{student_id}/"
+
+            logger.debug(
+                f"Fetching student dashboard (student_id={student_id}, login={context.login_id})"
+            )
+            await self._rate_limit()
+
+            async with context.aiohttp_session.get(dashboard_url) as response:
+                if response.status == 403:
+                    raise ScrapingError(
+                        f"Access denied to student dashboard. "
+                        f"Ensure the login is an admin account with dashboard access."
+                    )
+                if response.status == 404:
+                    raise ScrapingError(f"Student with ID {student_id} not found")
+                if response.status != 200:
+                    raise ScrapingError(
+                        f"Failed to load student dashboard: HTTP {response.status}"
+                    )
+
+                html = await response.text()
+
+            soup = BeautifulSoup(html, 'html.parser')
+
+            # Parse the articles table from the dashboard
+            articles = self._parse_student_dashboard_articles(soup, student_id)
+
+            context.last_activity = datetime.utcnow()
+            logger.info(
+                f"Found {len(articles)} articles for student {student_id}"
+            )
+
+            return articles
+
+        except ScrapingError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to get student dashboard for {student_id}: {e}")
+            raise ScrapingError(f"Student dashboard retrieval failed: {e}")
+
+    def _parse_student_dashboard_articles(
+        self,
+        soup: BeautifulSoup,
+        student_id: int
+    ) -> List[StudentArticleInfo]:
+        """
+        Parse the articles table from a student's dashboard HTML.
+
+        Expected HTML structure:
+        <table>
+          <tbody>
+            <tr>
+              <td><a href="/article/edit/2695/">Article Title</a></td>
+              <td>3. Klasse (Primarschule Schachen)</td>
+              <td><li class="list-group-item">Unterhalten</li></td>
+              <td>Publiziert</td>
+              <td>28.01.2026 um 09:24 Uhr</td>
+            </tr>
+          </tbody>
+        </table>
+
+        Args:
+            soup: BeautifulSoup object of the dashboard page
+            student_id: myMoment student user ID (for logging)
+
+        Returns:
+            List of StudentArticleInfo objects
+        """
+        articles = []
+
+        # Find the articles tab content - look for the table in #pills-articles
+        articles_tab = soup.select_one('#pills-articles')
+        if not articles_tab:
+            # Try finding any table with article links
+            articles_tab = soup
+
+        # Find all rows in the articles table
+        rows = articles_tab.select('table tbody tr')
+
+        for row in rows:
+            try:
+                cells = row.find_all('td')
+                if len(cells) < 5:
+                    continue
+
+                # Column 1: Title with edit URL
+                title_cell = cells[0]
+                title_link = title_cell.find('a')
+                if not title_link:
+                    continue
+
+                title = title_link.get_text(strip=True)
+                edit_url = title_link.get('href', '')
+
+                # Extract article ID from edit URL: /article/edit/2695/
+                article_id = self._extract_article_id_from_url(edit_url)
+                if article_id is None:
+                    logger.warning(f"Could not extract article ID from URL: {edit_url}")
+                    continue
+
+                # Column 2: Visibility (class/group)
+                visibility = cells[1].get_text(strip=True)
+
+                # Column 3: Category (may contain multiple li elements)
+                category_cell = cells[2]
+                category_items = category_cell.find_all('li')
+                if category_items:
+                    category = ', '.join(item.get_text(strip=True) for item in category_items)
+                else:
+                    category = category_cell.get_text(strip=True)
+
+                # Column 4: Status
+                status = cells[3].get_text(strip=True)
+
+                # Column 5: Last modified datetime
+                last_modified_text = cells[4].get_text(strip=True)
+                last_modified = self._parse_german_datetime(last_modified_text)
+
+                # Build view URL from article ID
+                view_url = f"/article/{article_id}/"
+
+                article_info = StudentArticleInfo(
+                    article_id=article_id,
+                    title=title,
+                    visibility=visibility,
+                    category=category,
+                    status=status,
+                    last_modified=last_modified,
+                    edit_url=edit_url,
+                    view_url=view_url
+                )
+                articles.append(article_info)
+
+            except Exception as e:
+                logger.warning(f"Failed to parse article row: {e}")
+                continue
+
+        return articles
+
+    def _extract_article_id_from_url(self, url: str) -> Optional[int]:
+        """
+        Extract article ID from a myMoment URL.
+
+        Handles URLs like:
+        - /article/edit/2695/
+        - /article/2695/
+
+        Args:
+            url: URL string to parse
+
+        Returns:
+            Article ID as integer, or None if not found
+        """
+        match = re.search(r'/article/(?:edit/)?(\d+)/', url)
+        if match:
+            return int(match.group(1))
+        return None
+
+    def _parse_german_datetime(self, datetime_str: str) -> Optional[datetime]:
+        """
+        Parse German datetime string from myMoment.
+
+        Expected format: "28.01.2026 um 09:24 Uhr"
+
+        Args:
+            datetime_str: German datetime string
+
+        Returns:
+            Parsed datetime object, or None if parsing fails
+        """
+        try:
+            # Remove "um" and "Uhr" and parse
+            # Format: "28.01.2026 um 09:24 Uhr" -> "28.01.2026 09:24"
+            cleaned = datetime_str.replace(' um ', ' ').replace(' Uhr', '')
+            return datetime.strptime(cleaned, '%d.%m.%Y %H:%M')
+        except (ValueError, AttributeError) as e:
+            logger.debug(f"Could not parse datetime '{datetime_str}': {e}")
+            return None

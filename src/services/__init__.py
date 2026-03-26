@@ -14,7 +14,7 @@ from .mymoment_credentials_service import (
 )
 from .mymoment_session_service import MyMomentSessionService
 from .llm_service import LLMProviderService, LLMProviderError
-from .scraper_service import ScraperService, ScrapingError, SessionContext
+from .scraper_service import ScraperService, ScrapingError, SessionContext, StudentArticleInfo
 from .monitoring_service import MonitoringService
 from .comment_service import CommentService, CommentGenerationError
 from .prompt_service import (
@@ -24,6 +24,14 @@ from .prompt_service import (
     TemplateValidationError,
     TemplateAccessError,
     TemplatePreviewRequest
+)
+from .student_backup_service import (
+    StudentBackupService,
+    StudentBackupServiceError,
+    StudentBackupValidationError,
+    StudentBackupNotFoundError,
+    StudentBackupDisabledError,
+    StudentBackupLimitError
 )
 
 __all__ = [
@@ -49,6 +57,7 @@ __all__ = [
     "ScraperService",
     "ScrapingError",
     "SessionContext",
+    "StudentArticleInfo",
 
     # Monitoring
     "MonitoringService",
@@ -63,5 +72,13 @@ __all__ = [
     "TemplateNotFoundError",
     "TemplateValidationError",
     "TemplateAccessError",
-    "TemplatePreviewRequest"
+    "TemplatePreviewRequest",
+
+    # Student Backup
+    "StudentBackupService",
+    "StudentBackupServiceError",
+    "StudentBackupValidationError",
+    "StudentBackupNotFoundError",
+    "StudentBackupDisabledError",
+    "StudentBackupLimitError"
 ]
