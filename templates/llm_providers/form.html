@@ -59,9 +59,17 @@
                     </div>
 
                     <div class="mb-3">
-                        <label for="modelName" class="form-label">Modellname <span class="text-danger">*</span></label>
-                        <input type="text" id="modelName" name="model_name" class="form-control" maxlength="100" required placeholder="z. B. gpt-4o-mini oder mistral-large-latest">
-                        <div class="form-text">Gib den exakten Modellbezeichner des LLM-Anbieters an.</div>
+                        <label for="modelName" class="form-label">
+                            Modellname <span class="text-danger">*</span>
+                            <span id="reasoningBadge" class="badge bg-warning text-dark ms-2" style="display:none;">
+                                <i class="bi bi-cpu me-1"></i>Reasoning-Modell
+                            </span>
+                        </label>
+                        <div class="position-relative">
+                            <input type="text" id="modelName" name="model_name" class="form-control" maxlength="100" required placeholder="z. B. gpt-4o-mini oder mistral-large-latest" autocomplete="off">
+                            <ul id="modelSuggestions" class="list-group position-absolute w-100 shadow-sm" style="display:none; z-index:1000; max-height:220px; overflow-y:auto;"></ul>
+                        </div>
+                        <div class="form-text">Tippe, um unterstützte Modelle zu suchen, oder gib den exakten Bezeichner ein.</div>
                     </div>
 
                     <div class="row g-3">
@@ -135,6 +143,83 @@ document.addEventListener('DOMContentLoaded', async function() {
         togglePasswordVisibility(apiKeyInput, toggleApiKeyIcon);
     });
 
+    // --- Model autocomplete ---
+    let allModels = [];
+    const suggestions = document.getElementById('modelSuggestions');
+    const reasoningBadge = document.getElementById('reasoningBadge');
+
+    fetch('/api/v1/llm-providers/supported', fetchOptions('GET'))
+        .then(r => r.ok ? r.json() : {})
+        .then(catalog => {
+            allModels = Object.entries(catalog).map(([key, info]) => ({
+                name: key,
+                bare: key.replace(/^[^/]+\//, ''),
+                provider: info.provider,
+                supports_reasoning: info.supports_reasoning,
+            }));
+        })
+        .catch(() => {});
+
+    function fuzzyFilter(query, models) {
+        if (!query) return [];
+        const q = query.toLowerCase();
+        const prov = providerNameInput.value;
+        return models
+            .filter(m => {
+                if (prov && m.provider !== prov) return false;
+                const name = m.bare.toLowerCase();
+                let qi = 0;
+                for (let i = 0; i < name.length && qi < q.length; i++) {
+                    if (name[i] === q[qi]) qi++;
+                }
+                return qi === q.length;
+            })
+            .slice(0, 12);
+    }
+
+    function renderSuggestions(matches) {
+        suggestions.innerHTML = '';
+        if (!matches.length) { suggestions.style.display = 'none'; return; }
+        matches.forEach(m => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center py-1';
+            li.style.cursor = 'pointer';
+            li.innerHTML = `<span>${m.bare}</span>` +
+                (m.supports_reasoning ? '<span class="badge bg-warning text-dark">Reasoning</span>' : '');
+            li.addEventListener('mousedown', e => {
+                e.preventDefault();
+                modelNameInput.value = m.bare;
+                suggestions.style.display = 'none';
+                reasoningBadge.style.display = m.supports_reasoning ? 'inline-block' : 'none';
+            });
+            suggestions.appendChild(li);
+        });
+        suggestions.style.display = 'block';
+    }
+
+    function updateReasoningBadge() {
+        const val = modelNameInput.value.trim().toLowerCase();
+        const match = allModels.find(m => m.bare.toLowerCase() === val);
+        reasoningBadge.style.display = (match?.supports_reasoning) ? 'inline-block' : 'none';
+    }
+
+    modelNameInput.addEventListener('input', () => {
+        renderSuggestions(fuzzyFilter(modelNameInput.value.trim(), allModels));
+        updateReasoningBadge();
+    });
+    modelNameInput.addEventListener('blur', () => {
+        setTimeout(() => { suggestions.style.display = 'none'; }, 150);
+        updateReasoningBadge();
+    });
+    modelNameInput.addEventListener('focus', () => {
+        if (modelNameInput.value.trim())
+            renderSuggestions(fuzzyFilter(modelNameInput.value.trim(), allModels));
+    });
+    providerNameInput.addEventListener('change', () => {
+        if (modelNameInput.value.trim())
+            renderSuggestions(fuzzyFilter(modelNameInput.value.trim(), allModels));
+    });
+
     if (isEditMode) {
         await loadProvider();
     }
@@ -193,6 +278,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             modelNameInput.value = provider.model_name || '';
             maxTokensInput.value = provider.max_tokens ?? '';
             temperatureInput.value = provider.temperature ?? '';
+            updateReasoningBadge();
 
             form.dataset.originalModelName = modelNameInput.value;
             form.dataset.originalMaxTokens = maxTokensInput.value;

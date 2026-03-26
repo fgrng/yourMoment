@@ -89,6 +89,38 @@ async def get_llm_providers(
         )
 
 
+# Must be defined before /{provider_id} to avoid FastAPI routing "supported" as a UUID
+@router.get(
+    "/supported",
+    summary="Get supported LLM providers",
+    description="Get model catalog for supported providers (OpenAI, Mistral) with capability flags.",
+    responses={
+        200: {"description": "Model catalog retrieved successfully"}
+    }
+)
+async def get_supported_providers(
+    current_user: User = Depends(get_current_user),
+    llm_service: LLMProviderService = Depends(get_llm_service)
+):
+    """
+    Get information about supported LLM providers.
+
+    Returns:
+        dict: Model catalog keyed by litellm model identifier
+    """
+    try:
+        supported_providers = llm_service.get_supported_providers()
+        logger.info(f"Retrieved supported providers info for user {current_user.id}")
+        return supported_providers
+
+    except Exception as e:
+        logger.error(f"Error retrieving supported providers: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve supported providers information"
+        )
+
+
 @router.get(
     "/{provider_id}",
     response_model=LLMProviderResponse,
@@ -374,35 +406,3 @@ async def delete_llm_provider(
             detail="Failed to delete provider configuration"
         )
 
-
-# Additional endpoint to get supported providers info
-@router.get(
-    "/supported",
-    response_model=dict,
-    summary="Get supported LLM providers",
-    description="Get information about supported LLM providers and their capabilities",
-    responses={
-        200: {"description": "Supported providers information retrieved successfully"}
-    }
-)
-async def get_supported_providers(
-    current_user: User = Depends(get_current_user),
-    llm_service: LLMProviderService = Depends(get_llm_service)
-):
-    """
-    Get information about supported LLM providers.
-
-    Returns:
-        dict: Information about supported providers
-    """
-    try:
-        supported_providers = llm_service.get_supported_providers()
-        logger.info(f"Retrieved supported providers info for user {current_user.id}")
-        return supported_providers
-
-    except Exception as e:
-        logger.error(f"Error retrieving supported providers: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve supported providers information"
-        )
