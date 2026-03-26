@@ -405,6 +405,7 @@ class AICommentResponse(BaseModel):
 
     # AI comment fields
     comment_content: Optional[str] = Field(..., description="AI-generated comment content")
+    reasoning_content: Optional[str] = Field(None, description="Native reasoning/thought process from LLM (o-series, Magistral)")
     is_hidden: bool = Field(..., description="Whether comment is hidden on myMoment")
     status: str = Field(..., description="Comment status: generated, posted, failed, deleted")
     ai_model_name: Optional[str] = Field(None, description="LLM model used")

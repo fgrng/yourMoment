@@ -112,8 +112,9 @@ class AIComment(BaseModel):
     # AI COMMENT FIELDS
     # ========================================
 
-    # Comment content (nullable to support discovered->generated->posted workflow)
+    # AI comment fields
     comment_content = Column(Text, nullable=True)
+    reasoning_content = Column(Text, nullable=True)  # Store native reasoning/thought process from LLM
 
     # Comment visibility on myMoment
     is_hidden = Column(Boolean, nullable=False, default=False)  # Whether comment is hidden on myMoment
@@ -348,6 +349,7 @@ class AIComment(BaseModel):
             "id": self.id,
             "mymoment_comment_id": self.mymoment_comment_id,
             "content": self.comment_content,
+            "reasoning_content": self.reasoning_content,
             "status": self.status,
             "is_posted": self.is_posted,
             "is_hidden": self.is_hidden,
