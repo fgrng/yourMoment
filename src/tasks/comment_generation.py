@@ -215,7 +215,7 @@ class CommentGenerationTask(BaseTask):
         formatted_prompt: str,
         system_prompt: str,
         llm_config: LLMConfig
-    ) -> tuple[str, int]:
+    ) -> tuple[str, Optional[str], int]:
         """
         Generate comment using LLM API.
 
@@ -227,22 +227,18 @@ class CommentGenerationTask(BaseTask):
             llm_config: LLM provider configuration
 
         Returns:
-            Tuple of (generated_text, generation_time_ms)
+            Tuple of (generated_text, reasoning_content, generation_time_ms)
 
         Raises:
             LLMProviderError: If generation fails
         """
         start_time = datetime.utcnow()
 
-        # Create a temporary session for LLMProviderService
-        # Note: The service will use this session but won't hold it during API calls
         session = await self.get_async_session()
         async with session:
-            # Create a temporary LLMProviderConfiguration object for generation
-            # We can't use the cached config directly, so we recreate it
             temp_provider = LLMProviderConfiguration(
-                id=uuid.uuid4(),  # Temporary ID
-                user_id=uuid.uuid4(),  # Temporary user ID
+                id=uuid.uuid4(),
+                user_id=uuid.uuid4(),
                 provider_name=llm_config.provider_name,
                 model_name=llm_config.model_name,
                 max_tokens=llm_config.max_tokens,
@@ -250,23 +246,18 @@ class CommentGenerationTask(BaseTask):
             )
             temp_provider.set_api_key(llm_config.api_key)
 
-            # Initialize LLM service
             llm_service = LLMProviderService(session)
 
-            # Generate completion (this happens outside the DB session internally)
-            generated_text = await llm_service.generate_completion(
+            generated_text, reasoning_content = await llm_service.generate_completion(
                 user_prompt=formatted_prompt,
                 provider_config=temp_provider,
                 system_prompt=system_prompt
             )
 
-        # Session closed
-
-        # Calculate generation time
         end_time = datetime.utcnow()
         generation_time_ms = int((end_time - start_time).total_seconds() * 1000)
 
-        return generated_text, generation_time_ms
+        return generated_text, reasoning_content, generation_time_ms
 
     def _add_ai_prefix(self, comment_text: str) -> str:
         """
@@ -313,6 +304,7 @@ class CommentGenerationTask(BaseTask):
 
             # Update fields
             ai_comment.comment_content = comment_data['comment_content']
+            ai_comment.reasoning_content = comment_data.get('reasoning_content')
             ai_comment.ai_model_name = comment_data['ai_model_name']
             ai_comment.ai_provider_name = comment_data['ai_provider_name']
             ai_comment.generation_tokens = comment_data.get('generation_tokens')
@@ -418,7 +410,7 @@ class CommentGenerationTask(BaseTask):
                     formatted_prompt = self._format_user_prompt(comment_snapshot, prompt_config)
 
                     # Generate comment via LLM (outside DB session)
-                    generated_text, generation_time_ms = await self._generate_comment_with_llm(
+                    generated_text, reasoning_content, generation_time_ms = await self._generate_comment_with_llm(
                         formatted_prompt=formatted_prompt,
                         system_prompt=prompt_config.system_prompt,
                         llm_config=llm_config
@@ -430,6 +422,7 @@ class CommentGenerationTask(BaseTask):
                     # Update AIComment record
                     comment_data = {
                         'comment_content': comment_with_prefix,
+                        'reasoning_content': reasoning_content,
                         'ai_model_name': llm_config.model_name,
                         'ai_provider_name': llm_config.provider_name,
                         'generation_tokens': None,  # Not available from current API

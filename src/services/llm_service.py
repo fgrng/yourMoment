@@ -9,7 +9,8 @@ import uuid
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
-import instructor
+import litellm
+import litellm.exceptions
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select, and_, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,7 +39,29 @@ class LLMProviderValidationError(LLMProviderError):
 
 
 class PydanticComment(BaseModel):
-    content: str = Field(description="AI-generated comment on myMoment article")
+    reasoning: Optional[str] = Field(
+        None,
+        description=(
+            "Internal reasoning for comment generation on the myMoment platform. "
+            "Think step-by-step. This is not visible by the author. "
+            "Write your reasoning here."
+        )
+    )
+    content: str = Field(
+        description=(
+            "Generated comment for publishing on the myMoment platform. "
+            "This is visible by the author of the article commented upon. "
+            "Write your comment here."
+        )
+    )
+
+
+# Provider-level metadata not available in litellm.model_cost
+_PROVIDER_META: dict[str, dict] = {
+    "openai": {"api_key_prefix": "sk-"},
+    "mistral": {"api_key_prefix": ""},
+}
+
 
 class LLMProviderService:
     """
@@ -46,26 +69,11 @@ class LLMProviderService:
 
     Implements:
     - Encrypted API key storage (FR-002)
-    - Multi-provider support (OpenAI, Mistral)
-    - Unified instructor-based generation with JSON mode for token efficiency
+    - Multi-provider support (OpenAI, Mistral) via LiteLLM
+    - Unified generation with LiteLLM native structured output
     - User data isolation (each user manages their own providers)
     - Configuration validation and management
-
-    Note: HuggingFace support temporarily removed - will be re-added via LiteLLM integration
     """
-
-    # Supported LLM providers
-    # Note: HuggingFace temporarily removed - will be re-added via LiteLLM integration
-    SUPPORTED_PROVIDERS = {
-        "openai": {
-            "default_models": ["gpt-5-nano", "gpt-5", "gpt-4.1"],
-            "api_key_prefix": "sk-"
-        },
-        "mistral": {
-            "default_models": ["mistral-small-latest", "magistral-small-latest", "magistral-medium-latest", "mistral-medium-latest"],
-            "api_key_prefix": ""
-        }
-    }
 
     def __init__(self, db_session: AsyncSession):
         """
@@ -90,7 +98,7 @@ class LLMProviderService:
 
         Args:
             user_id: ID of the user creating the configuration
-            provider_name: Name of the LLM provider (openai, mistral)
+            provider_name: Name of the LLM provider (openai, mistral, huggingface)
             api_key: API key for the provider (will be encrypted)
             model_name: Specific model to use
             max_tokens: Maximum tokens for responses (optional)
@@ -105,15 +113,15 @@ class LLMProviderService:
         """
         try:
             # Validate provider name
-            if provider_name not in self.SUPPORTED_PROVIDERS:
+            if provider_name not in _PROVIDER_META:
                 raise LLMProviderValidationError(
                     f"Unsupported provider: {provider_name}. "
-                    f"Supported providers: {list(self.SUPPORTED_PROVIDERS.keys())}"
+                    f"Supported providers: {list(_PROVIDER_META.keys())}"
                 )
 
             # Validate API key format if provider has prefix requirement
-            provider_info = self.SUPPORTED_PROVIDERS[provider_name]
-            if provider_info["api_key_prefix"] and not api_key.startswith(provider_info["api_key_prefix"]):
+            prefix = _PROVIDER_META[provider_name]["api_key_prefix"]
+            if prefix and not api_key.startswith(prefix):
                 logger.warning(f"API key format may be invalid for {provider_name}")
 
             # Validate temperature range
@@ -354,12 +362,31 @@ class LLMProviderService:
 
     def get_supported_providers(self) -> Dict[str, Any]:
         """
-        Get information about supported LLM providers.
+        Return model catalog for supported providers.
+
+        Filters litellm.model_cost to OpenAI and Mistral models that support
+        structured output (supports_response_schema=True). Each entry includes
+        capability flags and provider metadata relevant to this project.
 
         Returns:
-            Dictionary with provider information
+            Dict keyed by litellm model identifier (e.g. "openai/gpt-4o")
         """
-        return self.SUPPORTED_PROVIDERS.copy()
+        catalog: Dict[str, Any] = {}
+        for model_key, info in litellm.model_cost.items():
+            provider = info.get("litellm_provider", "")
+            if provider not in _PROVIDER_META:
+                continue
+            if not info.get("supports_response_schema"):
+                continue
+            catalog[model_key] = {
+                "provider": provider,
+                "supports_response_schema": True,
+                "supports_reasoning": bool(info.get("supports_reasoning", False)),
+                "api_key_prefix": _PROVIDER_META[provider]["api_key_prefix"],
+                "max_input_tokens": info.get("max_input_tokens"),
+                "max_output_tokens": info.get("max_output_tokens"),
+            }
+        return dict(sorted(catalog.items()))
 
     async def get_active_providers(self, user_id: uuid.UUID) -> List[LLMProviderConfiguration]:
         """
@@ -389,117 +416,107 @@ class LLMProviderService:
             logger.error(f"Failed to retrieve active providers for user {user_id}: {e}")
             raise LLMProviderError(f"Failed to retrieve active providers: {e}")
 
-    async def _get_instructor_client(
-        self,
-        provider_name: str,
-        api_key: str
-    ) -> instructor.Instructor:
-        """
-        Initialize instructor client for specified provider.
-
-        Args:
-            provider_name: Name of LLM provider (openai, mistral)
-            api_key: Decrypted API key
-
-        Returns:
-            Instructor-wrapped client
-
-        Raises:
-            LLMProviderError: If client initialization fails
-        """
-        try:
-            if provider_name == "openai":
-                try:
-                    from openai import AsyncOpenAI
-                except ImportError as exc:
-                    raise LLMProviderError(
-                        "openai package is required for OpenAI support"
-                    ) from exc
-
-                base_client = AsyncOpenAI(api_key=api_key)
-                return instructor.from_openai(
-                    base_client,
-                    mode=instructor.Mode.JSON
-                )
-
-            elif provider_name == "mistral":
-                try:
-                    from mistralai import Mistral
-                except ImportError as exc:
-                    raise LLMProviderError(
-                        "mistralai package is required for Mistral support"
-                    ) from exc
-
-                base_client = Mistral(api_key=api_key)
-                return instructor.from_mistral(
-                    base_client,
-                    mode=instructor.Mode.MISTRAL_STRUCTURED_OUTPUTS,
-                    use_async=True
-                )
-
-            else:
-                raise LLMProviderError(f"Unsupported provider: {provider_name}")
-
-        except Exception as e:
-            logger.error(f"Failed to initialize instructor client for {provider_name}: {e}")
-            raise LLMProviderError(f"Client initialization failed: {e}")
-
     async def _generate_with_instructor(
         self,
-        client: instructor.Instructor,
         user_prompt: str,
+        provider_name: str,
         model: str,
-        max_tokens: int,
-        temperature: float,
+        api_key: str,
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
         system_prompt: Optional[str] = None
-    ) -> str:
+    ) -> tuple[str, Optional[str]]:
         """
-        Generate completion using instructor client with structured output.
-
-        Uses JSON mode with PydanticComment for minimal token overhead while
-        maintaining structured validation.
+        Generate completion using LiteLLM with Pydantic structured output.
 
         Args:
-            client: Instructor-wrapped client
             user_prompt: User prompt text
+            provider_name: Provider name (to determine LiteLLM model prefix)
             model: Model name
+            api_key: Decrypted API key
             max_tokens: Maximum tokens
             temperature: Temperature setting
             system_prompt: Optional system prompt to guide the model
 
         Returns:
-            Generated text string
+            Tuple of (generated text, reasoning_content or None)
 
         Raises:
             LLMProviderError: If generation fails
         """
         try:
+            # Determine LiteLLM model string (format: "provider/model")
+            # Strip any accidental provider prefix the caller may have included
+            bare_model = model.removeprefix(f"{provider_name}/")
+            litellm_model = f"{provider_name}/{bare_model}"
+
             # Build messages list
             messages = []
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": user_prompt})
 
-            # Use instructor with JSON mode for structured output
             params = {
-                "model": model,
+                "model": litellm_model,
                 "messages": messages,
                 "response_model": PydanticComment,
+                "api_key": api_key
             }
 
-            if max_tokens is not None:
-                params["max_tokens"] = max_tokens
+            is_reasoning_model = any(m in litellm_model.lower() for m in ["o1-", "o3-", "gpt-5", "magistral"])
+            if not is_reasoning_model:
+                if max_tokens is not None:
+                    params["max_tokens"] = max_tokens
+                if temperature is not None:
+                    params["temperature"] = temperature
+            else:
+                if max_tokens is not None:
+                    params["max_completion_tokens"] = max_tokens
+                params["temperature"] = 1.0
 
-            if temperature is not None:
-                params["temperature"] = temperature
+            response = await litellm.acompletion(**params)
+            parsed = PydanticComment.model_validate_json(response.choices[0].message.content)
 
-            response = await client.chat.completions.create(**params)
+            # Extract reasoning content if present
+            # Priority 1: native reasoning tokens (o-series, Magistral)
+            # Priority 2: CoT from structured output field (non-reasoning models)
+            reasoning_content = None
+            try:
+                message = response.choices[0].message
+                if hasattr(message, "reasoning_content") and message.reasoning_content:
+                    reasoning_content = message.reasoning_content
+                elif isinstance(message, dict) and message.get("reasoning_content"):
+                    reasoning_content = message["reasoning_content"]
+                elif parsed.reasoning:
+                    reasoning_content = parsed.reasoning
+            except Exception:
+                pass
 
-            # Extract content from structured response
-            return response.content.strip()
+            return parsed.content.strip(), reasoning_content
 
+        except litellm.exceptions.AuthenticationError as e:
+            logger.error(f"LiteLLM authentication failed for {provider_name}/{model}: {e}")
+            raise LLMProviderError(f"Invalid API key or authentication failed: {e}")
+        except litellm.exceptions.RateLimitError as e:
+            logger.warning(f"LiteLLM rate limit hit for {provider_name}/{model}: {e}")
+            raise LLMProviderError(f"Rate limit exceeded — try again later: {e}")
+        except litellm.exceptions.ContextWindowExceededError as e:
+            logger.error(f"LiteLLM context window exceeded for {provider_name}/{model}: {e}")
+            raise LLMProviderError(f"Prompt exceeds model context window: {e}")
+        except litellm.exceptions.APIConnectionError as e:
+            logger.error(f"LiteLLM connection error for {provider_name}/{model}: {e}")
+            raise LLMProviderError(f"Could not reach LLM provider API: {e}")
+        except litellm.exceptions.Timeout as e:
+            logger.error(f"LiteLLM request timed out for {provider_name}/{model}: {e}")
+            raise LLMProviderError(f"LLM request timed out: {e}")
+        except litellm.exceptions.ServiceUnavailableError as e:
+            logger.error(f"LiteLLM provider unavailable for {provider_name}/{model}: {e}")
+            raise LLMProviderError(f"LLM provider temporarily unavailable: {e}")
+        except (ValidationError, ValueError) as e:
+            logger.error(f"Failed to parse structured output from {provider_name}/{model}: {e}")
+            raise LLMProviderError(f"Model returned invalid structured output: {e}")
         except Exception as e:
-            logger.error(f"Instructor generation failed: {e}")
+            logger.error(f"LiteLLM generation failed for {provider_name}/{model}: {e}")
             raise LLMProviderError(f"Generation failed: {e}")
 
     async def generate_completion(
@@ -507,11 +524,9 @@ class LLMProviderService:
         user_prompt: str,
         provider_config: LLMProviderConfiguration,
         system_prompt: Optional[str] = None
-    ) -> str:
+    ) -> tuple[str, Optional[str]]:
         """
         Generate LLM completion using specified provider configuration.
-
-        Uses instructor library with JSON mode for structured output and minimal token overhead.
 
         Args:
             user_prompt: The prompt text to send to the LLM
@@ -519,33 +534,22 @@ class LLMProviderService:
             system_prompt: Optional system prompt to guide the model
 
         Returns:
-            Generated text completion from LLM
+            Tuple of (generated text, reasoning_content or None)
 
         Raises:
             LLMProviderError: If generation fails
         """
         try:
-            # Use config values or overrides
-            final_max_tokens = provider_config.max_tokens
-            final_temperature = provider_config.temperature
-
-            # Get decrypted API key
             decrypted_key = provider_config.get_api_key()
 
-            # Initialize instructor client
-            client = await self._get_instructor_client(
-                provider_config.provider_name,
-                decrypted_key
-            )
-
-            # Generate using unified instructor method
             return await self._generate_with_instructor(
-                client,
-                user_prompt,
-                provider_config.model_name,
-                final_max_tokens,
-                final_temperature,
-                system_prompt
+                user_prompt=user_prompt,
+                provider_name=provider_config.provider_name,
+                model=provider_config.model_name,
+                api_key=decrypted_key,
+                max_tokens=provider_config.max_tokens,
+                temperature=provider_config.temperature,
+                system_prompt=system_prompt
             )
 
         except Exception as e:

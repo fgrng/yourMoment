@@ -14,8 +14,8 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Union
 from dataclasses import dataclass
 
-import instructor
-import openai
+import litellm
+import litellm.exceptions
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
@@ -78,6 +78,7 @@ class CommentResponse:
     token_count: Optional[int] = None
     validation_errors: List[str] = None
     fallback_used: bool = False
+    reasoning_content: Optional[str] = None  # Native reasoning/thought process from LLM
 
 
 class CommentGenerationError(Exception):
@@ -108,7 +109,7 @@ class CommentService:
 
     Features:
     - German AI prefix enforcement (FR-006)
-    - Multi-provider LLM integration (OpenAI, Mistral, HuggingFace)
+    - Multi-provider LLM integration via LiteLLM (OpenAI, Mistral, HuggingFace)
     - Prompt template processing with placeholder replacement
     - Comment validation and quality assurance
     - Fallback strategies for provider failures
@@ -316,7 +317,7 @@ class CommentService:
         fallback_used: bool = False
     ) -> CommentResponse:
         """
-        Generate comment using a specific LLM provider.
+        Generate comment using a specific LLM provider via LiteLLM.
 
         Args:
             provider_config: LLM provider configuration
@@ -333,31 +334,38 @@ class CommentService:
             CommentGenerationError: If generation fails
         """
         try:
-            # Get provider configuration for generation
-            generation_config = await self.llm_service.get_provider_for_generation(
-                provider_config.id,
-                user_id
-            )
+            # Get decrypted API key
+            decrypted_key = provider_config.get_api_key()
 
-            # Initialize provider-specific client
-            client = await self._initialize_provider_client(provider_config, generation_config)
-
-            # Generate comment using instructor
+            # Generate comment using unified LiteLLM-based instructor client
             async with asyncio.timeout(self.config.generation_timeout):
-                response = await self._call_llm(
-                    client,
+                # Use create_with_completion to capture reasoning tokens
+                parsed_response, raw_completion = await self._call_llm(
                     provider_config,
+                    decrypted_key,
                     template.system_prompt,
                     rendered_prompt
                 )
 
             # Extract comment text
-            if isinstance(response, CommentStructure):
-                comment_content = response.comment_content
-                token_count = None  # Would need provider-specific token counting
-            else:
-                comment_content = str(response)
-                token_count = None
+            comment_content = parsed_response.comment_content
+            
+            # Extract reasoning content.
+            # Priority 1: native reasoning tokens (o-series, Magistral)
+            # Priority 2: CoT from structured output field (non-reasoning models)
+            reasoning_content = None
+            try:
+                message = raw_completion.choices[0].message
+                if hasattr(message, "reasoning_content") and message.reasoning_content:
+                    reasoning_content = message.reasoning_content
+                elif isinstance(message, dict) and message.get("reasoning_content"):
+                    reasoning_content = message["reasoning_content"]
+                elif parsed_response.reasoning:
+                    reasoning_content = parsed_response.reasoning
+            except Exception as e:
+                logger.debug(f"Could not extract reasoning content: {e}")
+
+            token_count = getattr(raw_completion, "usage", {}).get("total_tokens", None)
 
             # Ensure German AI prefix (FR-006)
             comment_content = self._ensure_german_prefix(comment_content)
@@ -365,7 +373,8 @@ class CommentService:
             # Validate generated comment
             validation_result = self._validate_comment(comment_content, request)
 
-            return CommentResponse(
+            # Create response with reasoning
+            response = CommentResponse(
                 content=comment_content,
                 is_valid=validation_result["is_valid"],
                 has_ai_prefix=validation_result["has_ai_prefix"],
@@ -376,6 +385,11 @@ class CommentService:
                 validation_errors=validation_result["errors"],
                 fallback_used=fallback_used
             )
+            
+            # Attach reasoning for storage layer
+            response.reasoning_content = reasoning_content
+            
+            return response
 
         except asyncio.TimeoutError:
             raise CommentGenerationError(
@@ -387,98 +401,84 @@ class CommentService:
             logger.error(f"Provider {provider_config.provider_name} generation failed: {e}")
             raise CommentGenerationError(f"LLM generation failed: {e}")
 
-    async def _initialize_provider_client(
-        self,
-        provider_config: LLMProviderConfiguration,
-        generation_config: Dict[str, Any]
-    ) -> Union[instructor.Instructor, Any]:
-        """
-        Initialize provider-specific LLM client with instructor.
-
-        Args:
-            provider_config: Provider configuration
-            generation_config: Generation configuration with API key
-
-        Returns:
-            Initialized instructor client
-
-        Raises:
-            CommentGenerationError: If client initialization fails
-        """
-        try:
-            api_key = generation_config["api_key"]
-            provider_name = provider_config.provider_name.lower()
-
-            if provider_name == "openai":
-                base_client = openai.AsyncOpenAI(api_key=api_key)
-                return instructor.from_openai(base_client)
-
-            if provider_name == "mistral":
-                try:
-                    from mistralai.client import Mistral
-                    from instructor.providers.mistral.client import from_mistral
-                except ImportError as exc:
-                    raise CommentGenerationError(
-                        "mistralai package is required for Mistral support"
-                    ) from exc
-
-                base_client = Mistral(api_key=api_key)
-                return from_mistral(base_client, use_async=True)
-
-            if provider_name == "huggingface":
-                base_client = openai.AsyncOpenAI(
-                    api_key=api_key,
-                    base_url="https://api-inference.huggingface.co/v1"
-                )
-                return instructor.from_openai(base_client)
-
-            raise CommentGenerationError(f"Unsupported provider: {provider_name}")
-
-        except Exception as e:
-            logger.error(f"Failed to initialize {provider_config.provider_name} client: {e}")
-            raise CommentGenerationError(f"Client initialization failed: {e}")
-
     async def _call_llm(
         self,
-        client: instructor.Instructor,
         provider_config: LLMProviderConfiguration,
+        api_key: str,
         system_prompt: str,
         user_prompt: str
-    ) -> CommentStructure:
+    ) -> tuple[CommentStructure, Any]:
         """
-        Make structured LLM API call using instructor.
+        Make structured LLM API call using LiteLLM with Pydantic structured output.
 
         Args:
-            client: Instructor client
             provider_config: Provider configuration
+            api_key: Decrypted API key
             system_prompt: System prompt
             user_prompt: User prompt
 
         Returns:
-            Structured CommentStructure response
+            Tuple of (parsed CommentStructure, raw completion response)
 
         Raises:
             CommentGenerationError: If LLM call fails
         """
         try:
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
+            # Determine LiteLLM model string (format: "provider/model")
+            # Strip any accidental provider prefix the caller may have included
+            provider_name = provider_config.provider_name.lower()
+            bare_model = provider_config.model_name.removeprefix(f"{provider_name}/")
+            litellm_model = f"{provider_name}/{bare_model}"
 
-            # Use instructor to get structured response
-            response = await client.chat.completions.create(
-                model=provider_config.model_name,
-                messages=messages,
-                response_model=CommentStructure,
-                max_tokens=provider_config.max_tokens,
-                temperature=provider_config.temperature
-            )
+            messages = []
+            # O-series/Reasoning models sometimes prefer 'developer' or 'user' over 'system' 
+            # or handle system prompts differently. LiteLLM usually normalizes this.
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": user_prompt})
 
-            return response
+            params = {
+                "model": litellm_model,
+                "messages": messages,
+                "response_format": CommentStructure,
+                "api_key": api_key,
+            }
 
+            is_reasoning_model = any(m in litellm_model.lower() for m in ["o1-", "o3-", "gpt-5", "magistral"])
+            if not is_reasoning_model:
+                if provider_config.max_tokens:
+                    params["max_tokens"] = provider_config.max_tokens
+                if provider_config.temperature is not None:
+                    params["temperature"] = provider_config.temperature
+            else:
+                if provider_config.max_tokens:
+                    params["max_completion_tokens"] = provider_config.max_tokens
+                params["temperature"] = 1.0
+
+            response = await litellm.acompletion(**params)
+            parsed = CommentStructure.model_validate_json(response.choices[0].message.content)
+            return parsed, response
+
+        except litellm.exceptions.AuthenticationError as e:
+            logger.error(f"LiteLLM authentication failed for {litellm_model}: {e}")
+            raise CommentGenerationError(f"Invalid API key or authentication failed: {e}")
+        except litellm.exceptions.RateLimitError as e:
+            logger.warning(f"LiteLLM rate limit hit for {litellm_model}: {e}")
+            raise CommentGenerationError(f"Rate limit exceeded — try again later: {e}")
+        except litellm.exceptions.ContextWindowExceededError as e:
+            logger.error(f"LiteLLM context window exceeded for {litellm_model}: {e}")
+            raise CommentGenerationError(f"Prompt exceeds model context window: {e}")
+        except litellm.exceptions.APIConnectionError as e:
+            logger.error(f"LiteLLM connection error for {litellm_model}: {e}")
+            raise CommentGenerationError(f"Could not reach LLM provider API: {e}")
+        except litellm.exceptions.Timeout as e:
+            logger.error(f"LiteLLM request timed out for {litellm_model}: {e}")
+            raise CommentGenerationError(f"LLM request timed out: {e}")
+        except litellm.exceptions.ServiceUnavailableError as e:
+            logger.error(f"LiteLLM provider unavailable for {litellm_model}: {e}")
+            raise CommentGenerationError(f"LLM provider temporarily unavailable: {e}")
         except Exception as e:
-            logger.error(f"LLM API call failed: {e}")
+            logger.error(f"LLM API call failed via LiteLLM: {e}")
             raise CommentGenerationError(f"LLM API call failed: {e}")
 
     async def _get_prompt_template(
@@ -809,6 +809,565 @@ class CommentService:
 
                 # AI comment fields
                 comment_content=response.content,
+                reasoning_content=response.reasoning_content,
+                status="posted" if is_posted else "generated",
+                ai_model_name=response.model_used,
+                ai_provider_name=response.provider_used,
+                generation_tokens=response.token_count,
+                generation_time_ms=int(response.generation_time * 1000) if response.generation_time else None,
+
+                # Timestamps
+                created_at=datetime.utcnow(),
+                posted_at=datetime.utcnow() if is_posted else None,
+
+                # Status
+                is_active=True
+            )
+
+            self.db_session.add(ai_comment)
+            await self.db_session.commit()
+            await self.db_session.refresh(ai_comment)
+
+            logger.info(
+                f"Stored AI comment with article snapshot: {ai_comment.id} "
+                f"(article: {request.article_id}, status: {ai_comment.status})"
+            )
+            return ai_comment
+
+        except Exception as e:
+            logger.error(f"Failed to store AI comment: {e}")
+            await self.db_session.rollback()
+            raise CommentGenerationError(f"AI comment storage failed: {e}")
+
+    async def update_comment_posted_status(
+        self,
+        ai_comment_id: uuid.UUID,
+        mymoment_comment_id: str,
+        posted_at: Optional[datetime] = None
+    ) -> AIComment:
+        """
+        Update AI comment status after successful posting to myMoment.
+
+        Args:
+            ai_comment_id: AI comment ID
+            mymoment_comment_id: Comment ID from myMoment platform
+            posted_at: When posted (defaults to now)
+
+        Returns:
+            Updated AIComment record
+
+        Raises:
+            CommentGenerationError: If update fails
+        """
+        try:
+            # Get comment
+            stmt = select(AIComment).where(AIComment.id == ai_comment_id)
+            result = await self.db_session.execute(stmt)
+            ai_comment = result.scalar_one_or_none()
+
+            if not ai_comment:
+                raise CommentGenerationError(f"AI comment {ai_comment_id} not found")
+
+            # Update status
+            ai_comment.mark_as_posted(mymoment_comment_id, posted_at)
+
+            await self.db_session.commit()
+            await self.db_session.refresh(ai_comment)
+
+            logger.info(f"Updated AI comment {ai_comment_id} as posted with myMoment ID {mymoment_comment_id}")
+            return ai_comment
+
+        except Exception as e:
+            logger.error(f"Failed to update AI comment posted status: {e}")
+            await self.db_session.rollback()
+            raise CommentGenerationError(f"AI comment update failed: {e}")
+
+    async def update_comment_failed_status(
+        self,
+        ai_comment_id: uuid.UUID,
+        error_message: str,
+        failed_at: Optional[datetime] = None
+    ) -> AIComment:
+        """
+        Update AI comment status after failed posting attempt.
+
+        Args:
+            ai_comment_id: AI comment ID
+            error_message: Error description
+            failed_at: When failed (defaults to now)
+
+        Returns:
+            Updated AIComment record
+
+        Raises:
+            CommentGenerationError: If update fails
+        """
+        try:
+            # Get comment
+            stmt = select(AIComment).where(AIComment.id == ai_comment_id)
+            result = await self.db_session.execute(stmt)
+            ai_comment = result.scalar_one_or_none()
+
+            if not ai_comment:
+                raise CommentGenerationError(f"AI comment {ai_comment_id} not found")
+
+            # Update status
+            ai_comment.mark_as_failed(error_message, failed_at)
+
+            await self.db_session.commit()
+            await self.db_session.refresh(ai_comment)
+
+            logger.info(f"Updated AI comment {ai_comment_id} as failed: {error_message}")
+            return ai_comment
+
+        except Exception as e:
+            logger.error(f"Failed to update AI comment failed status: {e}")
+            await self.db_session.rollback()
+            raise CommentGenerationError(f"AI comment update failed: {e}")
+
+    async def get_user_comment_statistics(self, user_id: uuid.UUID) -> Dict[str, Any]:
+        """
+        Get AI comment generation statistics for a user.
+
+        Args:
+            user_id: User ID
+
+        Returns:
+            Dictionary with AI comment statistics
+        """
+        try:
+            # Get AI comment statistics directly (user_id is directly on AIComment)
+            stmt = select(AIComment).where(
+                and_(
+                    AIComment.user_id == user_id,
+                    AIComment.is_active.is_(True)
+                )
+            )
+            result = await self.db_session.execute(stmt)
+            ai_comments = result.scalars().all()
+
+            total_comments = len(ai_comments)
+            posted_comments = sum(1 for c in ai_comments if c.status == "posted")
+            failed_comments = sum(1 for c in ai_comments if c.status == "failed")
+            generated_comments = sum(1 for c in ai_comments if c.status == "generated")
+
+            success_rate = (posted_comments / total_comments * 100) if total_comments > 0 else 0.0
+
+            # Calculate average generation time
+            generation_times = [c.generation_time_ms for c in ai_comments if c.generation_time_ms]
+            avg_generation_time_ms = sum(generation_times) / len(generation_times) if generation_times else 0
+
+            return {
+                "total_comments": total_comments,
+                "posted_comments": posted_comments,
+                "failed_comments": failed_comments,
+                "generated_comments": generated_comments,
+                "success_rate": success_rate,
+                "avg_generation_time_ms": avg_generation_time_ms,
+                "total_articles_commented": len(set(c.mymoment_article_id for c in ai_comments))
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get comment statistics for user {user_id}: {e}")
+            return {"error": str(e)}
+
+    async def cleanup_failed_comments(self, max_age_hours: int = 24) -> int:
+        """
+        Cleanup old failed AI comment generation attempts.
+
+        Args:
+            max_age_hours: Maximum age of failed comments to keep
+
+        Returns:
+            Number of comments cleaned up
+        """
+        try:
+            cutoff_time = datetime.utcnow() - timedelta(hours=max_age_hours)
+
+            # Find failed AI comments older than cutoff
+            stmt = select(AIComment).where(
+                and_(
+                    AIComment.status == "failed",
+                    AIComment.created_at < cutoff_time,
+                    AIComment.is_active.is_(True)
+                )
+            )
+            result = await self.db_session.execute(stmt)
+            old_failed_comments = result.scalars().all()
+
+            if not old_failed_comments:
+                return 0
+
+            # Soft delete old failed comments
+            for comment in old_failed_comments:
+                comment.is_active = False
+                comment.status = "deleted"
+
+            await self.db_session.commit()
+
+            logger.info(
+                f"Cleaned up {len(old_failed_comments)} old failed AI comments"
+            )
+            return len(old_failed_comments)
+
+        except Exception as e:
+            logger.error(f"Failed to cleanup old AI comments: {e}")
+            await self.db_session.rollback()
+            return 0
+
+    def _get_ai_prefix(self) -> str:
+        """
+        Get the required German AI prefix from settings.
+
+        Returns:
+            AI comment prefix string
+        """
+        settings = get_settings()
+        return settings.monitoring.AI_COMMENT_PREFIX
+
+    def _build_article_url(self, article_id: str) -> str:
+        """
+        Build article URL from article ID using configured base URL.
+
+        Args:
+            article_id: Article ID
+
+        Returns:
+            Full article URL
+        """
+        settings = get_settings()
+        base_url = settings.scraper.MYMOMENT_BASE_URL
+        return f"{base_url}/article/{article_id}/"
+
+    async def _get_prompt_template(
+        self,
+        template_id: Optional[uuid.UUID],
+        user_id: uuid.UUID
+    ) -> PromptTemplate:
+        """
+        Get prompt template by ID or fallback to default system template.
+
+        Args:
+            template_id: Optional template ID
+            user_id: User ID for access validation
+
+        Returns:
+            PromptTemplate instance
+
+        Raises:
+            CommentGenerationError: If template not found
+        """
+        try:
+            if template_id:
+                # Get specific template (check user access)
+                stmt = select(PromptTemplate).where(
+                    and_(
+                        PromptTemplate.id == template_id,
+                        PromptTemplate.is_active.is_(True),
+                        ((PromptTemplate.category == "USER") &
+                         (PromptTemplate.user_id == user_id)) |
+                        (PromptTemplate.category == "SYSTEM")
+                    )
+                )
+                result = await self.db_session.execute(stmt)
+                template = result.scalar_one_or_none()
+
+                if not template:
+                    raise CommentGenerationError(
+                        f"Prompt template {template_id} not found or not "
+                        "accessible"
+                    )
+
+                return template
+
+            else:
+                # Get default system template
+                stmt = select(PromptTemplate).where(
+                    and_(
+                        PromptTemplate.category == "SYSTEM",
+                        PromptTemplate.is_active.is_(True)
+                    )
+                ).limit(1)
+                result = await self.db_session.execute(stmt)
+                template = result.scalar_one_or_none()
+
+                if not template:
+                    # Create default template if none exists
+                    template = await self._create_default_template()
+
+                return template
+
+        except Exception as e:
+            logger.error(f"Failed to get prompt template: {e}")
+            raise CommentGenerationError(f"Template retrieval failed: {e}")
+
+    async def _create_default_template(self) -> PromptTemplate:
+        """Create and store default system prompt template."""
+        default_template = PromptTemplate(
+            name="Default German Comment Generator",
+            description="System default template for generating contextual German comments",
+            system_prompt=(
+                "Du bist ein hilfsreicher KI-Assistent, der konstruktive und höfliche Kommentare "
+                "zu deutschen Texten verfasst. Deine Aufgabe ist es, einen kurzen, relevanten "
+                "Kommentar zu schreiben, der den Inhalt würdigt oder eine hilfreiche Frage stellt. "
+                "Der Kommentar soll freundlich, respektvoll und auf Deutsch verfasst sein."
+            ),
+            user_prompt_template=(
+                "Bitte verfasse einen kurzen Kommentar (50-200 Wörter) zu folgendem Artikel:\n\n"
+                "Titel: {article_title}\n"
+                "Autor: {article_author}\n"
+                "Inhalt: {article_content}\n\n"
+                "Der Kommentar soll konstruktiv und freundlich sein."
+            ),
+            category="SYSTEM",
+            user_id=None,
+            is_active=True
+        )
+
+        self.db_session.add(default_template)
+        await self.db_session.commit()
+        await self.db_session.refresh(default_template)
+
+        logger.info("Created default prompt template")
+        return default_template
+
+    async def _render_prompt(self, template: PromptTemplate, request: CommentRequest) -> str:
+        """
+        Render prompt template with article context.
+
+        Args:
+            template: Prompt template
+            request: Comment request with context data
+
+        Returns:
+            Rendered prompt string
+
+        Raises:
+            CommentGenerationError: If template rendering fails
+        """
+        try:
+            # Prepare context dictionary
+            context = {
+                "article_title": request.article_title,
+                "article_content": request.article_content[:2000],  # Limit content length
+                "article_author": request.article_author,
+                "mymoment_username": request.mymoment_username,
+            }
+
+            # Optional context fields
+            if request.article_published_at:
+                context["article_published_at"] = (
+                    request.article_published_at.strftime("%Y-%m-%d")
+                )
+
+            if request.article_raw_html:
+                context["article_raw_html"] = request.article_raw_html[:5000]  # Limit HTML length
+
+            # Check for missing required placeholders
+            missing_keys = template.get_missing_context_keys(context)
+            if missing_keys:
+                logger.warning(
+                    f"Missing context keys for template: {missing_keys}"
+                )
+
+            # Render template
+            rendered = template.render_prompt(context)
+            return rendered
+
+        except Exception as e:
+            logger.error(f"Failed to render prompt template: {e}")
+            raise CommentGenerationError(f"Prompt rendering failed: {e}")
+
+    async def _get_provider_chain(
+        self,
+        preferred_provider_id: Optional[uuid.UUID],
+        user_id: uuid.UUID
+    ) -> List[LLMProviderConfiguration]:
+        """
+        Get ordered list of LLM providers (preferred first, then others).
+
+        Args:
+            preferred_provider_id: Optional preferred provider ID
+            user_id: User ID for provider access
+
+        Returns:
+            List of provider configurations in preference order
+        """
+        try:
+            # Get all active providers for user
+            all_providers = await self.llm_service.get_active_providers(user_id)
+
+            if not all_providers:
+                return []
+
+            # If preferred provider specified, move it to front
+            if preferred_provider_id:
+                preferred_providers = [p for p in all_providers if p.id == preferred_provider_id]
+                other_providers = [p for p in all_providers if p.id != preferred_provider_id]
+                return preferred_providers + other_providers
+
+            # Otherwise, use all providers in order
+            return all_providers
+
+        except Exception as e:
+            logger.error(f"Failed to get provider chain: {e}")
+            return []
+
+    def _ensure_german_prefix(self, comment_content: str) -> str:
+        """
+        Ensure comment starts with required German AI prefix (FR-006).
+
+        Args:
+            comment_content: Original comment text
+
+        Returns:
+            Comment text with German AI prefix
+        """
+        ai_prefix = self._get_ai_prefix()
+        if comment_content.startswith(ai_prefix):
+            return comment_content
+
+        # Add prefix with proper spacing
+        if comment_content.startswith(" "):
+            return f"{ai_prefix}{comment_content}"
+        else:
+            return f"{ai_prefix} {comment_content}"
+
+    def _validate_comment(self, comment_content: str, request: CommentRequest) -> Dict[str, Any]:
+        """
+        Validate generated comment against quality and requirement criteria.
+
+        Args:
+            comment_content: Generated comment text
+            request: Original request for context
+
+        Returns:
+            Dictionary with validation results
+        """
+        errors = []
+
+        # Check German AI prefix (FR-006)
+        ai_prefix = self._get_ai_prefix()
+        has_ai_prefix = comment_content.startswith(ai_prefix)
+        if not has_ai_prefix:
+            errors.append("Missing required German AI prefix")
+
+        # Check length constraints
+        content_without_prefix = comment_content.replace(ai_prefix, "").strip()
+        content_length = len(content_without_prefix)
+
+        if content_length < self.config.min_comment_length:
+            errors.append(
+                f"Comment too short ({content_length} < "
+                f"{self.config.min_comment_length} chars)"
+            )
+
+        if content_length > self.config.max_comment_length:
+            errors.append(
+                f"Comment too long ({content_length} > "
+                f"{self.config.max_comment_length} chars)"
+            )
+
+        # Check for empty content
+        if not content_without_prefix:
+            errors.append("Comment content is empty after prefix")
+
+        # Basic quality checks if enabled
+        if self.config.enable_content_validation:
+            # Check for repetitive text
+            words = content_without_prefix.split()
+            if len(words) > 5 and len(set(words)) < len(words) * 0.5:
+                errors.append("Comment appears to be repetitive")
+
+            # Check for placeholder text
+            placeholder_patterns = [r'\{[^}]+\}', r'<[^>]+>', r'\[.*\]']
+            for pattern in placeholder_patterns:
+                if re.search(pattern, content_without_prefix):
+                    errors.append("Comment contains unresolved placeholders")
+                    break
+
+        return {
+            "is_valid": len(errors) == 0,
+            "has_ai_prefix": has_ai_prefix,
+            "errors": errors,
+            "content_length": content_length
+        }
+
+    async def _rate_limit_provider(self, provider_id: uuid.UUID):
+        """Apply per-provider rate limiting."""
+        async with self._generation_lock:
+            last_time = self._last_generation_time.get(provider_id, 0)
+            now = asyncio.get_event_loop().time()
+            elapsed = now - last_time
+
+            if elapsed < self.config.retry_delay:
+                sleep_time = self.config.retry_delay - elapsed
+                await asyncio.sleep(sleep_time)
+
+            self._last_generation_time[provider_id] = asyncio.get_event_loop().time()
+
+    async def _store_comment(
+        self,
+        request: CommentRequest,
+        response: CommentResponse,
+        monitoring_process_id: uuid.UUID,
+        mymoment_login_id: uuid.UUID,
+        is_posted: bool
+    ) -> AIComment:
+        """
+        Store generated AI comment with article snapshot in database.
+
+        Args:
+            request: Original comment request (contains article snapshot data)
+            response: Comment generation response
+            monitoring_process_id: Monitoring process ID
+            mymoment_login_id: MyMoment login ID
+            is_posted: Whether comment was successfully posted
+
+        Returns:
+            Created AIComment record
+
+        Raises:
+            CommentGenerationError: If storage fails
+        """
+        try:
+            # Get user_id from monitoring process
+            stmt = select(MonitoringProcess).where(MonitoringProcess.id == monitoring_process_id)
+            result = await self.db_session.execute(stmt)
+            process = result.scalar_one_or_none()
+
+            if not process:
+                raise CommentGenerationError(f"Monitoring process {monitoring_process_id} not found")
+
+            user_id = process.user_id
+
+            # Create AIComment record with article snapshot
+            ai_comment = AIComment(
+                # myMoment identifiers
+                mymoment_article_id=request.article_id,
+                mymoment_comment_id=None,  # Will be set after successful posting to myMoment
+
+                # Foreign keys
+                user_id=user_id,
+                mymoment_login_id=mymoment_login_id if is_posted else None,
+                monitoring_process_id=monitoring_process_id,
+                prompt_template_id=request.prompt_template_id,
+                llm_provider_id=request.llm_provider_id,
+
+                # Article snapshot fields
+                article_title=request.article_title,
+                article_author=request.article_author,
+                article_category=request.article_category,
+                article_url=request.article_url or self._build_article_url(request.article_id),
+                article_content=request.article_content,
+                article_raw_html=request.article_raw_html or "",
+                article_published_at=request.article_published_at,
+                article_edited_at=request.article_edited_at,
+                article_scraped_at=datetime.utcnow(),
+
+                # AI comment fields
+                comment_content=response.content,
+                reasoning_content=response.reasoning_content,
                 status="posted" if is_posted else "generated",
                 ai_model_name=response.model_used,
                 ai_provider_name=response.provider_used,
