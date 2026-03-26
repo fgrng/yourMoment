@@ -1,7 +1,7 @@
 """add llm_provider_id to monitoring_processes
 
 Revision ID: a1b2c3d4e5f6
-Revises: 9c0b8ec3260d
+Revises: eb82f700314e
 Create Date: 2026-03-25 12:10:00.000000
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'a1b2c3d4e5f6'
-down_revision = '2526bb29dffe'
+down_revision = 'eb82f700314e'
 branch_labels = None
 depends_on = None
 

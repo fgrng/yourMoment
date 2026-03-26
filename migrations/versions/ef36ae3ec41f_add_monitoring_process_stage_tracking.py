@@ -38,11 +38,8 @@ def upgrade() -> None:
         batch_op.create_index('ix_monitoring_processes_celery_generation_task_id', ['celery_generation_task_id'])
         batch_op.create_index('ix_monitoring_processes_celery_posting_task_id', ['celery_posting_task_id'])
 
-        # Add 4 progress tracking columns
-        batch_op.add_column(sa.Column('articles_discovered', sa.Integer(), nullable=False, server_default='0'))
+        # Add articles_prepared (new column; articles_discovered, comments_generated, comments_posted already exist from initial schema)
         batch_op.add_column(sa.Column('articles_prepared', sa.Integer(), nullable=False, server_default='0'))
-        batch_op.add_column(sa.Column('comments_generated', sa.Integer(), nullable=False, server_default='0'))
-        batch_op.add_column(sa.Column('comments_posted', sa.Integer(), nullable=False, server_default='0'))
 
         # Add 4 error tracking columns
         batch_op.add_column(sa.Column('errors_encountered_in_discovery', sa.Integer(), nullable=False, server_default='0'))
@@ -59,11 +56,8 @@ def downgrade() -> None:
         batch_op.drop_column('errors_encountered_in_preparation')
         batch_op.drop_column('errors_encountered_in_discovery')
 
-        # Drop the 4 progress tracking columns
-        batch_op.drop_column('comments_posted')
-        batch_op.drop_column('comments_generated')
+        # Drop articles_prepared (articles_discovered, comments_generated, comments_posted belong to initial schema)
         batch_op.drop_column('articles_prepared')
-        batch_op.drop_column('articles_discovered')
 
         # Drop indexes for the new task ID columns
         batch_op.drop_index('ix_monitoring_processes_celery_posting_task_id')
