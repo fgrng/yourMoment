@@ -680,12 +680,12 @@ async def trigger_comment_poster_task(
             )
 
         # Import the Celery task
-        from src.tasks.comment_poster import post_comments_for_process
+        from src.tasks.comment_posting import post_comments_for_articles
 
         # Trigger the task
-        task = post_comments_for_process.apply_async(
+        task = post_comments_for_articles.apply_async(
             args=[str(process_id)],
-            queue='comments'
+            queue='posting'
         )
 
         logger.info(

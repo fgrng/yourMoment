@@ -400,7 +400,9 @@ class AICommentResponse(BaseModel):
     article_raw_html: Optional[str] = Field(None, description="Raw HTML content")
     article_url: str = Field(..., description="myMoment article URL")
     article_category: Optional[int] = Field(None, description="myMoment category ID")
+    article_task_id: Optional[int] = Field(None, description="myMoment task ID")
     article_published_at: Optional[datetime] = Field(None, description="Article publication date")
+    article_edited_at: Optional[datetime] = Field(None, description="Article last edit date")
     article_scraped_at: datetime = Field(..., description="When article snapshot was captured")
 
     # AI comment fields
@@ -410,15 +412,21 @@ class AICommentResponse(BaseModel):
     status: str = Field(..., description="Comment status: generated, posted, failed, deleted")
     ai_model_name: Optional[str] = Field(None, description="LLM model used")
     ai_provider_name: Optional[str] = Field(None, description="LLM provider used")
+    generation_tokens: Optional[int] = Field(None, description="Total token count for generation")
     generation_time_ms: Optional[int] = Field(None, description="Time taken to generate (ms)")
+    error_message: Optional[str] = Field(None, description="Error message if generation or posting failed")
+    retry_count: int = Field(..., description="Number of posting retries attempted", ge=0)
 
     # Timestamps
     created_at: datetime = Field(..., description="When comment was generated")
     posted_at: Optional[datetime] = Field(None, description="When comment was posted to myMoment")
+    failed_at: Optional[datetime] = Field(None, description="When processing failed")
 
     # Relations
     user_id: uuid.UUID = Field(..., description="User who owns this comment")
     mymoment_login_id: Optional[uuid.UUID] = Field(None, description="Login used to post")
+    prompt_template_id: Optional[uuid.UUID] = Field(None, description="Prompt template used for generation")
+    llm_provider_id: Optional[uuid.UUID] = Field(None, description="Provider configuration used for generation")
     monitoring_process_id: Optional[uuid.UUID] = Field(None, description="Monitoring process that generated this")
 
 

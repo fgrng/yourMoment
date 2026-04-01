@@ -1,6 +1,6 @@
 /**
  * AI Comments Page JavaScript
- * Handles comment listing, filtering, polling, and posting operations
+ * Handles comment listing, filtering, polling, and posting operations.
  */
 
 import {
@@ -8,27 +8,34 @@ import {
     escapeAttribute,
     fetchOptions,
     safeParseJson,
-    extractErrorMessage
+    extractErrorMessage,
+    formatDate,
+    formatProviderLabel
 } from './utils.js';
 
 let allComments = [];
 let monitoringProcess = null;
-let pipelineStatus = null;  // Add pipeline status tracking
+let pipelineStatus = null;
 let pollingInterval = null;
 let processId = null;
 
 // DOM elements
-let statusFilter, searchInput, limitSelect, refreshBtn;
-let loadingState, emptyState, commentsList, processDetailsCard;
+let statusFilter;
+let searchInput;
+let limitSelect;
+let refreshBtn;
+let loadingState;
+let emptyState;
+let commentsList;
+let processDetailsCard;
 
 /**
- * Initialize the AI comments page
- * @param {string|null} processIdParam - Optional process ID for filtering
+ * Initialize the AI comments page.
+ * @param {string|null} processIdParam - Optional process ID for filtering.
  */
 export function initCommentsPage(processIdParam = null) {
     processId = processIdParam;
 
-    // Get DOM elements
     statusFilter = document.getElementById('statusFilter');
     searchInput = document.getElementById('searchInput');
     limitSelect = document.getElementById('limitSelect');
@@ -38,16 +45,13 @@ export function initCommentsPage(processIdParam = null) {
     commentsList = document.getElementById('commentsList');
     processDetailsCard = document.getElementById('processDetailsCard');
 
-    // Event listeners
     statusFilter.addEventListener('change', () => renderComments(filterComments()));
     searchInput.addEventListener('input', () => renderComments(filterComments()));
     limitSelect.addEventListener('change', () => loadComments());
     refreshBtn.addEventListener('click', () => loadComments());
 
-    // Initial load
     loadComments();
 
-    // Clean up polling on page unload
     window.addEventListener('beforeunload', () => {
         if (pollingInterval) {
             clearInterval(pollingInterval);
@@ -59,75 +63,60 @@ async function loadComments() {
     window.showAlert();
     loadingState.style.display = 'block';
     emptyState.style.display = 'none';
-    // commentsList.style.display = 'none';
-    // commentsList.innerHTML = '';
 
     try {
         const limit = limitSelect.value;
         let commentsUrl = `/api/v1/comments/index?limit=${limit}`;
 
-        // If viewing process-specific comments, add filter
         if (processId) {
             commentsUrl += `&monitoring_process_id=${processId}`;
-            // Also fetch process details
             await loadProcessDetails();
         }
 
         const response = await fetch(commentsUrl, fetchOptions('GET'));
-
-        if (!response.ok) {
-            throw new Error(`Kommentare konnten nicht geladen werden (HTTP ${response.status})`);
-        }
+        await assertOk(response, 'Kommentare konnten nicht geladen werden.');
 
         const data = await response.json();
         allComments = data.items || [];
 
         loadingState.style.display = 'none';
-
-        if (!allComments.length) {
-            emptyState.style.display = 'block';
-        } else {
-            commentsList.innerHTML = '';
-            commentsList.style.display = 'flex';
-            renderComments(filterComments());
-            console.log("reloaded")
-        }
-
-        // Setup polling if viewing process-specific comments and process is running
+        renderComments(filterComments());
         updatePolling();
-
     } catch (error) {
         console.error('Error loading AI comments:', error);
         loadingState.style.display = 'none';
-        window.showAlert(error.message || 'KI-Kommentare konnten nicht geladen werden. Bitte versuche es erneut.', 'danger');
+        window.showAlert(
+            error.message || 'KI-Kommentare konnten nicht geladen werden. Bitte versuche es erneut.',
+            'danger'
+        );
     }
 }
 
 async function loadProcessDetails() {
-    if (!processId) return;
+    if (!processId) {
+        return;
+    }
 
     try {
-        // Fetch both process details and pipeline status
         const [processResponse, pipelineResponse] = await Promise.all([
             fetch(`/api/v1/monitoring-processes/${processId}`, fetchOptions('GET')),
             fetch(`/api/v1/monitoring-processes/${processId}/pipeline-status`, fetchOptions('GET'))
         ]);
 
-        if (!processResponse.ok) {
-            return;
-        }
-
+        await assertOk(processResponse, 'Prozessdetails konnten nicht geladen werden.');
         monitoringProcess = await processResponse.json();
 
-        // Load pipeline status if available
         if (pipelineResponse.ok) {
             pipelineStatus = await pipelineResponse.json();
+        } else {
+            pipelineStatus = null;
         }
 
         renderProcessDetails();
-
     } catch (error) {
         console.error('Error loading process details:', error);
+        processDetailsCard.style.display = 'none';
+        window.showAlert(error.message || 'Prozessdetails konnten nicht geladen werden.', 'danger');
     }
 }
 
@@ -137,104 +126,102 @@ function renderProcessDetails() {
         return;
     }
 
-    const statusBadgeClass = monitoringProcess.is_running
-        ? 'bg-success'
-        : monitoringProcess.error_message ? 'bg-danger' : 'bg-secondary';
-    const statusText = monitoringProcess.is_running
-        ? 'LÄUFT'
-        : monitoringProcess.error_message ? 'FEHLER' : 'ANGEHALTEN';
-
-    // Use pipeline status if available, otherwise fall back to old fields
     const discoveredCount = pipelineStatus ? pipelineStatus.discovered : 0;
     const preparedCount = pipelineStatus ? pipelineStatus.prepared : 0;
-    const generatedCount = pipelineStatus ? pipelineStatus.generated : (monitoringProcess.comments_generated || 0);
+    const generatedCount = pipelineStatus ? pipelineStatus.generated : 0;
     const postedCount = pipelineStatus ? pipelineStatus.posted : 0;
     const failedCount = pipelineStatus ? pipelineStatus.failed : 0;
-    const totalCount = pipelineStatus ? pipelineStatus.total : (monitoringProcess.articles_discovered || 0);
+    const totalCount = pipelineStatus ? pipelineStatus.total : 0;
+
+    const statusBadge = monitoringProcess.is_running
+        ? '<span class="badge bg-success">Laeuft</span>'
+        : monitoringProcess.error_message
+            ? '<span class="badge bg-danger">Fehler</span>'
+            : '<span class="badge bg-secondary">Angehalten</span>';
+
+    const postAllDisabled = generatedCount === 0 ? 'disabled' : '';
+    const startStopAction = monitoringProcess.is_running
+        ? `<button class="btn btn-outline-warning" type="button" id="toggleProcessBtn">
+                <i class="bi bi-pause-circle me-2"></i>Prozess stoppen
+           </button>`
+        : `<button class="btn btn-outline-success" type="button" id="toggleProcessBtn">
+                <i class="bi bi-play-circle me-2"></i>Prozess starten
+           </button>`;
 
     processDetailsCard.innerHTML = `
-        <div class="card mt-4 border-primary">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">
-                    <i class="bi bi-gear-fill me-2"></i>
-                    Überwachungsprozess: ${escapeHtml(monitoringProcess.name)}
-                </h5>
+        <div class="card mt-4 border-primary shadow-sm">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-start gap-3">
+                <div>
+                    <h5 class="mb-1">
+                        <i class="bi bi-gear-fill me-2"></i>${escapeHtml(monitoringProcess.name)}
+                    </h5>
+                    ${monitoringProcess.description ? `<div class="small opacity-75">${escapeHtml(monitoringProcess.description)}</div>` : ''}
+                </div>
+                <div>${statusBadge}</div>
             </div>
             <div class="card-body">
-                <div class="row">
-                    <div class="col-md-8">
-                        ${monitoringProcess.description ? `<p class="text-muted mb-3">${escapeHtml(monitoringProcess.description)}</p>` : ''}
-                        <div class="row g-3 mb-3">
-                            <div class="col-6 col-md-3">
-                                <div class="text-muted small">Status</div>
-                                <div class="fw-bold">
-                                    <span class="badge ${statusBadgeClass}">
-                                        ${statusText}
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="text-muted small">Modus</div>
-                                <div class="fw-bold">
-                                    ${monitoringProcess.generate_only
-                                        ? '<span class="badge bg-warning">Nur erzeugen</span>'
-                                        : '<span class="badge bg-danger">Erzeugen & Veröffentlichen</span>'}
-                                </div>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="text-muted small">Gesamt verarbeitete Artikel</div>
-                                <div class="fw-bold">${totalCount}</div>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="text-muted small">Fehlgeschlagene</div>
-                                <div class="fw-bold text-danger">${failedCount}</div>
-                            </div>
-                        </div>
-                        <div class="row g-3 mb-3">
-                            <div class="col-6 col-md-3">
-                                <div class="text-muted small">Entdeckt</div>
-                                <div class="fw-bold text-secondary">${discoveredCount}</div>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="text-muted small">Vorbereitet</div>
-                                <div class="fw-bold text-primary">${preparedCount}</div>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="text-muted small">Generiert</div>
-                                <div class="fw-bold text-warning">${generatedCount}</div>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="text-muted small">Veröffentlicht</div>
-                                <div class="fw-bold text-success">${postedCount}</div>
-                            </div>
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-12">
-                                <div class="text-muted small">Letzte Aktivität</div>
-                                <div class="small">
-                                    ${formatLastActivity(monitoringProcess)}
-                                </div>
-                            </div>
+                <div class="row g-3 mb-4">
+                    <div class="col-6 col-lg-2">
+                        <div class="text-muted small">Entdeckt</div>
+                        <div class="fw-bold text-secondary fs-5">${discoveredCount}</div>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <div class="text-muted small">Vorbereitet</div>
+                        <div class="fw-bold text-primary fs-5">${preparedCount}</div>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <div class="text-muted small">Generiert</div>
+                        <div class="fw-bold text-warning fs-5">${generatedCount}</div>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <div class="text-muted small">Veroeffentlicht</div>
+                        <div class="fw-bold text-success fs-5">${postedCount}</div>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <div class="text-muted small">Fehlgeschlagen</div>
+                        <div class="fw-bold text-danger fs-5">${failedCount}</div>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <div class="text-muted small">Gesamt</div>
+                        <div class="fw-bold fs-5">${totalCount}</div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div class="text-muted small">Modus</div>
+                        <div class="fw-semibold">
+                            ${monitoringProcess.generate_only
+                                ? 'Nur generieren'
+                                : 'Generieren und veroeffentlichen'}
+                            ${monitoringProcess.hide_comments ? '<span class="badge bg-secondary ms-2">Versteckt</span>' : ''}
                         </div>
                     </div>
-                    <div class="col-md-4 border-start">
-                        <h6 class="mb-3">Aktionen</h6>
-                        <div class="d-grid gap-2">
-                            <button
-                                class="btn btn-success"
-                                id="postCommentsBtn"
-                                ${generatedCount === 0 ? 'disabled' : ''}>
-                                <i class="bi bi-send-fill me-2"></i>
-                                Alle generierten Kommentare veröffentlichen
-                            </button>
-                            <a href="/processes/${monitoringProcess.id}/edit" class="btn btn-outline-primary">
-                                <i class="bi bi-pencil me-2"></i>Prozess bearbeiten
-                            </a>
-                            <a href="/processes" class="btn btn-outline-secondary">
-                                <i class="bi bi-arrow-left me-2"></i>Zurück zu den Prozessen
-                            </a>
-                        </div>
+                    <div class="col-md-4">
+                        <div class="text-muted small">Maximale Laufzeit</div>
+                        <div class="fw-semibold">${monitoringProcess.max_duration_minutes} Minuten</div>
                     </div>
+                    <div class="col-md-4">
+                        <div class="text-muted small">Letzte Aktivitaet</div>
+                        <div class="fw-semibold">${formatLastActivity(monitoringProcess)}</div>
+                    </div>
+                </div>
+
+                ${monitoringProcess.error_message
+                    ? `<div class="alert alert-warning mb-4"><strong>Prozessfehler:</strong> ${escapeHtml(monitoringProcess.error_message)}</div>`
+                    : ''}
+
+                <div class="d-flex flex-wrap gap-2">
+                    ${startStopAction}
+                    <button class="btn btn-success" type="button" id="postCommentsBtn" ${postAllDisabled}>
+                        <i class="bi bi-send-fill me-2"></i>Generierte Kommentare veroeffentlichen
+                    </button>
+                    <a href="/processes/${monitoringProcess.id}/edit" class="btn btn-outline-primary">
+                        <i class="bi bi-pencil me-2"></i>Prozess bearbeiten
+                    </a>
+                    <a href="/processes" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left me-2"></i>Zurueck zu den Prozessen
+                    </a>
                 </div>
             </div>
         </div>
@@ -242,66 +229,68 @@ function renderProcessDetails() {
 
     processDetailsCard.style.display = 'block';
 
-    // Attach event listener for post comments button
     const postCommentsBtn = document.getElementById('postCommentsBtn');
     if (postCommentsBtn) {
         postCommentsBtn.addEventListener('click', handlePostAllComments);
     }
+
+    const toggleProcessBtn = document.getElementById('toggleProcessBtn');
+    if (toggleProcessBtn) {
+        toggleProcessBtn.addEventListener('click', async () => {
+            if (monitoringProcess.is_running) {
+                await window.YM.monitoring.stopProcess(monitoringProcess.id);
+            } else {
+                await window.YM.monitoring.startProcess(monitoringProcess.id);
+            }
+            await loadComments();
+        });
+    }
 }
 
 async function handlePostAllComments() {
-    if (!monitoringProcess) return;
+    if (!monitoringProcess) {
+        return;
+    }
 
-    if (!confirm('Alle generierten Kommentare für diesen Überwachungsprozess veröffentlichen?')) {
+    if (!confirm('Alle generierten Kommentare fuer diesen Ueberwachungsprozess veroeffentlichen?')) {
         return;
     }
 
     const btn = document.getElementById('postCommentsBtn');
     const originalText = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Aufgabe wird gestartet…';
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Aufgabe wird gestartet...';
 
     try {
-        const response = await fetch(`/api/v1/monitoring-processes/${processId}/post-comments`, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Aufgabe zum Veröffentlichen der Kommentare konnte nicht gestartet werden');
-        }
+        const response = await fetch(
+            `/api/v1/monitoring-processes/${processId}/post-comments`,
+            fetchOptions('POST')
+        );
+        await assertOk(response, 'Aufgabe zum Veroeffentlichen der Kommentare konnte nicht gestartet werden.');
 
         const data = await response.json();
-
-        window.showAlert(`Aufgabe zum Veröffentlichen der Kommentare erfolgreich gestartet! Aufgaben-ID: ${data.task_id}. Die Kommentare werden im Hintergrund veröffentlicht. Aktualisiere diese Seite, um Updates zu sehen.`, 'success');
+        window.showAlert(
+            `Aufgabe zum Veroeffentlichen der Kommentare gestartet. Aufgaben-ID: ${escapeHtml(data.task_id)}`,
+            'success'
+        );
 
         btn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Aufgabe gestartet';
-
-        setTimeout(() => {
-            if (confirm('Das Veröffentlichen läuft. Seite aktualisieren, um Updates zu sehen?')) {
-                window.location.reload();
-            }
-        }, 3000);
-
+        await loadComments();
     } catch (error) {
         console.error('Error starting comment posting task:', error);
-        window.showAlert(`Kommentarveröffentlichung konnte nicht gestartet werden: ${error.message}`, 'danger');
+        window.showAlert(`Kommentarveroeffentlichung konnte nicht gestartet werden: ${error.message}`, 'danger');
         btn.disabled = false;
         btn.innerHTML = originalText;
     }
 }
 
 function updatePolling() {
-    const shouldPoll = monitoringProcess && monitoringProcess.is_running;
+    const shouldPoll = Boolean(monitoringProcess && monitoringProcess.is_running);
 
     if (shouldPoll && !pollingInterval) {
         pollingInterval = setInterval(() => {
             loadComments();
-        }, 10000); // Poll every 10 seconds
+        }, 10000);
     } else if (!shouldPoll && pollingInterval) {
         clearInterval(pollingInterval);
         pollingInterval = null;
@@ -312,16 +301,17 @@ function filterComments() {
     const status = statusFilter.value;
     const query = searchInput.value.trim().toLowerCase();
 
-    return allComments.filter(comment => {
+    return allComments.filter((comment) => {
         const matchesStatus = status === 'ALL' || comment.status === status;
-
         const haystack = [
             comment.article_title || '',
-            comment.article_author || ''
+            comment.article_author || '',
+            comment.comment_content || '',
+            comment.ai_provider_name || '',
+            comment.ai_model_name || ''
         ].join(' ').toLowerCase();
-        const matchesQuery = !query || haystack.includes(query);
 
-        return matchesStatus && matchesQuery;
+        return matchesStatus && (!query || haystack.includes(query));
     });
 }
 
@@ -330,95 +320,67 @@ function renderComments(comments) {
 
     if (!comments.length) {
         commentsList.style.display = 'none';
-        emptyState.style.display = 'block';
-        emptyState.querySelector('h3').textContent = allComments.length ? 'Keine Kommentare entsprechen deinen Filtern' : 'Noch keine KI-Kommentare';
-        emptyState.querySelector('p').textContent = allComments.length ? 'Passe Filter oder Suchbegriffe an, um weitere Kommentare anzuzeigen.' : 'Sobald Überwachungsprozesse Kommentare generieren, erscheinen sie hier.';
+        renderEmptyState();
         return;
     }
 
     emptyState.style.display = 'none';
     commentsList.style.display = 'flex';
 
-    comments.forEach(comment => {
+    comments.forEach((comment) => {
         const col = document.createElement('div');
-        col.className = 'col-md-6 col-lg-4';
+        col.className = 'col-md-6 col-xl-4';
 
-        //                                 <div class="text-muted small">Entdeckt</div>
-                            //     <div class="fw-bold text-secondary">${discoveredCount}</div>
-                            // </div>
-                            // <div class="col-6 col-md-3">
-                            //     <div class="text-muted small">Vorbereitet</div>
-                            //     <div class="fw-bold text-primary">${preparedCount}</div>
-                            // </div>
-                            // <div class="col-6 col-md-3">
-                            //     <div class="text-muted small">Generiert</div>
-                            //     <div class="fw-bold text-warning">${generatedTotal}</div>
-                            // </div>
-                            // <div class="col-6 col-md-3">
-                            //     <div class="text-muted small">Veröffentlicht</div>
-                            //     <div class="fw-bold text-success">${postedTotal}</div>
-        const statusBadgeClass = comment.status === 'posted'
-            ? 'bg-success'
-            : comment.status === 'generated' ? 'bg-warning'
-            : comment.status === 'prepared' ? 'bg-primary'
-            : comment.status === 'discovered' ? 'bg-secondary'
-            : 'bg-danger';
-        const statusLabel = formatCommentStatus(comment.status);
-
-        const truncatedTitle = (comment.article_title || 'Unbekannter Artikel').length > 25
-            ? (comment.article_title || 'Unbekannter Artikel').substring(0, 20) + '…'
-            : (comment.article_title || 'Unbekannter Artikel');
-
-        const commentPreview = comment.comment_content
-            ? (comment.comment_content.length > 160
-                ? comment.comment_content.substring(0, 160) + '…'
-                : comment.comment_content)
-            : '<span class="fst-italic">Kein Kommentarinhalt erfasst.</span>';
+        const statusMeta = getStatusMeta(comment.status);
+        const commentPreview = buildCommentPreview(comment);
+        const generationMeta = buildGenerationMeta(comment);
+        const postingMeta = buildPostingMeta(comment);
+        const processMeta = !processId && comment.monitoring_process_id
+            ? `<span class="badge bg-light text-dark border">Prozess</span>`
+            : '';
+        const loginMeta = comment.mymoment_login_id
+            ? '<span class="badge bg-light text-dark border">Zugang hinterlegt</span>'
+            : '';
+        const errorBlock = comment.error_message
+            ? `<div class="alert alert-warning py-2 px-3 mt-3 mb-0 small"><strong>Fehler:</strong> ${escapeHtml(comment.error_message)}</div>`
+            : '';
 
         col.innerHTML = `
-            <div class="card h-100">
-                <div class="card-header d-flex justify-content-between align-items-start">
-                    <div class="flex-grow-1">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-start gap-3">
+                    <div class="min-w-0">
                         <h5 class="mb-1 text-truncate" data-bs-toggle="tooltip" data-bs-placement="top" title="${escapeAttribute(comment.article_title || 'Unbekannter Artikel')}">
-                            <i class="bi bi-journal-text me-2"></i>
-                            ${escapeHtml(truncatedTitle)}
+                            <i class="bi bi-journal-text me-2"></i>${escapeHtml(comment.article_title || 'Unbekannter Artikel')}
                         </h5>
-                        <span class="badge ${statusBadgeClass}">
-                            ${statusLabel}
-                        </span>
-                        ${comment.is_hidden ? '<span class="badge bg-secondary ms-1"><i class="bi bi-eye-slash"></i></span>' : ''}
+                        <div class="d-flex flex-wrap gap-1">
+                            <span class="badge comment-status-badge ${statusMeta.badgeClass}">${statusMeta.label}</span>
+                            ${comment.is_hidden ? '<span class="badge bg-secondary"><i class="bi bi-eye-slash me-1"></i>Versteckt</span>' : '<span class="badge bg-light text-dark border"><i class="bi bi-eye me-1"></i>Sichtbar</span>'}
+                            ${processMeta}
+                            ${loginMeta}
+                        </div>
                     </div>
-                    <small class="text-muted text-end ms-2">
-                        ${formatDate(comment.created_at)}
-                    </small>
+                    <small class="text-muted text-end">${formatDate(comment.created_at, 'Unbekannt')}</small>
                 </div>
                 <div class="card-body">
-                    <p class="small text-muted mb-2">Autor: ${escapeHtml(comment.article_author || 'Unbekannt')}</p>
-                    <div class="mb-2">
-                        <strong>Kommentarvorschau:</strong>
-                        <p class="small text-muted mb-0">
-                            ${commentPreview}
-                        </p>
+                    <p class="small text-muted mb-3">Autor: ${escapeHtml(comment.article_author || 'Unbekannt')}</p>
+                    <div class="mb-3">
+                        <strong>Kommentar</strong>
+                        <p class="small text-muted mb-0">${commentPreview}</p>
                     </div>
-                    <div class="small text-muted">
-                        Modell: ${escapeHtml(comment.ai_provider_name || 'k. A.')} ${escapeHtml(comment.ai_model_name || '')}
-                    </div>
-                    <div class="small text-muted">
-                        Veröffentlicht am: ${comment.posted_at ? formatDate(comment.posted_at) : 'Noch nicht veröffentlicht'}
-                    </div>
+                    <div class="small text-muted mb-2">${generationMeta}</div>
+                    <div class="small text-muted">${postingMeta}</div>
+                    ${errorBlock}
                 </div>
-                <div class="card-footer bg-transparent">
-                    <div class="d-flex flex-wrap gap-2">
-                        <a href="/ai-comments/${comment.id}" class="btn btn-outline-primary btn-sm">
-                            <i class="bi bi-eye"></i> Details anzeigen
-                        </a>
-                        <button
-                            class="btn ${comment.status === 'generated' ? 'btn-success' : 'btn-outline-success'} btn-sm post-comment-btn"
-                            data-comment-id="${comment.id}"
-                            ${comment.status === 'generated' ? '' : 'disabled'}>
-                            <i class="bi bi-send"></i> ${comment.status === 'posted' ? 'Veröffentlicht' : 'Auf myMoment veröffentlichen'}
-                        </button>
-                    </div>
+                <div class="card-footer bg-transparent d-flex flex-wrap gap-2">
+                    <a href="/ai-comments/${comment.id}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-eye me-1"></i>Details
+                    </a>
+                    <button
+                        class="btn ${comment.status === 'generated' ? 'btn-success' : 'btn-outline-success'} btn-sm post-comment-btn"
+                        data-comment-id="${comment.id}"
+                        ${comment.status === 'generated' ? '' : 'disabled'}>
+                        <i class="bi bi-send me-1"></i>${comment.status === 'posted' ? 'Veroeffentlicht' : 'Auf myMoment veroeffentlichen'}
+                    </button>
                 </div>
             </div>
         `;
@@ -426,23 +388,84 @@ function renderComments(comments) {
         commentsList.appendChild(col);
     });
 
-    // Attach post comment event listeners
-    document.querySelectorAll('.post-comment-btn').forEach(button => {
+    document.querySelectorAll('.post-comment-btn').forEach((button) => {
         if (!button.disabled) {
             button.addEventListener('click', handlePostComment);
         }
     });
 }
 
-function formatCommentStatus(status) {
+function renderEmptyState() {
+    emptyState.style.display = 'block';
+
+    const heading = emptyState.querySelector('h3');
+    const copy = emptyState.querySelector('p');
+
+    if (allComments.length) {
+        heading.textContent = 'Keine Kommentare entsprechen deinen Filtern';
+        copy.textContent = 'Passe Filter oder Suchbegriffe an, um weitere Kommentare anzuzeigen.';
+        return;
+    }
+
+    if (processId && monitoringProcess?.is_running) {
+        heading.textContent = 'Der Prozess arbeitet noch';
+        copy.textContent = 'Kommentare erscheinen hier, sobald der Ueberwachungsprozess Artikel entdeckt und verarbeitet.';
+        return;
+    }
+
+    heading.textContent = 'Noch keine KI-Kommentare';
+    copy.textContent = 'Sobald Ueberwachungsprozesse KI-Kommentare erzeugen, erscheinen sie hier.';
+}
+
+function getStatusMeta(status) {
     const mapping = {
-        posted: 'Veröffentlicht',
-        generated: 'Generiert',
-        prepared: 'Vorbereitet',
-        discovered: 'Entdeckt',
-        failed: 'Fehlgeschlagen'
+        discovered: { label: 'Entdeckt', badgeClass: 'bg-secondary' },
+        prepared: { label: 'Vorbereitet', badgeClass: 'bg-primary' },
+        generated: { label: 'Generiert', badgeClass: 'bg-warning text-dark' },
+        posted: { label: 'Veroeffentlicht', badgeClass: 'bg-success' },
+        failed: { label: 'Fehlgeschlagen', badgeClass: 'bg-danger' },
+        deleted: { label: 'Geloescht', badgeClass: 'bg-dark' }
     };
-    return mapping[status] || status;
+    return mapping[status] || { label: status || 'Unbekannt', badgeClass: 'bg-secondary' };
+}
+
+function buildCommentPreview(comment) {
+    if (!comment.comment_content) {
+        if (comment.status === 'discovered') {
+            return '<span class="fst-italic">Artikel wurde entdeckt, aber noch nicht vorbereitet.</span>';
+        }
+        if (comment.status === 'prepared') {
+            return '<span class="fst-italic">Artikelinhalt ist vorbereitet, die Generierung laeuft noch.</span>';
+        }
+        return '<span class="fst-italic">Kein Kommentarinhalt gespeichert.</span>';
+    }
+
+    const preview = comment.comment_content.length > 200
+        ? `${comment.comment_content.substring(0, 200)}...`
+        : comment.comment_content;
+
+    return escapeHtml(preview);
+}
+
+function buildGenerationMeta(comment) {
+    const providerLabel = comment.ai_provider_name
+        ? formatProviderLabel(comment.ai_provider_name)
+        : 'k. A.';
+    const modelLabel = comment.ai_model_name || 'kein Modell';
+    const timing = comment.generation_time_ms ? `${comment.generation_time_ms} ms` : 'keine Zeitmessung';
+    const tokens = comment.generation_tokens ? `${comment.generation_tokens} Tokens` : 'keine Tokenzahl';
+
+    return `Generierung: ${escapeHtml(providerLabel)} / ${escapeHtml(modelLabel)} | ${timing} | ${tokens}`;
+}
+
+function buildPostingMeta(comment) {
+    if (comment.status === 'posted') {
+        return `Veroeffentlicht: ${formatDate(comment.posted_at, 'Unbekannt')}`;
+    }
+    if (comment.status === 'failed') {
+        return `Fehlgeschlagen: ${formatDate(comment.failed_at, 'Unbekannt')}`;
+    }
+    return `Artikel-Snapshot: ${formatDate(comment.article_scraped_at, 'Unbekannt')}`;
 }
 
 async function handlePostComment(event) {
@@ -451,77 +474,48 @@ async function handlePostComment(event) {
     const originalText = button.innerHTML;
 
     button.disabled = true;
-    button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Wird veröffentlicht…';
+    button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Wird veroeffentlicht...';
 
     try {
-        const response = await fetch(`/api/v1/comments/${commentId}/post`, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Kommentar konnte nicht veröffentlicht werden');
-        }
+        const response = await fetch(`/api/v1/comments/${commentId}/post`, fetchOptions('POST'));
+        await assertOk(response, 'Kommentar konnte nicht veroeffentlicht werden.');
 
         const data = await response.json();
-
-        // Update UI
-        button.innerHTML = '<i class="bi bi-check-circle"></i> Veröffentlicht';
-        button.classList.remove('btn-success');
-        button.classList.add('btn-secondary');
-
-        // Update status badge in card header
-        const card = button.closest('.card');
-        const statusBadge = card.querySelector('.badge');
-        if (statusBadge) {
-            statusBadge.textContent = formatCommentStatus('posted');
-            statusBadge.className = 'badge bg-success';
-        }
-
-        // Update comment in local array
-        const commentIndex = allComments.findIndex(c => c.id === commentId);
+        const commentIndex = allComments.findIndex((item) => item.id === commentId);
         if (commentIndex !== -1) {
-            allComments[commentIndex].status = 'posted';
-            allComments[commentIndex].posted_at = data.posted_at;
+            allComments[commentIndex] = data;
         }
 
-        window.showAlert('Kommentar erfolgreich auf myMoment veröffentlicht!', 'success');
+        window.showAlert('Kommentar erfolgreich auf myMoment veroeffentlicht.', 'success');
+        renderComments(filterComments());
 
-        // Refresh process details if viewing process-specific comments
         if (processId) {
             await loadProcessDetails();
         }
-
     } catch (error) {
         console.error('Error posting comment:', error);
-        window.showAlert(`Kommentar konnte nicht veröffentlicht werden: ${error.message}`, 'danger');
+        window.showAlert(`Kommentar konnte nicht veroeffentlicht werden: ${error.message}`, 'danger');
         button.disabled = false;
         button.innerHTML = originalText;
     }
 }
 
+async function assertOk(response, message) {
+    if (response.ok) {
+        return;
+    }
+
+    const errorBody = await safeParseJson(response);
+    const detail = extractErrorMessage(errorBody) || `${message} (HTTP ${response.status})`;
+    throw new Error(detail);
+}
+
 function formatLastActivity(process) {
     if (process.stopped_at) {
-        return `Gestoppt: ${formatDateTime(process.stopped_at)}`;
-    } else if (process.started_at) {
-        return `Gestartet: ${formatDateTime(process.started_at)}`;
-    } else {
-        return `Erstellt: ${formatDateTime(process.created_at)}`;
+        return `Gestoppt: ${formatDate(process.stopped_at, 'Nicht verfuegbar')}`;
     }
-}
-
-function formatDate(dateString) {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toISOString().slice(0, 16).replace('T', ' ');
-}
-
-function formatDateTime(dateString) {
-    if (!dateString) return 'Nicht verfügbar';
-    const date = new Date(dateString);
-    return date.toISOString().slice(0, 16).replace('T', ' ');
+    if (process.started_at) {
+        return `Gestartet: ${formatDate(process.started_at, 'Nicht verfuegbar')}`;
+    }
+    return `Erstellt: ${formatDate(process.created_at, 'Nicht verfuegbar')}`;
 }

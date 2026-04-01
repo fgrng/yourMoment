@@ -27,6 +27,43 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/comments", tags=["Comments"])
 
 
+def serialize_ai_comment(comment: AIComment) -> AICommentResponse:
+    """Convert an AIComment model into the complete API response shape."""
+    return AICommentResponse(
+        id=comment.id,
+        mymoment_article_id=comment.mymoment_article_id,
+        mymoment_comment_id=comment.mymoment_comment_id,
+        article_title=comment.article_title,
+        article_author=comment.article_author,
+        article_content=comment.article_content,
+        article_raw_html=comment.article_raw_html,
+        article_url=comment.article_url,
+        article_category=comment.article_category,
+        article_task_id=comment.article_task_id,
+        article_published_at=comment.article_published_at,
+        article_edited_at=comment.article_edited_at,
+        article_scraped_at=comment.article_scraped_at,
+        comment_content=comment.comment_content,
+        reasoning_content=comment.reasoning_content,
+        is_hidden=comment.is_hidden,
+        status=comment.status,
+        ai_model_name=comment.ai_model_name,
+        ai_provider_name=comment.ai_provider_name,
+        generation_tokens=comment.generation_tokens,
+        generation_time_ms=comment.generation_time_ms,
+        error_message=comment.error_message,
+        retry_count=comment.retry_count,
+        created_at=comment.created_at,
+        posted_at=comment.posted_at,
+        failed_at=comment.failed_at,
+        user_id=comment.user_id,
+        mymoment_login_id=comment.mymoment_login_id,
+        prompt_template_id=comment.prompt_template_id,
+        llm_provider_id=comment.llm_provider_id,
+        monitoring_process_id=comment.monitoring_process_id
+    )
+
+
 @router.get("/index", response_model=AICommentListResponse)
 async def get_user_ai_comments(
     status_filter: Optional[str] = Query(None, description="Filter by status: generated, posted, failed, deleted"),
@@ -88,32 +125,7 @@ async def get_user_ai_comments(
         logger.debug(f"Retrieved {len(ai_comments)} AI comments for user {current_user.id}")
 
         # Convert to response format
-        comment_responses = [
-            AICommentResponse(
-                id=comment.id,
-                mymoment_article_id=comment.mymoment_article_id,
-                mymoment_comment_id=comment.mymoment_comment_id,
-                article_title=comment.article_title,
-                article_author=comment.article_author,
-                article_content=comment.article_content,
-                article_url=comment.article_url,
-                article_category=comment.article_category,
-                article_published_at=comment.article_published_at,
-                article_scraped_at=comment.article_scraped_at,
-                comment_content=comment.comment_content,
-                is_hidden=comment.is_hidden,
-                status=comment.status,
-                ai_model_name=comment.ai_model_name,
-                ai_provider_name=comment.ai_provider_name,
-                generation_time_ms=comment.generation_time_ms,
-                created_at=comment.created_at,
-                posted_at=comment.posted_at,
-                user_id=comment.user_id,
-                mymoment_login_id=comment.mymoment_login_id,
-                monitoring_process_id=comment.monitoring_process_id
-            )
-            for comment in ai_comments
-        ]
+        comment_responses = [serialize_ai_comment(comment) for comment in ai_comments]
 
         return AICommentListResponse(
             items=comment_responses,
@@ -169,30 +181,7 @@ async def get_ai_comment_detail(
 
         logger.debug(f"Retrieved AI comment {comment_id} for user {current_user.id}")
 
-        return AICommentResponse(
-            id=ai_comment.id,
-            mymoment_article_id=ai_comment.mymoment_article_id,
-            mymoment_comment_id=ai_comment.mymoment_comment_id,
-            article_title=ai_comment.article_title,
-            article_author=ai_comment.article_author,
-            article_content=ai_comment.article_content,
-            article_raw_html=ai_comment.article_raw_html,
-            article_url=ai_comment.article_url,
-            article_category=ai_comment.article_category,
-            article_published_at=ai_comment.article_published_at,
-            article_scraped_at=ai_comment.article_scraped_at,
-            comment_content=ai_comment.comment_content,
-            is_hidden=ai_comment.is_hidden,
-            status=ai_comment.status,
-            ai_model_name=ai_comment.ai_model_name,
-            ai_provider_name=ai_comment.ai_provider_name,
-            generation_time_ms=ai_comment.generation_time_ms,
-            created_at=ai_comment.created_at,
-            posted_at=ai_comment.posted_at,
-            user_id=ai_comment.user_id,
-            mymoment_login_id=ai_comment.mymoment_login_id,
-            monitoring_process_id=ai_comment.monitoring_process_id
-        )
+        return serialize_ai_comment(ai_comment)
 
     except HTTPException:
         raise
@@ -246,32 +235,7 @@ async def get_ai_comments_by_article(
         )
 
         # Convert to response format
-        comment_responses = [
-            AICommentResponse(
-                id=comment.id,
-                mymoment_article_id=comment.mymoment_article_id,
-                mymoment_comment_id=comment.mymoment_comment_id,
-                article_title=comment.article_title,
-                article_author=comment.article_author,
-                article_content=comment.article_content,
-                article_url=comment.article_url,
-                article_category=comment.article_category,
-                article_published_at=comment.article_published_at,
-                article_scraped_at=comment.article_scraped_at,
-                comment_content=comment.comment_content,
-                is_hidden=comment.is_hidden,
-                status=comment.status,
-                ai_model_name=comment.ai_model_name,
-                ai_provider_name=comment.ai_provider_name,
-                generation_time_ms=comment.generation_time_ms,
-                created_at=comment.created_at,
-                posted_at=comment.posted_at,
-                user_id=comment.user_id,
-                mymoment_login_id=comment.mymoment_login_id,
-                monitoring_process_id=comment.monitoring_process_id
-            )
-            for comment in ai_comments
-        ]
+        comment_responses = [serialize_ai_comment(comment) for comment in ai_comments]
 
         return AICommentListResponse(
             items=comment_responses,
@@ -433,30 +397,7 @@ async def post_comment_to_mymoment(
                 )
 
         # Return updated comment
-        return AICommentResponse(
-            id=ai_comment.id,
-            mymoment_article_id=ai_comment.mymoment_article_id,
-            mymoment_comment_id=ai_comment.mymoment_comment_id,
-            article_title=ai_comment.article_title,
-            article_author=ai_comment.article_author,
-            article_content=ai_comment.article_content,
-            article_raw_html=ai_comment.article_raw_html,
-            article_url=ai_comment.article_url,
-            article_category=ai_comment.article_category,
-            article_published_at=ai_comment.article_published_at,
-            article_scraped_at=ai_comment.article_scraped_at,
-            comment_content=ai_comment.comment_content,
-            is_hidden=ai_comment.is_hidden,
-            status=ai_comment.status,
-            ai_model_name=ai_comment.ai_model_name,
-            ai_provider_name=ai_comment.ai_provider_name,
-            generation_time_ms=ai_comment.generation_time_ms,
-            created_at=ai_comment.created_at,
-            posted_at=ai_comment.posted_at,
-            user_id=ai_comment.user_id,
-            mymoment_login_id=ai_comment.mymoment_login_id,
-            monitoring_process_id=ai_comment.monitoring_process_id
-        )
+        return serialize_ai_comment(ai_comment)
 
     except HTTPException:
         raise

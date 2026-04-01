@@ -13,7 +13,6 @@
     </div>
 </div>
 
-
 <div id="loadingState" class="text-center my-5">
     <div class="spinner-border text-primary" role="status">
         <span class="visually-hidden">Wird geladen …</span>
@@ -28,56 +27,12 @@
 </div>
 
 <div id="commentContent" style="display: none;">
-
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="bi bi-journal-text me-2"></i>Artikel-Snapshot</h5>
-            <a id="commentArticleLink" href="#" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm" style="display:none;">
-                Auf myMoment anzeigen
-            </a>
-        </div>
-        <div class="card-body">
-            <dl class="row mb-3">
-                <dt class="col-sm-3">Artikeltitel</dt>
-                <dd class="col-sm-9" id="articleTitle">-</dd>
-
-                <dt class="col-sm-3">Artikelautor*in</dt>
-                <dd class="col-sm-9" id="articleAuthor">-</dd>
-
-                <dt class="col-sm-3">Gescrapet am</dt>
-                <dd class="col-sm-9" id="articleScrapedAt">-</dd>
-            </dl>
-
-            <div class="mb-3">
-                <strong>KI-Kommentar</strong>
-                <p id="commentContentText" class="mb-0">-</p>
-            </div>
-
-            <div class="mb-3">
-                <strong>Artikelinhalt</strong>
-                <p class="text-muted" id="articleContent">-</p>
-            </div>
-
-            <div class="accordion" id="articleHtmlAccordion">
-                <div class="accordion-item">
-                    <h2 class="accordion-header" id="articleHtmlHeading">
-                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#articleHtmlCollapse" aria-expanded="false" aria-controls="articleHtmlCollapse">
-                            Rohes Artikel-HTML anzeigen
-                        </button>
-                    </h2>
-                    <div id="articleHtmlCollapse" class="accordion-collapse collapse" aria-labelledby="articleHtmlHeading" data-bs-parent="#articleHtmlAccordion">
-                        <div class="accordion-body">
-                            <pre class="small text-muted" id="articleRawHtml">Kein Roh-HTML erfasst.</pre>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="card mb-4">
-        <div class="card-header">
             <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Kommentarübersicht</h5>
+            <a id="processLink" href="#" class="btn btn-outline-primary btn-sm" style="display:none;">
+                Zum Prozess
+            </a>
         </div>
         <div class="card-body">
             <dl class="row mb-0">
@@ -92,6 +47,12 @@
 
                 <dt class="col-sm-3">Veröffentlicht</dt>
                 <dd class="col-sm-9" id="commentPostedAt">-</dd>
+
+                <dt class="col-sm-3">Fehlgeschlagen</dt>
+                <dd class="col-sm-9" id="commentFailedAt">-</dd>
+
+                <dt class="col-sm-3">myMoment-Kommentar-ID</dt>
+                <dd class="col-sm-9" id="commentExternalId">-</dd>
 
                 <dt class="col-sm-3">Fehler</dt>
                 <dd class="col-sm-9" id="commentError">-</dd>
@@ -118,7 +79,9 @@
                 </div>
                 <div class="card-body">
                     <p class="mb-1 fw-semibold" id="commentProviderName">-</p>
-                    <p class="text-muted small mb-0" id="commentProviderModel">-</p>
+                    <p class="text-muted small mb-1" id="commentProviderModel">-</p>
+                    <p class="text-muted small mb-1" id="commentGenerationTime">-</p>
+                    <p class="text-muted small mb-0" id="commentGenerationTokens">-</p>
                 </div>
             </div>
         </div>
@@ -130,6 +93,75 @@
                 <div class="card-body">
                     <p class="mb-1 fw-semibold" id="commentPromptName">-</p>
                     <p class="text-muted small mb-0" id="commentPromptDescription">-</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-chat-dots me-2"></i>Generierter Kommentar</h5>
+            <a id="commentArticleLink" href="#" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm" style="display:none;">
+                Auf myMoment anzeigen
+            </a>
+        </div>
+        <div class="card-body">
+            <pre class="mb-0 text-wrap" id="commentContentText">-</pre>
+        </div>
+    </div>
+
+    <div class="card mb-4" id="reasoningCard" style="display: none;">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-lightbulb me-2"></i>LLM-Reasoning</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small">Debug-Kontext aus dem Modell. Nicht mit dem veröffentlichten Kommentar verwechseln.</p>
+            <pre class="mb-0 text-wrap" id="reasoningContent">-</pre>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-journal-text me-2"></i>Artikel-Snapshot</h5>
+        </div>
+        <div class="card-body">
+            <dl class="row mb-3">
+                <dt class="col-sm-3">Artikeltitel</dt>
+                <dd class="col-sm-9" id="articleTitle">-</dd>
+
+                <dt class="col-sm-3">Artikelautor*in</dt>
+                <dd class="col-sm-9" id="articleAuthor">-</dd>
+
+                <dt class="col-sm-3">Gescrapet am</dt>
+                <dd class="col-sm-9" id="articleScrapedAt">-</dd>
+
+                <dt class="col-sm-3">Veröffentlicht am</dt>
+                <dd class="col-sm-9" id="articlePublishedAt">-</dd>
+
+                <dt class="col-sm-3">Zuletzt bearbeitet</dt>
+                <dd class="col-sm-9" id="articleEditedAt">-</dd>
+
+                <dt class="col-sm-3">Kategorie / Aufgabe</dt>
+                <dd class="col-sm-9" id="articleMeta">-</dd>
+            </dl>
+
+            <div class="mb-3">
+                <strong>Artikelinhalt</strong>
+                <pre class="text-muted text-wrap mb-0" id="articleContent">-</pre>
+            </div>
+
+            <div class="accordion" id="articleHtmlAccordion">
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="articleHtmlHeading">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#articleHtmlCollapse" aria-expanded="false" aria-controls="articleHtmlCollapse">
+                            Rohes Artikel-HTML anzeigen
+                        </button>
+                    </h2>
+                    <div id="articleHtmlCollapse" class="accordion-collapse collapse" aria-labelledby="articleHtmlHeading" data-bs-parent="#articleHtmlAccordion">
+                        <div class="accordion-body">
+                            <pre class="small text-muted text-wrap" id="articleRawHtml">Kein Roh-HTML erfasst.</pre>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -147,8 +179,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         fetchOptions,
         showContentState,
         showEmptyState,
-        showLoadingState,
-        escapeHtml
+        showLoadingState
     } = window.YM.utils;
 
     const loadingState = document.getElementById('loadingState');
@@ -161,20 +192,32 @@ document.addEventListener('DOMContentLoaded', async function() {
     const visibilityEl = document.getElementById('commentVisibility');
     const createdAtEl = document.getElementById('commentCreatedAt');
     const postedAtEl = document.getElementById('commentPostedAt');
+    const failedAtEl = document.getElementById('commentFailedAt');
+    const externalIdEl = document.getElementById('commentExternalId');
     const errorEl = document.getElementById('commentError');
     const articleLinkEl = document.getElementById('commentArticleLink');
+    const processLinkEl = document.getElementById('processLink');
+
     const articleTitleEl = document.getElementById('articleTitle');
     const articleAuthorEl = document.getElementById('articleAuthor');
     const articleScrapedAtEl = document.getElementById('articleScrapedAt');
+    const articlePublishedAtEl = document.getElementById('articlePublishedAt');
+    const articleEditedAtEl = document.getElementById('articleEditedAt');
+    const articleMetaEl = document.getElementById('articleMeta');
     const articleContentEl = document.getElementById('articleContent');
     const articleRawHtmlEl = document.getElementById('articleRawHtml');
-    const commentContentEl = document.getElementById('commentContentText');
+    const commentTextEl = document.getElementById('commentContentText');
+
+    const reasoningCardEl = document.getElementById('reasoningCard');
+    const reasoningContentEl = document.getElementById('reasoningContent');
 
     const loginNameEl = document.getElementById('commentLoginName');
     const loginUsernameEl = document.getElementById('commentLoginUsername');
 
     const providerNameEl = document.getElementById('commentProviderName');
     const providerModelEl = document.getElementById('commentProviderModel');
+    const generationTimeEl = document.getElementById('commentGenerationTime');
+    const generationTokensEl = document.getElementById('commentGenerationTokens');
 
     const promptNameEl = document.getElementById('commentPromptName');
     const promptDescriptionEl = document.getElementById('commentPromptDescription');
@@ -195,21 +238,21 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
 
         const comment = await response.json();
-
         await populateComment(comment);
         showContentState(commentContent, [loadingState, emptyState]);
     } catch (error) {
         console.error('Error loading comment:', error);
-        showLoadingState(null, [loadingState, emptyState, commentContent]);
-        window.showAlert('Fehler beim Laden des KI-Kommentars. Bitte später erneut versuchen.', 'danger');
+        titleEl.textContent = 'KI-Kommentar nicht gefunden';
+        subtitleEl.textContent = '';
+        showEmptyState(emptyState, [loadingState, commentContent]);
+        window.showAlert('Fehler beim Laden des KI-Kommentars. Bitte spaeter erneut versuchen.', 'danger');
     }
 
     async function populateComment(comment) {
         titleEl.textContent = `KI-Kommentar ${formatShortId(comment.id)}`;
-        subtitleEl.textContent = comment.article_title || 'Zugehöriger Artikel unbekannt';
-        statusEl.textContent = comment.status ? comment.status.toUpperCase() : 'UNBEKANNT';
+        subtitleEl.textContent = comment.article_title || 'Zugehoeriger Artikel unbekannt';
+        statusEl.innerHTML = buildStatusBadge(comment.status);
 
-        // Display visibility status
         if (comment.is_hidden) {
             visibilityEl.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-eye-slash me-1"></i>Versteckt</span>';
         } else {
@@ -217,16 +260,20 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
 
         createdAtEl.textContent = formatDate(comment.created_at, 'Unbekannt');
-        postedAtEl.textContent = comment.posted_at ? formatDate(comment.posted_at, 'Unbekannt') : 'Noch nicht veröffentlicht';
+        postedAtEl.textContent = formatDate(comment.posted_at, 'Noch nicht veroeffentlicht');
+        failedAtEl.textContent = formatDate(comment.failed_at, 'Nicht fehlgeschlagen');
+        externalIdEl.textContent = comment.mymoment_comment_id || 'Noch keine externe ID';
         errorEl.textContent = comment.error_message || '—';
 
-        loginNameEl.textContent = comment.mymoment_login_id ? 'Wird geladen …' : 'Noch nicht veröffentlicht';
+        loginNameEl.textContent = comment.mymoment_login_id ? 'Wird geladen …' : 'Noch nicht veroeffentlicht';
         loginUsernameEl.textContent = comment.mymoment_login_id ? '' : '—';
 
         providerNameEl.textContent = comment.ai_provider_name || 'Unbekannter Anbieter';
         providerModelEl.textContent = comment.ai_model_name ? `Modell: ${comment.ai_model_name}` : 'Kein Modell erfasst';
+        generationTimeEl.textContent = comment.generation_time_ms ? `Generierungszeit: ${comment.generation_time_ms} ms` : 'Keine Generierungszeit erfasst';
+        generationTokensEl.textContent = comment.generation_tokens ? `Tokens: ${comment.generation_tokens}` : 'Keine Tokenzahl erfasst';
 
-        promptNameEl.textContent = comment.prompt_template_id ? 'Wird geladen …' : 'Unbekannte Vorlage';
+        promptNameEl.textContent = comment.prompt_template_id ? 'Wird geladen …' : 'Keine Vorlage hinterlegt';
         promptDescriptionEl.textContent = comment.prompt_template_id ? '' : '—';
 
         if (comment.article_url) {
@@ -236,12 +283,29 @@ document.addEventListener('DOMContentLoaded', async function() {
             articleLinkEl.style.display = 'none';
         }
 
+        if (comment.monitoring_process_id) {
+            processLinkEl.href = `/processes/${comment.monitoring_process_id}/ai-comments`;
+            processLinkEl.style.display = 'inline-flex';
+        } else {
+            processLinkEl.style.display = 'none';
+        }
+
         articleTitleEl.textContent = comment.article_title || 'Unbekannter Artikel';
         articleAuthorEl.textContent = comment.article_author || 'Unbekannte*r Autor*in';
         articleScrapedAtEl.textContent = formatDate(comment.article_scraped_at, 'Unbekannt');
+        articlePublishedAtEl.textContent = formatDate(comment.article_published_at, 'Nicht erfasst');
+        articleEditedAtEl.textContent = formatDate(comment.article_edited_at, 'Nicht erfasst');
+        articleMetaEl.textContent = formatArticleMeta(comment);
         articleContentEl.textContent = comment.article_content || 'Kein Artikelinhalt erfasst.';
         articleRawHtmlEl.textContent = comment.article_raw_html || 'Kein Roh-HTML erfasst.';
-        commentContentEl.textContent = comment.comment_content || 'Kein Kommentarinhalt gespeichert.';
+        commentTextEl.textContent = comment.comment_content || 'Kein Kommentarinhalt gespeichert.';
+
+        if (comment.reasoning_content) {
+            reasoningCardEl.style.display = 'block';
+            reasoningContentEl.textContent = comment.reasoning_content;
+        } else {
+            reasoningCardEl.style.display = 'none';
+        }
 
         await Promise.all([
             loadCredentialDetails(comment.mymoment_login_id),
@@ -259,7 +323,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (!relatedDataCache.credentials) {
                 const response = await fetch('/api/v1/mymoment-credentials/index', fetchOptions('GET'));
                 if (!response.ok) {
-                    throw new Error(`Zugangsdatenübersicht konnte nicht geladen werden (HTTP ${response.status})`);
+                    throw new Error(`Zugangsdatenuebersicht konnte nicht geladen werden (HTTP ${response.status})`);
                 }
                 relatedDataCache.credentials = await response.json();
             }
@@ -270,7 +334,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             if (credential) {
                 loginNameEl.textContent = credential.name || 'Unbenannte Zugangsdaten';
-                loginUsernameEl.textContent = credential.username ? `Benutzername: ${credential.username}` : 'Benutzername nicht verfügbar';
+                loginUsernameEl.textContent = credential.username ? `Benutzername: ${credential.username}` : 'Benutzername nicht verfuegbar';
             } else {
                 loginNameEl.textContent = 'Zugangsdaten nicht gefunden';
                 loginUsernameEl.textContent = '—';
@@ -301,16 +365,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             );
 
             if (provider) {
-                providerNameEl.textContent = provider.provider_name || 'LLM-Anbieter';
-                providerModelEl.textContent = provider.model_name ? `Modell: ${provider.model_name}` : 'Kein Modell konfiguriert';
-            } else {
-                providerNameEl.textContent = comment.ai_provider_name || 'Unbekannter Anbieter';
-                providerModelEl.textContent = comment.ai_model_name ? `Modell: ${comment.ai_model_name}` : 'Kein Modell erfasst';
+                providerNameEl.textContent = provider.provider_name || comment.ai_provider_name || 'LLM-Anbieter';
+                providerModelEl.textContent = provider.model_name ? `Modell: ${provider.model_name}` : (comment.ai_model_name ? `Modell: ${comment.ai_model_name}` : 'Kein Modell konfiguriert');
             }
         } catch (error) {
             console.error('Failed to load provider details:', error);
-            providerNameEl.textContent = comment.ai_provider_name || 'Anbieter konnte nicht geladen werden';
-            providerModelEl.textContent = comment.ai_model_name ? `Modell: ${comment.ai_model_name}` : 'Kein Modell erfasst';
         }
     }
 
@@ -344,6 +403,30 @@ document.addEventListener('DOMContentLoaded', async function() {
             promptNameEl.textContent = 'Vorlage konnte nicht geladen werden';
             promptDescriptionEl.textContent = '—';
         }
+    }
+
+    function buildStatusBadge(status) {
+        const mapping = {
+            discovered: { className: 'bg-secondary', label: 'Entdeckt' },
+            prepared: { className: 'bg-primary', label: 'Vorbereitet' },
+            generated: { className: 'bg-warning text-dark', label: 'Generiert' },
+            posted: { className: 'bg-success', label: 'Veröffentlicht' },
+            failed: { className: 'bg-danger', label: 'Fehlgeschlagen' },
+            deleted: { className: 'bg-dark', label: 'Gelöscht' }
+        };
+        const badge = mapping[status] || { className: 'bg-secondary', label: 'Unbekannt' };
+        return `<span class="badge ${badge.className}">${badge.label}</span>`;
+    }
+
+    function formatArticleMeta(comment) {
+        const parts = [];
+        if (comment.article_category !== null && comment.article_category !== undefined) {
+            parts.push(`Kategorie ${comment.article_category}`);
+        }
+        if (comment.article_task_id !== null && comment.article_task_id !== undefined) {
+            parts.push(`Aufgabe ${comment.article_task_id}`);
+        }
+        return parts.length ? parts.join(' / ') : 'Keine Metadaten erfasst';
     }
 
     function formatShortId(id) {
