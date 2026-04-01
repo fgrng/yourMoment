@@ -24,7 +24,7 @@ yourMoment enables teachers and researchers to monitor myMoment articles and aut
 
 - **Multi-user architecture** – Isolated workflows with per-user LLM configurations, credentials, and templates
 - **Basic security** – JWT authentication, Fernet encryption for sensitive data and configurable password policies
-- **LLM provider flexibility** – Support for OpenAI, Mistral. Other providers will be available in the future.
+- **LLM provider flexibility** – Any provider supported by LiteLLM (OpenAI, Mistral, Anthropic, etc.) via a unified API surface
 - **Customizable templates** – System and user-defined prompt templates with validation and required AI disclosure prefix
 - **Automated monitoring** – Background processes with configurable duration limits, multi-credential fan-out, and (hopefully) graceful shutdown
 - **Article management** – Comprehensive article browsing with category (leaning tasks in myMoment) and tag (classroom in myMoment) filtering

@@ -245,12 +245,12 @@ async with ScraperService() as scraper:
 - `list_providers(user_id, limit)` – List user's providers
 - `update_provider(provider_id, user_id, updates)` – Update config/API key
 - `delete_provider(provider_id, user_id)` – Remove (checks if in use)
-- `generate_completion(...)` – Unified generation with LiteLLM native structured output
+- `generate_completion(user_prompt, config, system_prompt)` – Generate via LiteLLM; accepts `LLMProviderConfiguration` or `LLMGenerationConfig` DTO; returns `GenerationResult` (content, reasoning, token counts, timing)
+- `generate_completion_standalone(user_prompt, config, system_prompt)` – Module-level function; no DB session required; used directly by Celery tasks with a pre-built DTO
 
 **Supported Providers:**
-- OpenAI (gpt-4, gpt-3.5-turbo)
-- Mistral (mistral-small, mistral-medium, mistral-large)
-- Extensible for additional providers
+- Any provider supported by LiteLLM (model strings formatted as `provider/model`, e.g. `openai/gpt-4o`, `mistral/mistral-large-latest`)
+- Provider catalog sourced dynamically from `litellm.model_cost`; filtered by `supports_response_schema=True` for structured-output generation
 
 **Security:**
 - API keys encrypted at rest with Fernet
@@ -302,8 +302,10 @@ async with ScraperService() as scraper:
 - `generate_comment(article_id, prompt_template, llm_provider, context)` – Generate using LLM
 - `post_comment(article_id, comment_text, session)` – Publish to myMoment
 - `get_comments_for_article(article_id, limit)` – List generated comments
-- `validate_comment(comment_text)` – Check length, profanity, AI prefix
 - `retry_failed_comment(comment_id)` – Regenerate failed comment
+
+**Module-level helpers (importable directly):**
+- `validate_comment(comment_content, min_length, max_length, enable_content_validation)` – Validate length, AI prefix, and content quality; returns `{is_valid, has_ai_prefix, errors, content_length}`; used by both `CommentService` and Celery tasks
 
 **Generation Flow:**
 1. Fetch article details
@@ -342,6 +344,9 @@ async with ScraperService() as scraper:
 {article_excerpt}      # First 200 chars
 {article_category}     # Category/tab name
 {article_published_at} # Publication date
+{article_url}          # Full article URL
+{article_raw_html}     # Raw HTML (truncated to 5000 chars in tasks)
+{article_edited_at}    # Last edit timestamp
 {current_date}         # Current date
 {current_time}         # Current time
 {user_nickname}        # User's display name
