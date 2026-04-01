@@ -221,6 +221,7 @@ __marimo__/
 .specify/
 AGENTS.md
 CLAUDE.md
+GEMINI.md
 
 # ignore database
 *.db
@@ -230,6 +231,7 @@ CLAUDE.md
 # ignore project specific folders
 examples/
 docs/
+devlog/
 
 # ignore key files
 .encryption_key*

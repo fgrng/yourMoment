@@ -30,11 +30,8 @@ load_dotenv()
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+from src.config.logging import setup_logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,6 +61,7 @@ def cmd_server(args: argparse.Namespace) -> None:
             access_log=True,
             proxy_headers=True,
             forwarded_allow_ips="*",
+            log_config=None,
         )
     # Development server configuration
     else:
@@ -76,6 +74,7 @@ def cmd_server(args: argparse.Namespace) -> None:
             port=args.port,
             reload=True,
             log_level=args.loglevel,
+            log_config=None,
         )
 
 
@@ -541,6 +540,20 @@ def main() -> None:
     if not args.command:
         parser.print_help()
         return
+
+    service_name = "cli"
+    log_level = None
+    if args.command == "server":
+        service_name = "server"
+        log_level = args.loglevel
+    elif args.command == "worker":
+        service_name = "worker"
+        log_level = args.loglevel
+    elif args.command == "scheduler":
+        service_name = "scheduler"
+        log_level = args.loglevel
+
+    setup_logging(service_name=service_name, log_level=log_level)
 
     try:
         # Route to appropriate command

@@ -48,7 +48,7 @@ from src.lib.health import (
 async def lifespan(app: FastAPI):
     """Application lifespan management."""
     # Startup: configure logging and initialize database
-    setup_logging()
+    setup_logging(service_name="server")
     logger = logging.getLogger(__name__)
     logger.info("Starting yourMoment API")
 

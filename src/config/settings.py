@@ -11,6 +11,7 @@ Settings are validated using Pydantic for type safety.
 """
 
 import os
+from pathlib import Path
 from typing import Literal, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -161,8 +162,13 @@ class LoggingSettings(BaseSettings):
     """Logging configuration settings."""
 
     LOG_LEVEL: str = Field(default="INFO", description="Root log level")
+    LOG_DIR: str = Field(default="logs", description="Base directory for log files")
     LOG_FILE_ENABLED: bool = Field(default=True, description="Enable rotating file handler")
     LOG_FILE_PATH: str = Field(default="logs/app.log", description="Path to log file")
+    LOG_SERVER_FILE: Optional[str] = Field(default=None, description="Server log file path override")
+    LOG_WORKER_FILE: Optional[str] = Field(default=None, description="Worker log file path override")
+    LOG_SCHEDULER_FILE: Optional[str] = Field(default=None, description="Scheduler log file path override")
+    LOG_LLM_FILE: Optional[str] = Field(default=None, description="LLM summary log file path override")
     LOG_FILE_MAX_SIZE: int = Field(default=10 * 1024 * 1024, description="Log file max size in bytes")
     LOG_FILE_BACKUP_COUNT: int = Field(default=5, description="Log file backups to retain")
     LOG_CONSOLE_ENABLED: bool = Field(default=True, description="Enable console logging output")
@@ -173,6 +179,44 @@ class LoggingSettings(BaseSettings):
         env_file=".env",
         extra="ignore"
     )
+
+    def _resolve_default_log_path(self, filename: str) -> str:
+        return str(Path(self.LOG_DIR) / filename)
+
+    def get_service_log_path(self, service_name: str) -> str:
+        """Return the file path for the given service log."""
+        service_name = service_name.lower()
+        explicit_paths = {
+            "server": self.LOG_SERVER_FILE,
+            "worker": self.LOG_WORKER_FILE,
+            "scheduler": self.LOG_SCHEDULER_FILE,
+            "app": None,
+            "cli": None,
+        }
+
+        explicit_path = explicit_paths.get(service_name)
+        if explicit_path:
+            return explicit_path
+
+        if service_name == "app":
+            default_app_path = LoggingSettings.model_fields["LOG_FILE_PATH"].default
+            if self.LOG_FILE_PATH != default_app_path:
+                return self.LOG_FILE_PATH
+
+        default_filenames = {
+            "server": "server.log",
+            "worker": "worker.log",
+            "scheduler": "scheduler.log",
+            "app": "app.log",
+            "cli": "cli.log",
+        }
+        return self._resolve_default_log_path(default_filenames.get(service_name, f"{service_name}.log"))
+
+    def get_llm_log_path(self) -> str:
+        """Return the file path for the dedicated LLM summary log."""
+        if self.LOG_LLM_FILE:
+            return self.LOG_LLM_FILE
+        return self._resolve_default_log_path("llm.log")
 
 
 class CelerySettings(BaseSettings):
@@ -305,6 +349,17 @@ class MonitoringSettings(BaseSettings):
         description="Required prefix for AI-generated comments"
     )
 
+    COMMENT_FORMAT_INSTRUCTION: str = Field(
+        default=(
+            "FORMATTING REQUIREMENT: Structure your response using HTML paragraph tags only. "
+            "Wrap each paragraph in <p>...</p> tags. "
+            "You may use <strong>, <em>, and <br> for inline formatting. "
+            "Do NOT use <html>, <body>, <div>, <h1> through <h6>, or any other block-level or structural tags. "
+            "Do not use plain-text newlines to separate paragraphs."
+        ),
+        description="System-level formatting instruction appended to every LLM call for comment generation"
+    )
+
     COMMENT_MIN_LENGTH: int = Field(
         default=50,
         ge=1,
@@ -312,7 +367,7 @@ class MonitoringSettings(BaseSettings):
     )
 
     COMMENT_MAX_LENGTH: int = Field(
-        default=2000,
+        default=5000,
         ge=1,
         description="Maximum character length of generated comment content (excluding AI prefix)"
     )

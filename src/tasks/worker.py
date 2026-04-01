@@ -13,9 +13,10 @@ import logging
 from importlib import import_module
 from typing import Any, Dict, Iterable
 from celery import Celery
-from celery.signals import setup_logging, task_prerun, task_postrun
+from celery.signals import setup_logging as celery_setup_logging, task_prerun, task_postrun
 from kombu import Queue
 
+from src.config.logging import format_log_context, setup_logging as setup_project_logging
 from src.config.settings import get_settings
 
 # Task modules that need to be imported so Celery registers them
@@ -77,7 +78,9 @@ class CeleryConfig:
     # Worker settings
     worker_prefetch_multiplier = 1  # One task at a time for better resource control
     task_acks_late = True  # Acknowledge tasks after completion
+    task_track_started = True  # Emit STARTED so scheduler can detect in-flight tasks
     worker_max_tasks_per_child = 100  # Restart worker after 100 tasks to prevent memory leaks
+    worker_hijack_root_logger = False
 
     # Task time limits
     task_soft_time_limit = 3*(60*60)  # 3 hours soft limit
@@ -146,50 +149,31 @@ def import_task_modules():
 celery_app = create_celery_app()
 
 
-@setup_logging.connect
+@celery_setup_logging.connect
 def setup_celery_logging(loglevel=None, logfile=None, format=None, colorize=None, **kwargs):
     """Configure Celery logging to integrate with application logging."""
-    # Get the root logger
-    root_logger = logging.getLogger()
-
-    # Set log level
-    if loglevel:
-        root_logger.setLevel(loglevel)
-    else:
-        root_logger.setLevel(logging.INFO)
-
-    # Create formatter
-    formatter = logging.Formatter(
-        '[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-
-    # Console handler
-    if not root_logger.handlers:
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        root_logger.addHandler(console_handler)
-
-    # File handler for Celery logs
-    if logfile:
-        file_handler = logging.FileHandler(logfile)
-        file_handler.setFormatter(formatter)
-        root_logger.addHandler(file_handler)
+    service_name = os.getenv("YOURMOMENT_SERVICE_NAME", "worker")
+    setup_project_logging(service_name=service_name, log_level=loglevel)
 
 
 @task_prerun.connect
 def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None, **kwds):
     """Log task start information."""
-    logger.info(f"Starting task {task.name} [{task_id}] with args={args} kwargs={kwargs}")
+    logger.info(
+        "Starting task %s [%s] %s",
+        task.name,
+        task_id,
+        format_log_context(args=args, kwargs=kwargs),
+    )
 
 
 @task_postrun.connect
 def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None,
                         retval=None, state=None, **kwds):
     """Log task completion information."""
-    logger.info(f"Completed task {task.name} [{task_id}] with state={state}")
+    logger.info("Completed task %s [%s] state=%s", task.name, task_id, state)
     if state == 'FAILURE':
-        logger.error(f"Task {task.name} [{task_id}] failed with return value: {retval}")
+        logger.error("Task %s [%s] failed with return value: %s", task.name, task_id, retval)
 
 
 class BaseTask(celery_app.Task):
@@ -376,6 +360,9 @@ def start_worker(loglevel='info', queues=None, concurrency=None):
         queues: List of queues to consume from
         concurrency: Number of worker processes
     """
+    os.environ["YOURMOMENT_SERVICE_NAME"] = "worker"
+    setup_project_logging(service_name="worker", log_level=loglevel)
+
     argv = [
         'worker',
         f'--loglevel={loglevel}',
@@ -397,6 +384,9 @@ def start_beat(loglevel='info'):
     Args:
         loglevel: Log level (debug, info, warning, error)
     """
+    os.environ["YOURMOMENT_SERVICE_NAME"] = "scheduler"
+    setup_project_logging(service_name="scheduler", log_level=loglevel)
+
     argv = [
         'beat',
         f'--loglevel={loglevel}',
