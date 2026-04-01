@@ -44,7 +44,7 @@ def ensure_html_paragraphs(text: str) -> str:
     return "".join(f"<p>{p}</p>" for p in paragraphs) if paragraphs else stripped
 
 
-def _default_max_comment_length() -> int:
+def _default_max_comment_length() -> Optional[int]:
     return get_settings().monitoring.COMMENT_MAX_LENGTH
 
 
@@ -55,7 +55,7 @@ def _default_min_comment_length() -> int:
 @dataclass
 class CommentGenerationConfig:
     """Configuration for comment generation operations."""
-    max_comment_length: int = None  # defaults to COMMENT_MAX_LENGTH from settings
+    max_comment_length: Optional[int] = None  # defaults to COMMENT_MAX_LENGTH from settings
     min_comment_length: int = None  # defaults to COMMENT_MIN_LENGTH from settings
     generation_timeout: int = 30  # seconds
     max_retries: int = 3
@@ -122,7 +122,7 @@ class ProviderExhaustionError(CommentGenerationError):
 def validate_comment(
     comment_content: str,
     min_length: int = None,
-    max_length: int = None,
+    max_length: Optional[int] = None,
     enable_content_validation: bool = True
 ) -> Dict[str, Any]:
     """
@@ -161,7 +161,7 @@ def validate_comment(
     if content_length < min_length:
         errors.append(f"Comment too short ({content_length} < {min_length} chars)")
 
-    if content_length > max_length:
+    if max_length is not None and content_length > max_length:
         errors.append(f"Comment too long ({content_length} > {max_length} chars)")
 
     if not content_without_prefix:
@@ -950,4 +950,3 @@ class CommentService:
         settings = get_settings()
         base_url = settings.scraper.MYMOMENT_BASE_URL
         return f"{base_url}/article/{article_id}/"
-

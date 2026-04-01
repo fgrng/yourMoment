@@ -25,10 +25,11 @@ yourMoment enables teachers and researchers to monitor myMoment articles and aut
 - **Multi-user architecture** – Isolated workflows with per-user LLM configurations, credentials, and templates
 - **Basic security** – JWT authentication, Fernet encryption for sensitive data and configurable password policies
 - **LLM provider flexibility** – Any provider supported by LiteLLM (OpenAI, Mistral, Anthropic, etc.) via a unified API surface
-- **Customizable templates** – System and user-defined prompt templates with validation and required AI disclosure prefix
-- **Automated monitoring** – Background processes with configurable duration limits, multi-credential fan-out, and (hopefully) graceful shutdown
+- **Customizable templates** – System and user-defined prompt templates with validation, enforced HTML paragraph formatting, and a required AI disclosure prefix
+- **Automated monitoring** – Background processes with configurable duration limits, multi-credential fan-out, idempotent per-article processing, and optional generate-only mode
 - **Article management** – Comprehensive article browsing with category (leaning tasks in myMoment) and tag (classroom in myMoment) filtering
-- **Somewhat Production-ready** – Type-safe configuration, health checks and logging
+- **AI comment archive** – Review article snapshots, generated comments, model metadata, reasoning traces, and process-specific comment streams in the web UI
+- **Somewhat Production-ready** – Type-safe configuration, health checks, service-specific runtime logging, and dedicated LLM summary logs
 
 See `AGENTS.md` for the condensed architecture brief used by AI assistants.
 
@@ -44,6 +45,7 @@ See also the detailed [documentation of the API layer](./README_API.md), the [bu
 | LLM integration | LiteLLM |
 | UI | Jinja2 templates, Bootstrap 5, vanilla JS (fetch) |
 | Storage | SQLite by default (PostgreSQL/MySQL compatible) |
+| Logging | Python `logging` with rotating service-specific files |
 
 ## Quick Start
 
@@ -96,6 +98,19 @@ python cli.py worker
 python cli.py scheduler
 ```
 
+### Monitoring Pipeline
+
+Each discovered article flows through a four-stage pipeline backed by `AIComment` rows:
+
+1. `discovered` – metadata-only article snapshot created during discovery
+2. `prepared` – full article content and raw HTML captured
+3. `generated` – LLM output, provider/model metadata, tokens, and optional reasoning stored
+4. `posted` – comment published to myMoment, unless the process runs in `generate_only` mode
+
+The pipeline is idempotent per article/login/prompt/process combination. Duplicate discovery inserts are blocked by a database uniqueness constraint, and per-article preparation, generation, and posting tasks safely skip rows that have already advanced to a later status.
+
+Generated comments can be reviewed in the global `/ai-comments` archive, in process-scoped views at `/processes/{process_id}/ai-comments`, and manually posted later for generate-only processes.
+
 ## Configuration
 
 ### Environment Setup
@@ -131,12 +146,18 @@ python cli.py scheduler
 
 **Comment Generation**
 - `COMMENT_MIN_LENGTH` – Minimum comment length in characters, excluding AI prefix (default: `50`)
-- `COMMENT_MAX_LENGTH` – Maximum comment length in characters, excluding AI prefix (default: `2000`)
+- `COMMENT_MAX_LENGTH` – Maximum comment length in characters, excluding AI prefix (`None`/unset in code means unlimited; `.env.example` sets `5000`)
 - `AI_COMMENT_PREFIX` – Required German AI disclosure prefix prepended to every comment
+- `COMMENT_FORMAT_INSTRUCTION` – System-level instruction that forces paragraph-only HTML output from LLMs
 
 **Celery (Optional)**
 - `CELERY_BROKER_URL` – Redis broker URL (required for background workers)
 - `CELERY_RESULT_BACKEND` – Redis result backend URL
+
+**Logging**
+- `LOG_DIR` – Base directory for split runtime logs
+- `LOG_SERVER_FILE`, `LOG_WORKER_FILE`, `LOG_SCHEDULER_FILE` – Optional per-service log file overrides
+- `LOG_LLM_FILE` – Optional dedicated log file for compact LLM request summaries
 
 **Environment Control**
 - `ENVIRONMENT` – Set to `production`, `development`, or `testing`
@@ -151,6 +172,8 @@ The application automatically adjusts defaults based on `ENVIRONMENT`:
 | Security | Relaxed | Strict validation |
 | Encryption | Auto-generated | Required explicit keys |
 | Database | Local SQLite | Configurable path |
+
+By default, file logging is split by runtime entrypoint into `logs/server.log`, `logs/worker.log`, `logs/scheduler.log`, `logs/cli.log`, plus `logs/llm.log` for compact LLM request/result summaries.
 
 ### Configuration API
 
@@ -254,6 +277,8 @@ python cli.py worker --concurrency 4
 # 3. Beat scheduler (single instance only)
 python cli.py scheduler
 ```
+
+For multi-service deployments, review the split log files rather than a single shared application log. The web server, Celery worker, scheduler, CLI commands, and LLM summary stream can each be routed to separate files via the `LOG_*` settings.
 
 See [CLI.md](./CLI.md) for systemd service examples configuration.
 

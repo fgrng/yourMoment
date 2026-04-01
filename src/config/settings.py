@@ -366,10 +366,10 @@ class MonitoringSettings(BaseSettings):
         description="Minimum character length of generated comment content (excluding AI prefix)"
     )
 
-    COMMENT_MAX_LENGTH: int = Field(
-        default=5000,
+    COMMENT_MAX_LENGTH: Optional[int] = Field(
+        default=None,
         ge=1,
-        description="Maximum character length of generated comment content (excluding AI prefix)"
+        description="Maximum character length of generated comment content (excluding AI prefix); null means unlimited"
     )
 
     model_config = SettingsConfigDict(
