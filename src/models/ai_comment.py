@@ -238,6 +238,32 @@ class AIComment(BaseModel):
         required_prefix = settings.monitoring.AI_COMMENT_PREFIX
         return self.comment_content.startswith(required_prefix)
 
+    @staticmethod
+    def apply_ai_prefix(content: str) -> str:
+        """
+        Apply the required German AI prefix to the given content (FR-006).
+
+        Args:
+            content: The original comment content.
+
+        Returns:
+            The content with the AI prefix prepended.
+        """
+        if not content:
+            return content
+
+        settings = get_settings()
+        prefix = settings.monitoring.AI_COMMENT_PREFIX
+
+        if content.startswith(prefix):
+            return content
+
+        # Add prefix with a space separator if content doesn't start with whitespace
+        if not content[0].isspace():
+            return f"{prefix} {content}"
+        else:
+            return f"{prefix}{content}"
+
     @property
     def short_title(self) -> str:
         """Get a shortened version of the article title for display."""

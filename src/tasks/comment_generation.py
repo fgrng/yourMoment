@@ -24,7 +24,9 @@ from src.tasks.worker import celery_app, BaseTask
 from src.models.ai_comment import AIComment
 from src.models.llm_provider import LLMProviderConfiguration
 from src.models.prompt_template import PromptTemplate
-from src.services.llm_service import LLMProviderService, LLMProviderError
+from src.services.llm_service import LLMProviderService, LLMProviderError, generate_completion_standalone
+from src.services.comment_service import validate_comment
+from src.services.llm_types import LLMGenerationConfig, GenerationResult
 from src.config.database import get_database_manager
 from src.config.settings import get_settings
 
@@ -44,23 +46,14 @@ class CommentSnapshot:
     article_url: str
     llm_provider_id: Optional[uuid.UUID]
     prompt_template_id: Optional[uuid.UUID]
-
-
-@dataclass
-class LLMConfig:
-    """Cached LLM provider configuration."""
-    provider_name: str
-    model_name: str
-    api_key: str
-    max_tokens: Optional[int]
-    temperature: Optional[float]
+    article_raw_html: Optional[str]
+    article_edited_at: Optional[datetime]
 
 
 @dataclass
 class PromptConfig:
     """Cached prompt template configuration."""
-    system_prompt: str
-    user_prompt_template: str
+    template_model: PromptTemplate
 
 
 class CommentGenerationTask(BaseTask):
@@ -77,7 +70,7 @@ class CommentGenerationTask(BaseTask):
     async def _read_and_cache_for_generation(
         self,
         process_id: uuid.UUID
-    ) -> tuple[List[CommentSnapshot], Dict[uuid.UUID, LLMConfig], Dict[uuid.UUID, PromptConfig]]:
+    ) -> tuple[List[CommentSnapshot], Dict[uuid.UUID, LLMGenerationConfig], Dict[uuid.UUID, PromptConfig]]:
         """
         Read prepared AIComments and cache reference data.
 
@@ -120,7 +113,9 @@ class CommentGenerationTask(BaseTask):
                     article_published_at=c.article_published_at,
                     article_url=c.article_url,
                     llm_provider_id=c.llm_provider_id,
-                    prompt_template_id=c.prompt_template_id
+                    prompt_template_id=c.prompt_template_id,
+                    article_raw_html=c.article_raw_html,
+                    article_edited_at=c.article_edited_at
                 )
                 for c in ai_comments
             ]
@@ -128,7 +123,7 @@ class CommentGenerationTask(BaseTask):
 
         logger.info(f"Read {len(comment_snapshots)} prepared AIComments for process {process_id}")
 
-        # Step 2: Cache LLM provider configurations
+        # Step 2: Cache LLM provider configurations as DTOs
         llm_configs_cache = {}
         if unique_llm_ids:
             session = await self.get_async_session()
@@ -140,17 +135,11 @@ class CommentGenerationTask(BaseTask):
                 )
                 providers = result.scalars().all()
                 llm_configs_cache = {
-                    p.id: LLMConfig(
-                        provider_name=p.provider_name,
-                        model_name=p.model_name,
-                        api_key=p.get_api_key(),  # Decrypt once and cache
-                        max_tokens=p.max_tokens,
-                        temperature=p.temperature
-                    )
+                    p.id: LLMGenerationConfig.from_model(p, p.get_api_key())
                     for p in providers
                 }
             # Session closed
-            logger.info(f"Cached {len(llm_configs_cache)} LLM provider configurations")
+            logger.info(f"Cached {len(llm_configs_cache)} LLM provider DTOs")
 
         # Step 3: Cache prompt templates
         prompt_configs_cache = {}
@@ -164,10 +153,7 @@ class CommentGenerationTask(BaseTask):
                 )
                 templates = result.scalars().all()
                 prompt_configs_cache = {
-                    t.id: PromptConfig(
-                        system_prompt=t.system_prompt,
-                        user_prompt_template=t.user_prompt_template
-                    )
+                    t.id: PromptConfig(template_model=t)
                     for t in templates
                 }
             # Session closed
@@ -178,17 +164,14 @@ class CommentGenerationTask(BaseTask):
     def _format_user_prompt(
         self,
         article_snapshot: CommentSnapshot,
-        prompt_template: PromptConfig
+        prompt_config: PromptConfig
     ) -> str:
         """
         Format user prompt template with article data.
 
-        Handles missing placeholders gracefully by leaving them as-is or
-        replacing with empty strings where appropriate.
-
         Args:
             article_snapshot: Article data snapshot
-            prompt_template: Prompt template configuration
+            prompt_config: Prompt configuration containing template model
 
         Returns:
             Formatted user prompt string
@@ -201,63 +184,41 @@ class CommentGenerationTask(BaseTask):
             'article_category': str(article_snapshot.article_category) if article_snapshot.article_category else '',
             'article_published_at': article_snapshot.article_published_at.isoformat() if article_snapshot.article_published_at else '',
             'article_url': article_snapshot.article_url or '',
+            'article_raw_html': (article_snapshot.article_raw_html or '')[:5000],
+            'article_edited_at': article_snapshot.article_edited_at.isoformat() if article_snapshot.article_edited_at else '',
         }
 
-        # Format the template
-        formatted_prompt = prompt_template.user_prompt_template
-        for placeholder, value in context.items():
-            formatted_prompt = formatted_prompt.replace(f"{{{placeholder}}}", value)
-
-        return formatted_prompt
+        # Render using model method
+        return prompt_config.template_model.render_prompt(context)
 
     async def _generate_comment_with_llm(
         self,
         formatted_prompt: str,
         system_prompt: str,
-        llm_config: LLMConfig
-    ) -> tuple[str, Optional[str], int]:
+        llm_config: LLMGenerationConfig
+    ) -> GenerationResult:
         """
         Generate comment using LLM API.
 
-        Calls LLMProviderService.generate_completion() outside any database session.
+        Calls generate_completion_standalone() directly with a DTO,
+        avoiding unnecessary database sessions.
 
         Args:
             formatted_prompt: User prompt with article data filled in
             system_prompt: System prompt to guide generation
-            llm_config: LLM provider configuration
+            llm_config: LLM provider configuration DTO
 
         Returns:
-            Tuple of (generated_text, reasoning_content, generation_time_ms)
+            GenerationResult containing content and metadata
 
         Raises:
             LLMProviderError: If generation fails
         """
-        start_time = datetime.utcnow()
-
-        session = await self.get_async_session()
-        async with session:
-            temp_provider = LLMProviderConfiguration(
-                id=uuid.uuid4(),
-                user_id=uuid.uuid4(),
-                provider_name=llm_config.provider_name,
-                model_name=llm_config.model_name,
-                max_tokens=llm_config.max_tokens,
-                temperature=llm_config.temperature
-            )
-            temp_provider.set_api_key(llm_config.api_key)
-
-            llm_service = LLMProviderService(session)
-
-            generated_text, reasoning_content = await llm_service.generate_completion(
-                user_prompt=formatted_prompt,
-                provider_config=temp_provider,
-                system_prompt=system_prompt
-            )
-
-        end_time = datetime.utcnow()
-        generation_time_ms = int((end_time - start_time).total_seconds() * 1000)
-
-        return generated_text, reasoning_content, generation_time_ms
+        return await generate_completion_standalone(
+            user_prompt=formatted_prompt,
+            config=llm_config,
+            system_prompt=system_prompt
+        )
 
     def _add_ai_prefix(self, comment_text: str) -> str:
         """
@@ -271,14 +232,7 @@ class CommentGenerationTask(BaseTask):
         Returns:
             Comment text with AI prefix prepended
         """
-        settings = get_settings()
-        prefix = settings.monitoring.AI_COMMENT_PREFIX
-
-        # Add prefix with a space separator if comment doesn't start with whitespace
-        if comment_text and not comment_text[0].isspace():
-            return f"{prefix} {comment_text}"
-        else:
-            return f"{prefix}{comment_text}"
+        return AIComment.apply_ai_prefix(comment_text)
 
     async def _update_generated_comment(
         self,
@@ -410,29 +364,39 @@ class CommentGenerationTask(BaseTask):
                     formatted_prompt = self._format_user_prompt(comment_snapshot, prompt_config)
 
                     # Generate comment via LLM (outside DB session)
-                    generated_text, reasoning_content, generation_time_ms = await self._generate_comment_with_llm(
+                    gen_result = await self._generate_comment_with_llm(
                         formatted_prompt=formatted_prompt,
-                        system_prompt=prompt_config.system_prompt,
+                        system_prompt=prompt_config.template_model.system_prompt,
                         llm_config=llm_config
                     )
 
                     # Add AI prefix
-                    comment_with_prefix = self._add_ai_prefix(generated_text)
+                    comment_with_prefix = self._add_ai_prefix(gen_result.comment_content)
+
+                    # Validate comment before persisting (mirrors CommentService quality gate)
+                    validation = validate_comment(comment_with_prefix)
+                    if not validation["is_valid"]:
+                        error_msg = f"Comment failed validation for article {comment_snapshot.mymoment_article_id}: {validation['errors']}"
+                        logger.error(error_msg)
+                        await self._mark_comment_failed(comment_snapshot.id, error_msg)
+                        failed_count += 1
+                        errors.append(error_msg)
+                        continue
 
                     # Update AIComment record
                     comment_data = {
                         'comment_content': comment_with_prefix,
-                        'reasoning_content': reasoning_content,
-                        'ai_model_name': llm_config.model_name,
-                        'ai_provider_name': llm_config.provider_name,
-                        'generation_tokens': None,  # Not available from current API
-                        'generation_time_ms': generation_time_ms
+                        'reasoning_content': gen_result.reasoning_content,
+                        'ai_model_name': gen_result.model_used,
+                        'ai_provider_name': gen_result.provider_used,
+                        'generation_tokens': gen_result.total_tokens,
+                        'generation_time_ms': gen_result.generation_time_ms
                     }
 
                     await self._update_generated_comment(comment_snapshot.id, comment_data)
 
                     generated_count += 1
-                    total_generation_time_ms += generation_time_ms
+                    total_generation_time_ms += (gen_result.generation_time_ms or 0)
 
                     # Log progress
                     if i % 10 == 0 or i == len(comment_snapshots):

@@ -41,7 +41,7 @@ See also the detailed [documentation of the API layer](./README_API.md), the [bu
 | API & services | FastAPI, SQLAlchemy (async), Alembic |
 | Background jobs | Celery 5 + Redis broker/result store |
 | Scraping | aiohttp, BeautifulSoup4 |
-| LLM integration | instructor library |
+| LLM integration | LiteLLM |
 | UI | Jinja2 templates, Bootstrap 5, vanilla JS (fetch) |
 | Storage | SQLite by default (PostgreSQL/MySQL compatible) |
 

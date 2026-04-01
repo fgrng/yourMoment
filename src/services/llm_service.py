@@ -7,7 +7,7 @@ according to FR-002 (encrypted API key storage) and multi-provider support requi
 
 import uuid
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 
 import litellm
 import litellm.exceptions
@@ -18,6 +18,11 @@ from sqlalchemy.exc import IntegrityError
 
 from src.models.llm_provider import LLMProviderConfiguration
 from src.config.encryption import EncryptionError, DecryptionError
+from src.services.llm_types import (
+    AICommentSchema,
+    GenerationResult,
+    LLMGenerationConfig
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -37,30 +42,127 @@ class LLMProviderValidationError(LLMProviderError):
     """Raised when LLM provider configuration validation fails."""
     pass
 
-
-class PydanticComment(BaseModel):
-    reasoning: Optional[str] = Field(
-        None,
-        description=(
-            "Internal reasoning for comment generation on the myMoment platform. "
-            "Think step-by-step. This is not visible by the author. "
-            "Write your reasoning here."
-        )
-    )
-    content: str = Field(
-        description=(
-            "Generated comment for publishing on the myMoment platform. "
-            "This is visible by the author of the article commented upon. "
-            "Write your comment here."
-        )
-    )
-
-
 # Provider-level metadata not available in litellm.model_cost
 _PROVIDER_META: dict[str, dict] = {
     "openai": {"api_key_prefix": "sk-"},
     "mistral": {"api_key_prefix": ""},
 }
+
+
+async def generate_completion_standalone(
+    user_prompt: str,
+    config: LLMGenerationConfig,
+    system_prompt: Optional[str] = None
+) -> GenerationResult:
+    """
+    Generate LLM completion using specified provider configuration DTO.
+    This function is standalone and does not require a database session.
+
+    Args:
+        user_prompt: The prompt text to send to the LLM
+        config: LLM generation configuration DTO
+        system_prompt: Optional system prompt to guide the model
+
+    Returns:
+        GenerationResult containing generated content and metadata
+
+    Raises:
+        LLMProviderError: If generation fails
+    """
+    provider_name = config.provider_name.lower()
+    model = config.model_name
+    
+    try:
+        # Determine LiteLLM model string (format: "provider/model")
+        # Strip any accidental provider prefix the caller may have included
+        bare_model = model.removeprefix(f"{provider_name}/")
+        litellm_model = f"{provider_name}/{bare_model}"
+
+        # Build messages list
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": user_prompt})
+
+        model_info = litellm.model_cost.get(litellm_model, {})
+        is_reasoning_model = bool(model_info.get("supports_reasoning")) or any(
+            p in litellm_model.lower() for p in ["o1-", "o3-", "magistral"]
+        )
+
+        params = {
+            "model": litellm_model,
+            "messages": messages,
+            "api_key": config.api_key
+        }
+
+        if not is_reasoning_model:
+            # Non-reasoning models: use structured output with CoT elicitation
+            params["response_format"] = AICommentSchema
+            if config.max_tokens is not None:
+                params["max_tokens"] = config.max_tokens
+            if config.temperature is not None:
+                params["temperature"] = config.temperature
+        else:
+            # Reasoning models: plain text output, native tokens carry the reasoning
+            if config.max_tokens is not None:
+                params["max_completion_tokens"] = config.max_tokens
+            params["temperature"] = 1.0
+
+        start_time = datetime.utcnow()
+        response = await litellm.acompletion(**params)
+        generation_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+
+        message = response.choices[0].message
+        usage = getattr(response, "usage", None)
+
+        if is_reasoning_model:
+            comment_content = message.content.strip()
+            reasoning_content = None
+            if hasattr(message, "reasoning_content") and message.reasoning_content:
+                reasoning_content = message.reasoning_content
+            elif isinstance(message, dict) and message.get("reasoning_content"):
+                reasoning_content = message["reasoning_content"]
+        else:
+            parsed = AICommentSchema.model_validate_json(message.content)
+            comment_content = parsed.comment_content.strip()
+            reasoning_content = parsed.reasoning_content
+
+        return GenerationResult(
+            comment_content=comment_content,
+            reasoning_content=reasoning_content,
+            prompt_tokens=usage.prompt_tokens if usage else None,
+            completion_tokens=usage.completion_tokens if usage else None,
+            total_tokens=usage.total_tokens if usage else None,
+            finish_reason=response.choices[0].finish_reason,
+            model_used=response.model,
+            provider_used=provider_name,
+            generation_time_ms=generation_time_ms
+        )
+
+    except litellm.exceptions.AuthenticationError as e:
+        logger.error(f"LiteLLM authentication failed for {provider_name}/{model}: {e}")
+        raise LLMProviderError(f"Invalid API key or authentication failed: {e}")
+    except litellm.exceptions.RateLimitError as e:
+        logger.warning(f"LiteLLM rate limit hit for {provider_name}/{model}: {e}")
+        raise LLMProviderError(f"Rate limit exceeded — try again later: {e}")
+    except litellm.exceptions.ContextWindowExceededError as e:
+        logger.error(f"LiteLLM context window exceeded for {provider_name}/{model}: {e}")
+        raise LLMProviderError(f"Prompt exceeds model context window: {e}")
+    except litellm.exceptions.APIConnectionError as e:
+        logger.error(f"LiteLLM connection error for {provider_name}/{model}: {e}")
+        raise LLMProviderError(f"Could not reach LLM provider API: {e}")
+    except litellm.exceptions.Timeout as e:
+        logger.error(f"LiteLLM request timed out for {provider_name}/{model}: {e}")
+        raise LLMProviderError(f"LLM request timed out: {e}")
+    except litellm.exceptions.ServiceUnavailableError as e:
+        logger.error(f"LiteLLM provider unavailable for {provider_name}/{model}: {e}")
+        raise LLMProviderError(f"LLM provider temporarily unavailable: {e}")
+    except (ValidationError, ValueError) as e:
+        logger.error(f"Failed to parse structured output from {provider_name}/{model}: {e}")
+        raise LLMProviderError(f"Model returned invalid structured output: {e}")
+    except Exception as e:
+        logger.error(f"LLM generation failed for {provider_name}/{model}: {e}")
+        raise LLMProviderError(f"Generation failed: {e}")
 
 
 class LLMProviderService:
@@ -416,144 +518,41 @@ class LLMProviderService:
             logger.error(f"Failed to retrieve active providers for user {user_id}: {e}")
             raise LLMProviderError(f"Failed to retrieve active providers: {e}")
 
-    async def _generate_with_instructor(
-        self,
-        user_prompt: str,
-        provider_name: str,
-        model: str,
-        api_key: str,
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
-        system_prompt: Optional[str] = None
-    ) -> tuple[str, Optional[str]]:
-        """
-        Generate completion using LiteLLM with Pydantic structured output.
-
-        Args:
-            user_prompt: User prompt text
-            provider_name: Provider name (to determine LiteLLM model prefix)
-            model: Model name
-            api_key: Decrypted API key
-            max_tokens: Maximum tokens
-            temperature: Temperature setting
-            system_prompt: Optional system prompt to guide the model
-
-        Returns:
-            Tuple of (generated text, reasoning_content or None)
-
-        Raises:
-            LLMProviderError: If generation fails
-        """
-        try:
-            # Determine LiteLLM model string (format: "provider/model")
-            # Strip any accidental provider prefix the caller may have included
-            bare_model = model.removeprefix(f"{provider_name}/")
-            litellm_model = f"{provider_name}/{bare_model}"
-
-            # Build messages list
-            messages = []
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": user_prompt})
-
-            params = {
-                "model": litellm_model,
-                "messages": messages,
-                "response_model": PydanticComment,
-                "api_key": api_key
-            }
-
-            is_reasoning_model = any(m in litellm_model.lower() for m in ["o1-", "o3-", "gpt-5", "magistral"])
-            if not is_reasoning_model:
-                if max_tokens is not None:
-                    params["max_tokens"] = max_tokens
-                if temperature is not None:
-                    params["temperature"] = temperature
-            else:
-                if max_tokens is not None:
-                    params["max_completion_tokens"] = max_tokens
-                params["temperature"] = 1.0
-
-            response = await litellm.acompletion(**params)
-            parsed = PydanticComment.model_validate_json(response.choices[0].message.content)
-
-            # Extract reasoning content if present
-            # Priority 1: native reasoning tokens (o-series, Magistral)
-            # Priority 2: CoT from structured output field (non-reasoning models)
-            reasoning_content = None
-            try:
-                message = response.choices[0].message
-                if hasattr(message, "reasoning_content") and message.reasoning_content:
-                    reasoning_content = message.reasoning_content
-                elif isinstance(message, dict) and message.get("reasoning_content"):
-                    reasoning_content = message["reasoning_content"]
-                elif parsed.reasoning:
-                    reasoning_content = parsed.reasoning
-            except Exception:
-                pass
-
-            return parsed.content.strip(), reasoning_content
-
-        except litellm.exceptions.AuthenticationError as e:
-            logger.error(f"LiteLLM authentication failed for {provider_name}/{model}: {e}")
-            raise LLMProviderError(f"Invalid API key or authentication failed: {e}")
-        except litellm.exceptions.RateLimitError as e:
-            logger.warning(f"LiteLLM rate limit hit for {provider_name}/{model}: {e}")
-            raise LLMProviderError(f"Rate limit exceeded — try again later: {e}")
-        except litellm.exceptions.ContextWindowExceededError as e:
-            logger.error(f"LiteLLM context window exceeded for {provider_name}/{model}: {e}")
-            raise LLMProviderError(f"Prompt exceeds model context window: {e}")
-        except litellm.exceptions.APIConnectionError as e:
-            logger.error(f"LiteLLM connection error for {provider_name}/{model}: {e}")
-            raise LLMProviderError(f"Could not reach LLM provider API: {e}")
-        except litellm.exceptions.Timeout as e:
-            logger.error(f"LiteLLM request timed out for {provider_name}/{model}: {e}")
-            raise LLMProviderError(f"LLM request timed out: {e}")
-        except litellm.exceptions.ServiceUnavailableError as e:
-            logger.error(f"LiteLLM provider unavailable for {provider_name}/{model}: {e}")
-            raise LLMProviderError(f"LLM provider temporarily unavailable: {e}")
-        except (ValidationError, ValueError) as e:
-            logger.error(f"Failed to parse structured output from {provider_name}/{model}: {e}")
-            raise LLMProviderError(f"Model returned invalid structured output: {e}")
-        except Exception as e:
-            logger.error(f"LiteLLM generation failed for {provider_name}/{model}: {e}")
-            raise LLMProviderError(f"Generation failed: {e}")
-
     async def generate_completion(
         self,
         user_prompt: str,
-        provider_config: LLMProviderConfiguration,
+        config: Union[LLMProviderConfiguration, LLMGenerationConfig],
         system_prompt: Optional[str] = None
-    ) -> tuple[str, Optional[str]]:
+    ) -> GenerationResult:
         """
         Generate LLM completion using specified provider configuration.
 
         Args:
             user_prompt: The prompt text to send to the LLM
-            provider_config: LLM provider configuration to use
+            config: LLM provider configuration (model or DTO)
             system_prompt: Optional system prompt to guide the model
 
         Returns:
-            Tuple of (generated text, reasoning_content or None)
+            GenerationResult containing generated content and metadata
 
         Raises:
             LLMProviderError: If generation fails
         """
-        try:
-            decrypted_key = provider_config.get_api_key()
+        # Convert SQLAlchemy model to DTO if necessary
+        if isinstance(config, LLMProviderConfiguration):
+            try:
+                decrypted_key = config.get_api_key()
+                gen_config = LLMGenerationConfig.from_model(config, decrypted_key)
+            except DecryptionError as e:
+                logger.error(f"Failed to decrypt API key for provider {config.id}: {e}")
+                raise LLMProviderError(f"Failed to access provider credentials: {e}")
+        else:
+            gen_config = config
 
-            return await self._generate_with_instructor(
-                user_prompt=user_prompt,
-                provider_name=provider_config.provider_name,
-                model=provider_config.model_name,
-                api_key=decrypted_key,
-                max_tokens=provider_config.max_tokens,
-                temperature=provider_config.temperature,
-                system_prompt=system_prompt
-            )
-
-        except Exception as e:
-            logger.error(f"LLM generation failed with {provider_config.provider_name}: {e}")
-            raise LLMProviderError(f"Generation failed: {e}")
+        return await generate_completion_standalone(
+            user_prompt=user_prompt,
+            config=gen_config,
+            system_prompt=system_prompt
+        )
 
 

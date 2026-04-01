@@ -245,7 +245,7 @@ async with ScraperService() as scraper:
 - `list_providers(user_id, limit)` – List user's providers
 - `update_provider(provider_id, user_id, updates)` – Update config/API key
 - `delete_provider(provider_id, user_id)` – Remove (checks if in use)
-- `get_client(provider)` – Instantiate instructor-wrapped client for generation
+- `generate_completion(...)` – Unified generation with LiteLLM native structured output
 
 **Supported Providers:**
 - OpenAI (gpt-4, gpt-3.5-turbo)
@@ -308,7 +308,7 @@ async with ScraperService() as scraper:
 **Generation Flow:**
 1. Fetch article details
 2. Render prompt template with article context
-3. Call LLM provider via instructor
+3. Call LLM provider via LiteLLM
 4. Validate generated comment (length, prefix, content)
 5. Store in database with metadata
 6. Post to myMoment (if enabled)
