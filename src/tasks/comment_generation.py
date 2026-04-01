@@ -277,24 +277,33 @@ class CommentGenerationTask(BaseTask):
         """
         Mark AIComment as failed with error message.
 
+        Swallows its own exceptions so that a DB error here never escalates
+        and causes the per-comment handler to retry _mark_comment_failed
+        with a compounding error message.
+
         Args:
             ai_comment_id: AIComment UUID to mark as failed
             error_message: Error description
         """
-        session = await self.get_async_session()
-        async with session:
-            ai_comment = await session.get(AIComment, ai_comment_id)
+        try:
+            session = await self.get_async_session()
+            async with session:
+                ai_comment = await session.get(AIComment, ai_comment_id)
 
-            if not ai_comment:
-                logger.warning(f"AIComment {ai_comment_id} not found for failure marking")
-                return
+                if not ai_comment:
+                    logger.warning(f"AIComment {ai_comment_id} not found for failure marking")
+                    return
 
-            ai_comment.status = 'failed'
-            ai_comment.error_message = error_message
-            ai_comment.failed_at = datetime.utcnow()
+                ai_comment.status = 'failed'
+                ai_comment.error_message = error_message
+                ai_comment.failed_at = datetime.utcnow()
 
-            await session.commit()
-        # Session closed
+                await session.commit()
+        except Exception as db_err:
+            logger.error(
+                f"Failed to mark AIComment {ai_comment_id} as failed "
+                f"(original error: {error_message!r}): {db_err}"
+            )
 
     async def _generate_comments_async(self, process_id: uuid.UUID) -> Dict[str, Any]:
         """

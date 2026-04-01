@@ -159,7 +159,7 @@ class AIComment(BaseModel):
             name="check_ai_comment_status"
         ),
         CheckConstraint(
-            "(status IN ('discovered', 'prepared')) OR (comment_content IS NOT NULL)",
+            "(status IN ('discovered', 'prepared', 'failed')) OR (comment_content IS NOT NULL)",
             name="check_comment_content_required_after_preparation"
         ),
         CheckConstraint(
