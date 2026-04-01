@@ -39,16 +39,14 @@ class SchedulingTask(BaseTask):
         Async implementation of pipeline triggering.
 
         Args:
-            force_immediate: If True, spawn tasks for ALL running processes immediately.
-                            If False (default), only spawn if no task is currently running.
+            force_immediate: If True, spawn discovery tasks for ALL running processes
+                            immediately. If False (default), only spawn if no discovery
+                            task is currently running.
         """
         start_time = datetime.utcnow()
 
-        # Import stage tasks
+        # Import automated scheduler task
         from src.tasks.article_discovery import discover_articles
-        from src.tasks.article_preparation import prepare_content_of_articles
-        from src.tasks.comment_generation import generate_comments_for_articles
-        from src.tasks.comment_posting import post_comments_for_articles
 
         spawned_tasks = []
         skipped_tasks = []
@@ -70,15 +68,13 @@ class SchedulingTask(BaseTask):
 
                 logger.info(f"Found {len(running_processes)} running monitoring processes")
 
-                # For each process, check and spawn stage tasks
+                # For each process, check and spawn discovery only. Per-article
+                # prepare/generate/post tasks are chained from discovery.
                 for process in running_processes:
                     try:
                         process_spawned = await self._spawn_stage_tasks_for_process(
                             process,
                             discover_articles,
-                            prepare_content_of_articles,
-                            generate_comments_for_articles,
-                            post_comments_for_articles,
                             force_immediate=force_immediate
                         )
 
@@ -134,21 +130,15 @@ class SchedulingTask(BaseTask):
         self,
         process: MonitoringProcess,
         discover_articles_task,
-        prepare_content_task,
-        generate_comments_task,
-        post_comments_task,
         force_immediate: bool = False
     ) -> Dict[str, List[Dict[str, str]]]:
         """
-        Spawn stage tasks for a single process, checking if tasks are already running.
+        Spawn discovery task for a single process, checking if the task is already running.
 
         Args:
             process: MonitoringProcess instance
             discover_articles_task: Discovery task callable
-            prepare_content_task: Preparation task callable
-            generate_comments_task: Generation task callable
-            post_comments_task: Posting task callable
-            force_immediate: If True, spawn all tasks regardless of previous state.
+            force_immediate: If True, spawn discovery regardless of previous state.
                             Useful for initial process start.
 
         Returns:
@@ -157,31 +147,12 @@ class SchedulingTask(BaseTask):
         spawned = []
         skipped = []
 
-        # Define stage configurations
         stages = [
             {
                 'name': 'discovery',
                 'task_id_field': 'celery_discovery_task_id',
                 'task_callable': discover_articles_task,
                 'enabled': True
-            },
-            {
-                'name': 'preparation',
-                'task_id_field': 'celery_preparation_task_id',
-                'task_callable': prepare_content_task,
-                'enabled': True
-            },
-            {
-                'name': 'generation',
-                'task_id_field': 'celery_generation_task_id',
-                'task_callable': generate_comments_task,
-                'enabled': True
-            },
-            {
-                'name': 'posting',
-                'task_id_field': 'celery_posting_task_id',
-                'task_callable': post_comments_task,
-                'enabled': not process.generate_only  # Only spawn if not generate_only
             }
         ]
 
@@ -202,8 +173,11 @@ class SchedulingTask(BaseTask):
             if not force_immediate and current_task_id:
                 try:
                     task_result = AsyncResult(current_task_id)
-                    # Task is running if state is PENDING, STARTED, or RETRY
-                    is_running = task_result.state in ['PENDING', 'STARTED', 'RETRY']
+                    # PENDING means "unknown or queued" in Celery — it is also the
+                    # state of expired results. Only treat STARTED and RETRY as
+                    # genuinely running to avoid permanently blocking re-spawning
+                    # when a task has completed and its result TTL has expired.
+                    is_running = task_result.state in ['STARTED', 'RETRY']
 
                     if is_running:
                         skipped.append({
@@ -263,10 +237,11 @@ def trigger_monitoring_pipeline(force_immediate: bool = False) -> Dict[str, Any]
 
     This task runs every few minutes and ensures continuous monitoring by:
     1. Finding all running monitoring processes
-    2. For each process, checking each pipeline stage
-    3. Spawning stage tasks only if no task is currently running for that stage
+    2. For each process, checking the discovery stage
+    3. Spawning discovery only if no discovery task is currently running
 
-    This implements continuous monitoring without double-spawning tasks.
+    Discovery is the only scheduler-driven stage. Per-article prepare/generate/post
+    tasks are chained from newly discovered AIComment rows.
 
     Args:
         force_immediate: If True, immediately trigger for newly started processes

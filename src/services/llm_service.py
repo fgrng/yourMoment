@@ -6,6 +6,7 @@ according to FR-002 (encrypted API key storage) and multi-provider support requi
 """
 
 import uuid
+import logging
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Union
 
@@ -18,14 +19,16 @@ from sqlalchemy.exc import IntegrityError
 
 from src.models.llm_provider import LLMProviderConfiguration
 from src.config.encryption import EncryptionError, DecryptionError
+from src.config.logging import format_log_context
+from src.config.settings import get_settings
 from src.services.llm_types import (
     AICommentSchema,
     GenerationResult,
     LLMGenerationConfig
 )
-import logging
 
 logger = logging.getLogger(__name__)
+llm_summary_logger = logging.getLogger("yourmoment.llm")
 
 
 class LLMProviderError(Exception):
@@ -49,10 +52,31 @@ _PROVIDER_META: dict[str, dict] = {
 }
 
 
+def _merge_log_context(
+    base_context: Dict[str, Any],
+    extra_context: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Combine default and caller-provided log context."""
+    if extra_context:
+        base_context.update(extra_context)
+    return base_context
+
+
+def _log_llm_event(event: str, **fields: Any) -> None:
+    """Emit a compact LLM summary line."""
+    llm_summary_logger.info("%s %s", event, format_log_context(**fields))
+
+
+def _log_llm_failure(event: str, **fields: Any) -> None:
+    """Emit a compact LLM failure summary line."""
+    llm_summary_logger.error("%s %s", event, format_log_context(**fields))
+
+
 async def generate_completion_standalone(
     user_prompt: str,
     config: LLMGenerationConfig,
-    system_prompt: Optional[str] = None
+    system_prompt: Optional[str] = None,
+    log_context: Optional[Dict[str, Any]] = None,
 ) -> GenerationResult:
     """
     Generate LLM completion using specified provider configuration DTO.
@@ -71,6 +95,7 @@ async def generate_completion_standalone(
     """
     provider_name = config.provider_name.lower()
     model = config.model_name
+    litellm_model = f"{provider_name}/{model.removeprefix(f'{provider_name}/')}"
     
     try:
         # Determine LiteLLM model string (format: "provider/model")
@@ -83,6 +108,13 @@ async def generate_completion_standalone(
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": user_prompt})
+
+        # Inject format instruction — covers all model types including reasoning models
+        format_instruction = get_settings().monitoring.COMMENT_FORMAT_INSTRUCTION
+        if messages and messages[0]["role"] == "system":
+            messages[0]["content"] += "\n\n" + format_instruction
+        else:
+            messages.insert(0, {"role": "system", "content": format_instruction})
 
         model_info = litellm.model_cost.get(litellm_model, {})
         is_reasoning_model = bool(model_info.get("supports_reasoning")) or any(
@@ -108,6 +140,21 @@ async def generate_completion_standalone(
                 params["max_completion_tokens"] = config.max_tokens
             params["temperature"] = 1.0
 
+        request_context = _merge_log_context(
+            {
+                "provider": provider_name,
+                "model": litellm_model,
+                "reasoning": is_reasoning_model,
+                "message_count": len(messages),
+                "system_prompt_chars": len(messages[0]["content"]) if messages and messages[0]["role"] == "system" else 0,
+                "user_prompt_chars": len(user_prompt or ""),
+                "max_tokens": config.max_tokens,
+                "temperature": params.get("temperature"),
+            },
+            log_context,
+        )
+        _log_llm_event("llm_request_start", **request_context)
+
         start_time = datetime.utcnow()
         response = await litellm.acompletion(**params)
         generation_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
@@ -127,6 +174,23 @@ async def generate_completion_standalone(
             comment_content = parsed.comment_content.strip()
             reasoning_content = parsed.reasoning_content
 
+        _log_llm_event(
+            "llm_request_done",
+            **_merge_log_context(
+                {
+                    "provider": provider_name,
+                    "configured_model": litellm_model,
+                    "response_model": response.model,
+                    "duration_ms": generation_time_ms,
+                    "finish_reason": response.choices[0].finish_reason,
+                    "prompt_tokens": usage.prompt_tokens if usage else None,
+                    "completion_tokens": usage.completion_tokens if usage else None,
+                    "total_tokens": usage.total_tokens if usage else None,
+                },
+                log_context,
+            ),
+        )
+
         return GenerationResult(
             comment_content=comment_content,
             reasoning_content=reasoning_content,
@@ -140,27 +204,123 @@ async def generate_completion_standalone(
         )
 
     except litellm.exceptions.AuthenticationError as e:
+        _log_llm_failure(
+            "llm_request_failed",
+            **_merge_log_context(
+                {
+                    "provider": provider_name,
+                    "model": litellm_model,
+                    "error_type": "AuthenticationError",
+                    "error": str(e),
+                },
+                log_context,
+            ),
+        )
         logger.error(f"LiteLLM authentication failed for {provider_name}/{model}: {e}")
         raise LLMProviderError(f"Invalid API key or authentication failed: {e}")
     except litellm.exceptions.RateLimitError as e:
+        _log_llm_failure(
+            "llm_request_failed",
+            **_merge_log_context(
+                {
+                    "provider": provider_name,
+                    "model": litellm_model,
+                    "error_type": "RateLimitError",
+                    "error": str(e),
+                },
+                log_context,
+            ),
+        )
         logger.warning(f"LiteLLM rate limit hit for {provider_name}/{model}: {e}")
         raise LLMProviderError(f"Rate limit exceeded — try again later: {e}")
     except litellm.exceptions.ContextWindowExceededError as e:
+        _log_llm_failure(
+            "llm_request_failed",
+            **_merge_log_context(
+                {
+                    "provider": provider_name,
+                    "model": litellm_model,
+                    "error_type": "ContextWindowExceededError",
+                    "error": str(e),
+                },
+                log_context,
+            ),
+        )
         logger.error(f"LiteLLM context window exceeded for {provider_name}/{model}: {e}")
         raise LLMProviderError(f"Prompt exceeds model context window: {e}")
     except litellm.exceptions.APIConnectionError as e:
+        _log_llm_failure(
+            "llm_request_failed",
+            **_merge_log_context(
+                {
+                    "provider": provider_name,
+                    "model": litellm_model,
+                    "error_type": "APIConnectionError",
+                    "error": str(e),
+                },
+                log_context,
+            ),
+        )
         logger.error(f"LiteLLM connection error for {provider_name}/{model}: {e}")
         raise LLMProviderError(f"Could not reach LLM provider API: {e}")
     except litellm.exceptions.Timeout as e:
+        _log_llm_failure(
+            "llm_request_failed",
+            **_merge_log_context(
+                {
+                    "provider": provider_name,
+                    "model": litellm_model,
+                    "error_type": "Timeout",
+                    "error": str(e),
+                },
+                log_context,
+            ),
+        )
         logger.error(f"LiteLLM request timed out for {provider_name}/{model}: {e}")
         raise LLMProviderError(f"LLM request timed out: {e}")
     except litellm.exceptions.ServiceUnavailableError as e:
+        _log_llm_failure(
+            "llm_request_failed",
+            **_merge_log_context(
+                {
+                    "provider": provider_name,
+                    "model": litellm_model,
+                    "error_type": "ServiceUnavailableError",
+                    "error": str(e),
+                },
+                log_context,
+            ),
+        )
         logger.error(f"LiteLLM provider unavailable for {provider_name}/{model}: {e}")
         raise LLMProviderError(f"LLM provider temporarily unavailable: {e}")
     except (ValidationError, ValueError) as e:
+        _log_llm_failure(
+            "llm_request_failed",
+            **_merge_log_context(
+                {
+                    "provider": provider_name,
+                    "model": litellm_model,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                log_context,
+            ),
+        )
         logger.error(f"Failed to parse structured output from {provider_name}/{model}: {e}")
         raise LLMProviderError(f"Model returned invalid structured output: {e}")
     except Exception as e:
+        _log_llm_failure(
+            "llm_request_failed",
+            **_merge_log_context(
+                {
+                    "provider": provider_name,
+                    "model": litellm_model,
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                log_context,
+            ),
+        )
         logger.error(f"LLM generation failed for {provider_name}/{model}: {e}")
         raise LLMProviderError(f"Generation failed: {e}")
 
@@ -522,7 +682,8 @@ class LLMProviderService:
         self,
         user_prompt: str,
         config: Union[LLMProviderConfiguration, LLMGenerationConfig],
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        log_context: Optional[Dict[str, Any]] = None,
     ) -> GenerationResult:
         """
         Generate LLM completion using specified provider configuration.
@@ -552,7 +713,7 @@ class LLMProviderService:
         return await generate_completion_standalone(
             user_prompt=user_prompt,
             config=gen_config,
-            system_prompt=system_prompt
+            system_prompt=system_prompt,
+            log_context=log_context,
         )
-
 

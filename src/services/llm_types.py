@@ -30,7 +30,10 @@ class AICommentSchema(BaseModel):
         description=(
             "Generated comment for publishing on the myMoment platform. "
             "This is visible by the author of the article commented upon. "
-            "Write your comment here."
+            "IMPORTANT: Wrap each paragraph in <p>...</p> tags. "
+            "Do not use plain-text newlines for paragraph separation. "
+            "Only use <p>, <strong>, <em> tags — no block-level HTML. "
+            "Example: <p>First paragraph.</p><p>Second paragraph.</p>"
         )
     )
 

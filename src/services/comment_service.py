@@ -33,6 +33,17 @@ from src.services.scraper_service import (
 logger = logging.getLogger(__name__)
 
 
+def ensure_html_paragraphs(text: str) -> str:
+    """Normalize comment text to HTML paragraphs. No-op if already contains <p> tags."""
+    if not text:
+        return text
+    stripped = text.strip()
+    if "<p>" in stripped.lower():
+        return stripped
+    paragraphs = [p.strip() for p in re.split(r'\n\s*\n|\n', stripped) if p.strip()]
+    return "".join(f"<p>{p}</p>" for p in paragraphs) if paragraphs else stripped
+
+
 def _default_max_comment_length() -> int:
     return get_settings().monitoring.COMMENT_MAX_LENGTH
 
@@ -136,11 +147,15 @@ def validate_comment(
     if max_length is None:
         max_length = settings.monitoring.COMMENT_MAX_LENGTH
     ai_prefix = settings.monitoring.AI_COMMENT_PREFIX
-    has_ai_prefix = comment_content.startswith(ai_prefix)
+    has_ai_prefix = (comment_content.startswith(ai_prefix) or
+                     comment_content.startswith(f"<p>{ai_prefix}</p>"))
     if not has_ai_prefix:
         errors.append("Missing required German AI prefix")
 
-    content_without_prefix = comment_content.replace(ai_prefix, "").strip()
+    content_without_prefix = (comment_content
+                               .replace(f"<p>{ai_prefix}</p>", "")
+                               .replace(ai_prefix, "")
+                               .strip())
     content_length = len(content_without_prefix)
 
     if content_length < min_length:
@@ -157,7 +172,7 @@ def validate_comment(
         if len(words) > 5 and len(set(words)) < len(words) * 0.5:
             errors.append("Comment appears to be repetitive")
 
-        placeholder_patterns = [r'\{[^}]+\}', r'<[^>]+>', r'\[.*\]']
+        placeholder_patterns = [r'\{[^}]+\}']
         for pattern in placeholder_patterns:
             if re.search(pattern, content_without_prefix):
                 errors.append("Comment contains unresolved placeholders")
@@ -411,8 +426,10 @@ class CommentService:
                     system_prompt=template.system_prompt
                 )
 
+            # Normalize to HTML paragraphs (fallback if LLM ignored formatting instruction)
+            html_content = ensure_html_paragraphs(gen_result.comment_content)
             # Ensure German AI prefix (FR-006)
-            comment_content = self._ensure_german_prefix(gen_result.comment_content)
+            comment_content = self._ensure_german_prefix(html_content)
 
             # Validate generated comment
             validation_result = self._validate_comment(comment_content, request)

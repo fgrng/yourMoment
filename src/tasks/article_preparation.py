@@ -5,7 +5,7 @@ This module implements Task 2 of the refactored monitoring pipeline:
 - Reads discovered articles (status='discovered') for a monitoring process
 - Fetches full content for each article using ScraperService
 - Updates AIComment records with content and status='prepared'
-- Uses Pattern 3: Iterative Single-Record Updates with short DB sessions
+- Authenticates once per login and reuses the HTTP session for all article fetches
 """
 
 import asyncio
@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 from celery import current_task
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import and_, select, update
 
 from src.tasks.worker import celery_app, BaseTask
 from src.models.ai_comment import AIComment
@@ -37,6 +37,7 @@ class ArticleSnapshot:
     article_url: str
     mymoment_login_id: uuid.UUID
     user_id: uuid.UUID
+    status: str
 
 
 class ArticlePreparationTask(BaseTask):
@@ -85,7 +86,8 @@ class ArticlePreparationTask(BaseTask):
                     article_title=comment.article_title,
                     article_url=comment.article_url,
                     mymoment_login_id=comment.mymoment_login_id,
-                    user_id=comment.user_id
+                    user_id=comment.user_id,
+                    status=comment.status,
                 )
                 for comment in ai_comments
             ]
@@ -94,69 +96,126 @@ class ArticlePreparationTask(BaseTask):
         logger.info(f"Read {len(snapshots)} discovered articles for process {process_id}")
         return snapshots
 
-    async def _scrape_single_article_content(
-        self,
-        article_id: str,
-        login_id: uuid.UUID,
-        user_id: uuid.UUID
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Scrape full content for a single article.
+    async def _read_article_snapshot(self, ai_comment_id: uuid.UUID) -> Optional[ArticleSnapshot]:
+        """Read a single AIComment as a lightweight snapshot."""
+        session = await self.get_async_session()
+        async with session:
+            ai_comment = await session.get(AIComment, ai_comment_id)
+            if not ai_comment:
+                return None
 
-        This method runs OUTSIDE any long-lived database session.
-        Initializes a temporary session, fetches content, cleans up.
+            return ArticleSnapshot(
+                ai_comment_id=ai_comment.id,
+                mymoment_article_id=ai_comment.mymoment_article_id,
+                article_title=ai_comment.article_title,
+                article_url=ai_comment.article_url,
+                mymoment_login_id=ai_comment.mymoment_login_id,
+                user_id=ai_comment.user_id,
+                status=ai_comment.status,
+            )
+
+    async def _prepare_articles_for_login(
+        self,
+        articles: List[ArticleSnapshot],
+        login_id: uuid.UUID,
+        user_id: uuid.UUID,
+        scraping_config: ScrapingConfig,
+    ) -> tuple[int, int, List[str]]:
+        """
+        Fetch content for all articles belonging to a single login.
+
+        Authenticates with myMoment ONCE and reuses the HTTP session for all
+        article fetches, avoiding repeated authentication overhead.
 
         Args:
-            article_id: MyMoment article ID
+            articles: List of ArticleSnapshot objects for this login
             login_id: MyMomentLogin UUID
             user_id: User UUID
+            scraping_config: Scraping configuration
 
         Returns:
-            Dictionary with article content data or None if failed
+            Tuple of (prepared_count, failed_count, errors)
         """
-        try:
-            # Initialize scraper with config (outside DB session)
-            scraping_config = ScrapingConfig.from_settings()
+        prepared_count = 0
+        failed_count = 0
+        errors = []
 
-            # Create temporary session for scraping
-            session = await self.get_async_session()
-            async with session:
-                async with ScraperService(session, scraping_config) as scraper:
+        auth_start = datetime.utcnow()
+        session = await self.get_async_session()
+        async with session:
+            async with ScraperService(session, scraping_config) as scraper:
+                # Authenticate ONCE for all articles of this login
+                try:
+                    context = await scraper.initialize_session_for_login(
+                        login_id=login_id,
+                        user_id=user_id
+                    )
+                    auth_time = (datetime.utcnow() - auth_start).total_seconds()
+                    logger.info(
+                        f"Authenticated login {login_id} in {auth_time:.2f}s — "
+                        f"fetching content for {len(articles)} article(s)"
+                    )
+                except Exception as e:
+                    error_msg = f"Authentication failed for login {login_id}: {e}"
+                    logger.error(error_msg)
+                    errors.append(error_msg)
+                    for article in articles:
+                        await self._mark_article_failed(article.ai_comment_id, error_msg)
+                    return 0, len(articles), errors
+
+                # Fetch content for each article, reusing the authenticated session
+                for idx, article in enumerate(articles):
+                    fetch_start = datetime.utcnow()
                     try:
-                        # Initialize myMoment session for this login
-                        context = await scraper.initialize_session_for_login(
-                            login_id=login_id,
-                            user_id=user_id
-                        )
-
-                        # Fetch article content (HTTP request outside DB transaction)
                         content_data = await scraper.get_article_content(
                             context=context,
-                            article_id=article_id
+                            article_id=article.mymoment_article_id
                         )
-
-                        # Cleanup session
-                        await scraper.cleanup_session(login_id)
+                        fetch_time = (datetime.utcnow() - fetch_start).total_seconds()
 
                         if content_data:
-                            logger.debug(f"Scraped content for article {article_id}")
-                            return content_data
+                            success = await self._update_article_content(
+                                ai_comment_id=article.ai_comment_id,
+                                content_data=content_data
+                            )
+                            if success:
+                                prepared_count += 1
+                                logger.info(
+                                    f"[{idx + 1}/{len(articles)}] Prepared: {article.article_title!r} "
+                                    f"({fetch_time:.2f}s)"
+                                )
+                            else:
+                                error_msg = "Failed to update AIComment record"
+                                await self._mark_article_failed(article.ai_comment_id, error_msg)
+                                errors.append(f"Article {article.mymoment_article_id}: {error_msg}")
+                                failed_count += 1
                         else:
-                            logger.warning(f"No content returned for article {article_id}")
-                            return None
+                            error_msg = "No content returned by scraper"
+                            await self._mark_article_failed(article.ai_comment_id, error_msg)
+                            errors.append(f"Article {article.mymoment_article_id}: {error_msg}")
+                            failed_count += 1
+                            logger.warning(
+                                f"[{idx + 1}/{len(articles)}] No content for "
+                                f"article {article.mymoment_article_id} ({fetch_time:.2f}s)"
+                            )
 
                     except Exception as e:
-                        logger.error(f"Failed to scrape article {article_id}: {e}")
-                        return None
+                        fetch_time = (datetime.utcnow() - fetch_start).total_seconds()
+                        error_msg = (
+                            f"Preparation failed for article {article.mymoment_article_id}: {e}"
+                        )
+                        errors.append(error_msg)
+                        logger.error(f"{error_msg} ({fetch_time:.2f}s)")
+                        await self._mark_article_failed(article.ai_comment_id, str(e))
+                        failed_count += 1
 
-        except Exception as e:
-            logger.error(f"Scraping session failed for article {article_id}: {e}")
-            return None
+        return prepared_count, failed_count, errors
 
     async def _update_article_content(
         self,
         ai_comment_id: uuid.UUID,
-        content_data: Dict[str, Any]
+        content_data: Dict[str, Any],
+        expected_status: str = "discovered",
     ) -> bool:
         """
         Update single AIComment record with article content.
@@ -173,42 +232,49 @@ class ArticlePreparationTask(BaseTask):
         try:
             session = await self.get_async_session()
             async with session:
-                # Read AIComment record
-                ai_comment = await session.get(AIComment, ai_comment_id)
+                values = {
+                    "article_content": content_data.get("content", ""),
+                    "article_raw_html": content_data.get("full_html", ""),
+                    "article_scraped_at": datetime.utcnow(),
+                    "status": "prepared",
+                    "error_message": None,
+                    "failed_at": None,
+                }
+                if "title" in content_data:
+                    values["article_title"] = content_data["title"]
+                if content_data.get("category_id") is not None:
+                    values["article_category"] = content_data["category_id"]
+                if content_data.get("task_id") is not None:
+                    values["article_task_id"] = content_data["task_id"]
 
+                result = await session.execute(
+                    update(AIComment)
+                    .where(
+                        and_(
+                            AIComment.id == ai_comment_id,
+                            AIComment.status == expected_status,
+                        )
+                    )
+                    .values(**values)
+                )
+
+                if result.rowcount:
+                    await session.commit()
+                    logger.debug(f"Updated article content for AIComment {ai_comment_id}")
+                    return True
+
+                ai_comment = await session.get(AIComment, ai_comment_id)
                 if not ai_comment:
                     logger.error(f"AIComment {ai_comment_id} not found")
                     return False
-
-                # Update content fields
-                ai_comment.article_content = content_data.get('content', '')
-                ai_comment.article_raw_html = content_data.get('full_html', '')
-
-                # Update metadata if available
-                if 'title' in content_data:
-                    ai_comment.article_title = content_data['title']
-
-                # Update category and task IDs extracted from detail page
-                if 'category_id' in content_data and content_data['category_id'] is not None:
-                    ai_comment.article_category = content_data['category_id']
-                if 'task_id' in content_data and content_data['task_id'] is not None:
-                    ai_comment.article_task_id = content_data['task_id']
-
-                # Note: article_published_at is not available from scraper yet
-                # It would need to be added to ScraperService.get_article_content()
-
-                # Update scraping timestamp
-                ai_comment.article_scraped_at = datetime.utcnow()
-
-                # Update status to 'prepared'
-                ai_comment.status = 'prepared'
-
-                # Commit single record
-                await session.commit()
-
-            # Session closed automatically (< 50ms)
-            logger.debug(f"Updated article content for AIComment {ai_comment_id}")
-            return True
+                if ai_comment.status in {"prepared", "generated", "posted"}:
+                    logger.info(
+                        "Skipping stale preparation update for AIComment %s already in status=%s",
+                        ai_comment_id,
+                        ai_comment.status,
+                    )
+                    return True
+                return False
 
         except Exception as e:
             logger.error(f"Failed to update AIComment {ai_comment_id}: {e}")
@@ -217,7 +283,8 @@ class ArticlePreparationTask(BaseTask):
     async def _mark_article_failed(
         self,
         ai_comment_id: uuid.UUID,
-        error_message: str
+        error_message: str,
+        expected_status: str = "discovered",
     ) -> bool:
         """
         Mark AIComment as failed with error message.
@@ -232,35 +299,136 @@ class ArticlePreparationTask(BaseTask):
         try:
             session = await self.get_async_session()
             async with session:
-                ai_comment = await session.get(AIComment, ai_comment_id)
+                result = await session.execute(
+                    update(AIComment)
+                    .where(
+                        and_(
+                            AIComment.id == ai_comment_id,
+                            AIComment.status == expected_status,
+                        )
+                    )
+                    .values(
+                        status="failed",
+                        error_message=error_message,
+                        failed_at=datetime.utcnow(),
+                    )
+                )
 
+                if result.rowcount:
+                    await session.commit()
+                    logger.info(f"Marked AIComment {ai_comment_id} as failed: {error_message}")
+                    return True
+
+                ai_comment = await session.get(AIComment, ai_comment_id)
                 if not ai_comment:
                     logger.error(f"AIComment {ai_comment_id} not found")
                     return False
-
-                # Mark as failed
-                ai_comment.status = 'failed'
-                ai_comment.error_message = error_message
-                ai_comment.failed_at = datetime.utcnow()
-
-                await session.commit()
-
-            logger.info(f"Marked AIComment {ai_comment_id} as failed: {error_message}")
-            return True
+                logger.info(
+                    "Skipping stale failure mark for AIComment %s with current status=%s",
+                    ai_comment_id,
+                    ai_comment.status,
+                )
+                return ai_comment.status != expected_status
 
         except Exception as e:
             logger.error(f"Failed to mark AIComment {ai_comment_id} as failed: {e}")
             return False
 
+    async def _prepare_single_article_async(self, ai_comment_id: uuid.UUID) -> Dict[str, Any]:
+        """Prepare one article by fetching content and moving discovered -> prepared."""
+        start_time = datetime.utcnow()
+        snapshot = await self._read_article_snapshot(ai_comment_id)
+        if not snapshot:
+            return {
+                "ai_comment_id": str(ai_comment_id),
+                "status": "skipped",
+                "reason": "missing",
+                "execution_time_seconds": 0,
+            }
+
+        if snapshot.status != "discovered":
+            return {
+                "ai_comment_id": str(ai_comment_id),
+                "status": "skipped",
+                "reason": f"already_{snapshot.status}",
+                "execution_time_seconds": 0,
+            }
+
+        scraping_config = ScrapingConfig.from_settings()
+
+        try:
+            session = await self.get_async_session()
+            async with session:
+                async with ScraperService(session, scraping_config) as scraper:
+                    context = await scraper.initialize_session_for_login(
+                        login_id=snapshot.mymoment_login_id,
+                        user_id=snapshot.user_id,
+                    )
+                    content_data = await scraper.get_article_content(
+                        context=context,
+                        article_id=snapshot.mymoment_article_id,
+                    )
+                    await scraper.cleanup_session(snapshot.mymoment_login_id)
+
+            if not content_data:
+                error_msg = "No content returned by scraper"
+                await self._mark_article_failed(
+                    snapshot.ai_comment_id,
+                    error_msg,
+                    expected_status="discovered",
+                )
+                return {
+                    "ai_comment_id": str(ai_comment_id),
+                    "status": "failed",
+                    "reason": error_msg,
+                    "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+                }
+
+            updated = await self._update_article_content(
+                snapshot.ai_comment_id,
+                content_data,
+                expected_status="discovered",
+            )
+            return {
+                "ai_comment_id": str(ai_comment_id),
+                "status": "prepared" if updated else "skipped",
+                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+            }
+
+        except Exception as exc:
+            error_msg = f"Preparation failed for article {snapshot.mymoment_article_id}: {exc}"
+            logger.error(error_msg)
+            await self._mark_article_failed(
+                snapshot.ai_comment_id,
+                error_msg,
+                expected_status="discovered",
+            )
+            return {
+                "ai_comment_id": str(ai_comment_id),
+                "status": "failed",
+                "reason": str(exc),
+                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+            }
+
+
+def _normalize_identifier(identifier: Any, compat_args: tuple[Any, ...]) -> str:
+    """Accept both Celery invocation and legacy direct task calls in tests."""
+    if isinstance(identifier, str):
+        return identifier
+    if compat_args and isinstance(compat_args[0], str):
+        return compat_args[0]
+    return str(identifier)
+
     async def _prepare_content_async(self, process_id: uuid.UUID) -> Dict[str, Any]:
         """
         Main async method for article content preparation.
 
-        Implements the preparation workflow using Pattern 3:
+        Groups discovered articles by login_id so each login authenticates
+        once and reuses its HTTP session for all article fetches.
+
         1. Read all discovered AIComments (short session)
-        2. For each article: scrape content (outside DB session)
-        3. For each article: update AIComment (short session < 50ms)
-        4. Apply rate limiting between fetches
+        2. Group articles by login_id
+        3. For each login: authenticate once, fetch all articles, update DB
 
         Args:
             process_id: Monitoring process UUID
@@ -287,65 +455,34 @@ class ArticlePreparationTask(BaseTask):
                     'status': 'success'
                 }
 
-            logger.info(f"Starting preparation for {len(articles)} articles in process {process_id}")
+            # Step 2: Group by login_id to authenticate once per login
+            articles_by_login: Dict[uuid.UUID, List[ArticleSnapshot]] = {}
+            for article in articles:
+                articles_by_login.setdefault(article.mymoment_login_id, []).append(article)
 
-            # Get rate limit config
             scraping_config = ScrapingConfig.from_settings()
-            rate_limit_delay = scraping_config.rate_limit_delay
 
-            # Step 2 & 3: For each article - scrape and update iteratively
-            for idx, article in enumerate(articles):
-                try:
-                    # Scrape article content (outside DB session)
-                    content_data = await self._scrape_single_article_content(
-                        article_id=article.mymoment_article_id,
-                        login_id=article.mymoment_login_id,
-                        user_id=article.user_id
-                    )
+            logger.info(
+                f"Starting preparation for {len(articles)} article(s) across "
+                f"{len(articles_by_login)} login(s) for process {process_id}"
+            )
 
-                    if content_data:
-                        # Update AIComment with content (short DB session)
-                        success = await self._update_article_content(
-                            ai_comment_id=article.ai_comment_id,
-                            content_data=content_data
-                        )
-
-                        if success:
-                            prepared_count += 1
-                            logger.info(f"Prepared article {idx + 1}/{len(articles)}: {article.article_title}")
-                        else:
-                            # Update failed but we got content - mark as failed
-                            error_msg = "Failed to update AIComment record"
-                            await self._mark_article_failed(article.ai_comment_id, error_msg)
-                            errors.append(f"Article {article.mymoment_article_id}: {error_msg}")
-                            failed_count += 1
-                    else:
-                        # Scraping failed - mark as failed
-                        error_msg = "Failed to scrape article content"
-                        await self._mark_article_failed(article.ai_comment_id, error_msg)
-                        errors.append(f"Article {article.mymoment_article_id}: {error_msg}")
-                        failed_count += 1
-
-                    # Apply rate limiting between fetches (except after last article)
-                    if idx < len(articles) - 1:
-                        await asyncio.sleep(rate_limit_delay)
-
-                except Exception as e:
-                    # Individual article failure - log and continue
-                    error_msg = f"Preparation failed for article {article.mymoment_article_id}: {str(e)}"
-                    errors.append(error_msg)
-                    logger.error(error_msg)
-
-                    # Mark as failed
-                    await self._mark_article_failed(article.ai_comment_id, str(e))
-                    failed_count += 1
+            # Step 3: Process each login's articles with a shared auth session
+            for login_id, login_articles in articles_by_login.items():
+                user_id = login_articles[0].user_id
+                p, f, errs = await self._prepare_articles_for_login(
+                    login_articles, login_id, user_id, scraping_config
+                )
+                prepared_count += p
+                failed_count += f
+                errors.extend(errs)
 
             execution_time = (datetime.utcnow() - start_time).total_seconds()
 
-            logger.info(f"Article preparation completed for process {process_id}: "
-                       f"{prepared_count} prepared, "
-                       f"{failed_count} failed, "
-                       f"{execution_time:.2f}s")
+            logger.info(
+                f"Article preparation completed for process {process_id}: "
+                f"{prepared_count} prepared, {failed_count} failed, {execution_time:.2f}s"
+            )
 
             return {
                 'prepared': prepared_count,
@@ -374,12 +511,33 @@ class ArticlePreparationTask(BaseTask):
 @celery_app.task(
     bind=True,
     base=ArticlePreparationTask,
+    name='src.tasks.article_preparation.prepare_article_content',
+    queue='preparation',
+    max_retries=3,
+    default_retry_delay=120
+)
+def prepare_article_content(self, ai_comment_id: Any, *compat_args: Any) -> Dict[str, Any]:
+    """Prepare one AIComment row for downstream generation."""
+    try:
+        ai_comment_id = _normalize_identifier(ai_comment_id, compat_args)
+        logger.info(f"Starting single-article preparation task for AIComment {ai_comment_id}")
+        result = asyncio.run(self._prepare_single_article_async(uuid.UUID(ai_comment_id)))
+        logger.info(f"Single-article preparation task completed: {result}")
+        return result
+    except Exception as exc:
+        logger.error(f"Single-article preparation task failed for AIComment {ai_comment_id}: {exc}")
+        self.retry(exc=exc, countdown=120)
+
+
+@celery_app.task(
+    bind=True,
+    base=ArticlePreparationTask,
     name='src.tasks.article_preparation.prepare_content_of_articles',
     queue='preparation',
     max_retries=3,
     default_retry_delay=120
 )
-def prepare_content_of_articles(self, process_id: str) -> Dict[str, Any]:
+def prepare_content_of_articles(self, process_id: Any, *compat_args: Any) -> Dict[str, Any]:
     """
     Celery task wrapper for article content preparation.
 
@@ -399,6 +557,7 @@ def prepare_content_of_articles(self, process_id: str) -> Dict[str, Any]:
         - status: 'success', 'partial', or 'failed'
     """
     try:
+        process_id = _normalize_identifier(process_id, compat_args)
         logger.info(f"Starting article preparation task for process {process_id}")
         result = asyncio.run(self._prepare_content_async(uuid.UUID(process_id)))
         logger.info(f"Article preparation task completed: {result}")

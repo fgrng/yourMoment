@@ -25,7 +25,19 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, String, Text, DateTime, Integer, Boolean, UUID, ForeignKey, CheckConstraint, JSON
+from sqlalchemy import (
+    Column,
+    String,
+    Text,
+    DateTime,
+    Integer,
+    Boolean,
+    UUID,
+    ForeignKey,
+    CheckConstraint,
+    JSON,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 
 from src.models.base import Base, BaseModel
@@ -178,6 +190,13 @@ class AIComment(BaseModel):
             "(status != 'failed') OR (status = 'failed' AND error_message IS NOT NULL)",
             name="check_failed_status_has_error"
         ),
+        UniqueConstraint(
+            "mymoment_article_id",
+            "monitoring_process_id",
+            "mymoment_login_id",
+            "prompt_template_id",
+            name="uq_ai_comments_article_process_login_prompt",
+        ),
     )
 
     def __init__(self, **kwargs):
@@ -236,7 +255,11 @@ class AIComment(BaseModel):
             return False
         settings = get_settings()
         required_prefix = settings.monitoring.AI_COMMENT_PREFIX
-        return self.comment_content.startswith(required_prefix)
+        normalized_content = self.comment_content.strip()
+        return (
+            normalized_content.startswith(required_prefix)
+            or normalized_content.startswith(f"<p>{required_prefix}</p>")
+        )
 
     @staticmethod
     def apply_ai_prefix(content: str) -> str:
@@ -254,15 +277,23 @@ class AIComment(BaseModel):
 
         settings = get_settings()
         prefix = settings.monitoring.AI_COMMENT_PREFIX
+        normalized_content = content.strip()
 
-        if content.startswith(prefix):
-            return content
+        if (
+            normalized_content.startswith(prefix)
+            or normalized_content.startswith(f"<p>{prefix}</p>")
+        ):
+            return normalized_content
 
-        # Add prefix with a space separator if content doesn't start with whitespace
-        if not content[0].isspace():
-            return f"{prefix} {content}"
+        if normalized_content.lower().startswith("<p>"):
+            # HTML mode: wrap prefix in its own paragraph
+            return f"<p>{prefix}</p>{normalized_content}"
+
+        # Plain text mode: legacy behavior
+        if not normalized_content[0].isspace():
+            return f"{prefix} {normalized_content}"
         else:
-            return f"{prefix}{content}"
+            return f"{prefix}{normalized_content}"
 
     @property
     def short_title(self) -> str:

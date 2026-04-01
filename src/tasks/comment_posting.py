@@ -17,10 +17,11 @@ from dataclasses import dataclass
 
 from celery import current_task
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import and_, select, update
 
 from src.tasks.worker import celery_app, BaseTask
 from src.models.ai_comment import AIComment
+from src.models.monitoring_process import MonitoringProcess
 from src.models.mymoment_login import MyMomentLogin
 from src.services.scraper_service import ScraperService, ScrapingConfig, SessionContext
 from src.config.database import get_database_manager
@@ -37,6 +38,9 @@ class CommentSnapshot:
     mymoment_login_id: uuid.UUID
     article_title: str
     is_hidden: bool
+    monitoring_process_id: Optional[uuid.UUID]
+    user_id: uuid.UUID
+    status: str
 
 
 @dataclass
@@ -99,7 +103,10 @@ class CommentPostingTask(BaseTask):
                     comment_content=c.comment_content,
                     mymoment_login_id=c.mymoment_login_id,
                     article_title=c.article_title,
-                    is_hidden=c.is_hidden
+                    is_hidden=c.is_hidden,
+                    monitoring_process_id=c.monitoring_process_id,
+                    user_id=c.user_id,
+                    status=c.status,
                 )
                 for c in ai_comments
             ]
@@ -140,6 +147,26 @@ class CommentPostingTask(BaseTask):
         logger.info(f"Cached credentials for {len(cached_logins)} logins")
 
         return comment_snapshots, cached_logins
+
+    async def _read_comment_snapshot(self, ai_comment_id: uuid.UUID) -> Optional[CommentSnapshot]:
+        """Read a single AIComment with the fields required for posting."""
+        session = await self.get_async_session()
+        async with session:
+            ai_comment = await session.get(AIComment, ai_comment_id)
+            if not ai_comment:
+                return None
+
+            return CommentSnapshot(
+                id=ai_comment.id,
+                mymoment_article_id=ai_comment.mymoment_article_id,
+                comment_content=ai_comment.comment_content or "",
+                mymoment_login_id=ai_comment.mymoment_login_id,
+                article_title=ai_comment.article_title,
+                is_hidden=ai_comment.is_hidden,
+                monitoring_process_id=ai_comment.monitoring_process_id,
+                user_id=ai_comment.user_id,
+                status=ai_comment.status,
+            )
 
     async def _post_single_comment(
         self,
@@ -215,8 +242,9 @@ class CommentPostingTask(BaseTask):
         self,
         ai_comment_id: uuid.UUID,
         comment_id: str,
-        posted_at: datetime
-    ) -> None:
+        posted_at: datetime,
+        expected_status: str = "generated",
+    ) -> bool:
         """
         Update AIComment with posted status.
 
@@ -230,27 +258,40 @@ class CommentPostingTask(BaseTask):
         """
         session = await self.get_async_session()
         async with session:
-            ai_comment = await session.get(AIComment, ai_comment_id)
+            result = await session.execute(
+                update(AIComment)
+                .where(
+                    and_(
+                        AIComment.id == ai_comment_id,
+                        AIComment.status == expected_status,
+                    )
+                )
+                .values(
+                    mymoment_comment_id=comment_id,
+                    status="posted",
+                    posted_at=posted_at,
+                    error_message=None,
+                    failed_at=None,
+                )
+            )
+            if result.rowcount:
+                await session.commit()
+                logger.debug(f"Updated AIComment {ai_comment_id} to status='posted'")
+                return True
 
+            ai_comment = await session.get(AIComment, ai_comment_id)
             if not ai_comment:
                 raise ValueError(f"AIComment {ai_comment_id} not found")
-
-            # Update fields
-            ai_comment.mymoment_comment_id = comment_id
-            ai_comment.status = 'posted'
-            ai_comment.posted_at = posted_at
-            ai_comment.error_message = None  # Clear any previous errors
-
-            # Commit single record
-            await session.commit()
-
-        # Session closed automatically (< 50ms)
-        logger.debug(f"Updated AIComment {ai_comment_id} to status='posted'")
+            if ai_comment.status == "posted":
+                logger.info("Skipping stale posting update for AIComment %s already posted", ai_comment_id)
+                return True
+            return False
 
     async def _mark_comment_failed(
         self,
         ai_comment_id: uuid.UUID,
-        error_msg: str
+        error_msg: str,
+        expected_status: str = "generated",
     ) -> None:
         """
         Mark AIComment as failed with error message.
@@ -264,22 +305,145 @@ class CommentPostingTask(BaseTask):
         """
         session = await self.get_async_session()
         async with session:
-            ai_comment = await session.get(AIComment, ai_comment_id)
+            result = await session.execute(
+                update(AIComment)
+                .where(
+                    and_(
+                        AIComment.id == ai_comment_id,
+                        AIComment.status == expected_status,
+                    )
+                )
+                .values(
+                    status="failed",
+                    error_message=error_msg,
+                    failed_at=datetime.utcnow(),
+                    retry_count=AIComment.retry_count + 1,
+                )
+            )
+            if result.rowcount:
+                await session.commit()
+                logger.debug(f"Updated AIComment {ai_comment_id} to status='failed'")
+                return
 
+            ai_comment = await session.get(AIComment, ai_comment_id)
             if not ai_comment:
                 raise ValueError(f"AIComment {ai_comment_id} not found")
+            logger.info(
+                "Skipping stale posting failure mark for AIComment %s with current status=%s",
+                ai_comment_id,
+                ai_comment.status,
+            )
 
-            # Update fields
-            ai_comment.status = 'failed'
-            ai_comment.error_message = error_msg
-            ai_comment.failed_at = datetime.utcnow()
-            ai_comment.retry_count += 1
+    async def _post_single_comment_async(self, ai_comment_id: uuid.UUID) -> Dict[str, Any]:
+        """Post one generated comment if the process is still allowed to publish."""
+        start_time = datetime.utcnow()
+        snapshot = await self._read_comment_snapshot(ai_comment_id)
+        if not snapshot:
+            return {
+                "ai_comment_id": str(ai_comment_id),
+                "status": "skipped",
+                "reason": "missing",
+                "execution_time_seconds": 0,
+            }
 
-            # Commit single record
-            await session.commit()
+        if snapshot.status != "generated":
+            return {
+                "ai_comment_id": str(ai_comment_id),
+                "status": "skipped",
+                "reason": f"already_{snapshot.status}",
+                "execution_time_seconds": 0,
+            }
 
-        # Session closed automatically (< 50ms)
-        logger.debug(f"Updated AIComment {ai_comment_id} to status='failed', retry_count={ai_comment.retry_count}")
+        if snapshot.monitoring_process_id:
+            session = await self.get_async_session()
+            async with session:
+                process = await session.get(MonitoringProcess, snapshot.monitoring_process_id)
+            if not process or not process.is_active or process.status != "running":
+                return {
+                    "ai_comment_id": str(ai_comment_id),
+                    "status": "skipped",
+                    "reason": "process_not_running",
+                    "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+                }
+            if process.generate_only:
+                return {
+                    "ai_comment_id": str(ai_comment_id),
+                    "status": "skipped",
+                    "reason": "generate_only",
+                    "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+                }
+
+        scraping_config = ScrapingConfig.from_settings()
+        posted_at = datetime.utcnow()
+        try:
+            session = await self.get_async_session()
+            async with session:
+                async with ScraperService(session, scraping_config) as scraper:
+                    try:
+                        context = await scraper.initialize_session_for_login(
+                            login_id=snapshot.mymoment_login_id,
+                            user_id=snapshot.user_id,
+                        )
+                        success = await self._post_single_comment(
+                            context=context,
+                            article_id=snapshot.mymoment_article_id,
+                            comment_content=snapshot.comment_content,
+                            scraper=scraper,
+                            hide_comment=snapshot.is_hidden,
+                        )
+                    finally:
+                        try:
+                            await scraper.cleanup_session(snapshot.mymoment_login_id)
+                        except Exception as cleanup_error:
+                            logger.warning(
+                                "Failed to cleanup posting session for login %s: %s",
+                                snapshot.mymoment_login_id,
+                                cleanup_error,
+                            )
+        except Exception as exc:
+            error_msg = f"Failed to post comment for AIComment {snapshot.id}: {exc}"
+            logger.error(error_msg)
+            await self._mark_comment_failed(
+                snapshot.id,
+                error_msg,
+                expected_status="generated",
+            )
+            return {
+                "ai_comment_id": str(ai_comment_id),
+                "status": "failed",
+                "reason": str(exc),
+                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+            }
+
+        if not success:
+            error_msg = "Comment posting returned False"
+            await self._mark_comment_failed(
+                snapshot.id,
+                error_msg,
+                expected_status="generated",
+            )
+            return {
+                "ai_comment_id": str(ai_comment_id),
+                "status": "failed",
+                "reason": error_msg,
+                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+            }
+
+        comment_id = self._generate_placeholder_comment_id(
+            snapshot.mymoment_article_id,
+            snapshot.id,
+        )
+        updated = await self._update_posted_comment(
+            snapshot.id,
+            comment_id=comment_id,
+            posted_at=posted_at,
+            expected_status="generated",
+        )
+        return {
+            "ai_comment_id": str(ai_comment_id),
+            "status": "posted" if updated else "skipped",
+            "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+        }
 
     async def _post_comments_async(self, process_id: uuid.UUID) -> Dict[str, Any]:
         """
@@ -392,15 +556,23 @@ class CommentPostingTask(BaseTask):
                                 )
 
                                 # Update AIComment with posted status (separate session)
-                                await self._update_posted_comment(
+                                updated = await self._update_posted_comment(
                                     ai_comment_id=comment_snapshot.id,
                                     comment_id=comment_id,
                                     posted_at=posted_at
                                 )
 
-                                posted_count += 1
-                                logger.info(f"Posted comment {posted_count}/{len(comment_snapshots)}: "
-                                          f"'{comment_snapshot.article_title[:50]}'")
+                                if updated:
+                                    posted_count += 1
+                                    logger.info(
+                                        f"Posted comment {posted_count}/{len(comment_snapshots)}: "
+                                        f"'{comment_snapshot.article_title[:50]}'"
+                                    )
+                                else:
+                                    logger.info(
+                                        "Skipping stale posting completion for AIComment %s",
+                                        comment_snapshot.id,
+                                    )
                             else:
                                 # Mark as failed
                                 error_msg = "Comment posting returned False"
@@ -450,6 +622,36 @@ class CommentPostingTask(BaseTask):
             }
 
 
+def _normalize_identifier(identifier: Any, compat_args: tuple[Any, ...]) -> str:
+    """Accept both Celery invocation and legacy direct task calls in tests."""
+    if isinstance(identifier, str):
+        return identifier
+    if compat_args and isinstance(compat_args[0], str):
+        return compat_args[0]
+    return str(identifier)
+
+
+@celery_app.task(
+    bind=True,
+    base=CommentPostingTask,
+    name='src.tasks.comment_posting.post_comment_for_article',
+    queue='posting',
+    max_retries=3,
+    default_retry_delay=60
+)
+def post_comment_for_article(self, ai_comment_id: Any, *compat_args: Any) -> Dict[str, Any]:
+    """Post a single generated AIComment row."""
+    try:
+        ai_comment_id = _normalize_identifier(ai_comment_id, compat_args)
+        logger.info(f"Starting single-comment posting task for AIComment {ai_comment_id}")
+        result = asyncio.run(self._post_single_comment_async(uuid.UUID(ai_comment_id)))
+        logger.info(f"Single-comment posting task completed: {result}")
+        return result
+    except Exception as exc:
+        logger.error(f"Single-comment posting task failed for AIComment {ai_comment_id}: {exc}")
+        self.retry(exc=exc, countdown=60)
+
+
 @celery_app.task(
     bind=True,
     base=CommentPostingTask,
@@ -462,7 +664,7 @@ class CommentPostingTask(BaseTask):
     retry_jitter=True,
     default_retry_delay=60  # Start with 60 second delay
 )
-def post_comments_for_articles(self, process_id: str) -> Dict[str, Any]:
+def post_comments_for_articles(self, process_id: Any, *compat_args: Any) -> Dict[str, Any]:
     """
     Celery task wrapper for comment posting.
 
@@ -486,6 +688,7 @@ def post_comments_for_articles(self, process_id: str) -> Dict[str, Any]:
         - status: 'success', 'partial', or 'failed'
     """
     try:
+        process_id = _normalize_identifier(process_id, compat_args)
         logger.info(f"Starting comment posting task for process {process_id}")
         result = asyncio.run(self._post_comments_async(uuid.UUID(process_id)))
         logger.info(f"Comment posting task completed: {result}")

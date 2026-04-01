@@ -21,6 +21,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
+from src.models.ai_comment import AIComment
 from src.models.mymoment_login import MyMomentLogin
 from src.models.mymoment_session import MyMomentSession
 from src.models.monitoring_process import MonitoringProcess
@@ -996,11 +997,10 @@ class ScraperService:
             if not context.is_authenticated:
                 raise ScrapingError(f"Session not authenticated for login {context.login_id}")
 
-            # Ensure German AI prefix is included (FR-006)
-            settings = get_settings()
-            ai_prefix = settings.monitoring.AI_COMMENT_PREFIX
-            if not comment_content.startswith(ai_prefix):
-                comment_content = f"{ai_prefix} {comment_content}"
+            # Ensure German AI prefix is included exactly once (FR-006).
+            # Generated comments are often stored as HTML paragraphs, so
+            # plain startswith(prefix) is not sufficient here.
+            comment_content = AIComment.apply_ai_prefix(comment_content)
 
             # Get article to obtain CSRF token
             article_content = await self.get_article_content(context, article_id)

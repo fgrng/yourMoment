@@ -14,9 +14,10 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-from celery import current_task
+from celery import chain, current_task
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import and_, select
+from sqlalchemy.exc import IntegrityError
 
 from src.tasks.worker import celery_app, BaseTask
 from src.models.monitoring_process import MonitoringProcess
@@ -41,10 +42,11 @@ class ProcessConfig:
     prompt_ids: List[uuid.UUID]
     llm_provider_id: Optional[uuid.UUID]
     tab_filter: Optional[str]
-    category_filter: Optional[int]
-    task_filter: Optional[int]
-    search_filter: Optional[str]
-    hide_comments: bool
+    category_filter: Optional[int] = None
+    task_filter: Optional[int] = None
+    search_filter: Optional[str] = None
+    hide_comments: bool = False
+    generate_only: bool = False
 
 
 class ArticleDiscoveryTask(BaseTask):
@@ -134,7 +136,8 @@ class ArticleDiscoveryTask(BaseTask):
                 category_filter=process.category_filter,
                 task_filter=process.task_filter,
                 search_filter=process.search_filter,
-                hide_comments=process.hide_comments
+                hide_comments=process.hide_comments,
+                generate_only=process.generate_only,
             )
 
         # Session closed automatically (< 100ms total)
@@ -228,23 +231,24 @@ class ArticleDiscoveryTask(BaseTask):
         self,
         articles_metadata: List[tuple[ArticleMetadata, uuid.UUID, Optional[uuid.UUID]]],
         config: ProcessConfig
-    ) -> int:
+    ) -> List[uuid.UUID]:
         """
-        Batch create AIComment records from article metadata.
+        Create AIComment records from article metadata.
 
-        Uses Pattern 2: Batch Write Operations.
-        Creates all records in a single transaction for efficiency.
+        The existence check is only an optimization. Correctness comes from the
+        DB uniqueness constraint, so concurrent duplicate inserts are handled by
+        catching IntegrityError and skipping the duplicate row.
 
         Args:
             articles_metadata: List of (ArticleMetadata, login_id, prompt_id) tuples
             config: Process configuration snapshot
 
         Returns:
-            Number of AIComment records created
+            List of newly created AIComment IDs
         """
         session = await self.get_async_session()
         async with session:
-            created_count = 0
+            created_ids: List[uuid.UUID] = []
 
             for article_meta, login_id, prompt_id in articles_metadata:
                 try:
@@ -267,6 +271,7 @@ class ArticleDiscoveryTask(BaseTask):
 
                     # Create AIComment record with metadata only
                     ai_comment = AIComment(
+                        id=uuid.uuid4(),
                         # Article snapshot fields (metadata only)
                         mymoment_article_id=article_meta.id,
                         article_title=article_meta.title,
@@ -301,20 +306,30 @@ class ArticleDiscoveryTask(BaseTask):
                         is_hidden=config.hide_comments
                     )
 
-                    session.add(ai_comment)
-                    created_count += 1
+                    try:
+                        async with session.begin_nested():
+                            session.add(ai_comment)
+                            await session.flush()
+                        created_ids.append(ai_comment.id)
+                    except IntegrityError:
+                        logger.info(
+                            "Skipping duplicate AIComment insert for article %s, login %s, prompt %s, process %s",
+                            article_meta.id,
+                            login_id,
+                            prompt_id,
+                            config.process_id,
+                        )
+                        continue
 
                 except Exception as e:
                     logger.error(f"Failed to create AIComment for article {article_meta.id}: {e}")
                     continue
 
-            # Single commit for all records
-            if created_count > 0:
+            if created_ids:
                 await session.commit()
 
-        # Session closed automatically (< 500ms for batch)
-        logger.info(f"Created {created_count} AIComment records")
-        return created_count
+        logger.info(f"Created {len(created_ids)} AIComment records")
+        return created_ids
 
     async def _discover_articles_async(self, process_id: uuid.UUID) -> Dict[str, Any]:
         """
@@ -335,6 +350,7 @@ class ArticleDiscoveryTask(BaseTask):
         start_time = datetime.utcnow()
         errors = []
         total_discovered = 0
+        created_ai_comment_ids: List[uuid.UUID] = []
 
         try:
             # Step 1: Read process configuration (short-lived session)
@@ -376,10 +392,11 @@ class ArticleDiscoveryTask(BaseTask):
 
             # Step 3: Batch create AIComment records (single transaction)
             if all_articles_metadata:
-                total_discovered = await self._create_ai_comment_records(
+                created_ai_comment_ids = await self._create_ai_comment_records(
                     all_articles_metadata,
                     config
                 )
+                total_discovered = len(created_ai_comment_ids)
 
             execution_time = (datetime.utcnow() - start_time).total_seconds()
 
@@ -390,6 +407,8 @@ class ArticleDiscoveryTask(BaseTask):
 
             return {
                 'discovered': total_discovered,
+                'generate_only': config.generate_only,
+                'created_ai_comment_ids': [str(ai_comment_id) for ai_comment_id in created_ai_comment_ids],
                 'errors': errors,
                 'execution_time_seconds': execution_time,
                 'status': 'success' if not errors else 'partial'
@@ -404,10 +423,51 @@ class ArticleDiscoveryTask(BaseTask):
 
             return {
                 'discovered': total_discovered,
+                'generate_only': False,
+                'created_ai_comment_ids': [],
                 'errors': errors,
                 'execution_time_seconds': execution_time,
                 'status': 'failed'
             }
+
+
+def _dispatch_processing_chains(
+    ai_comment_ids: List[str],
+    generate_only: bool,
+) -> List[Dict[str, str]]:
+    """Spawn per-article processing chains for newly created AIComment rows."""
+    from src.tasks.article_preparation import prepare_article_content
+    from src.tasks.comment_generation import generate_comment_for_article
+    from src.tasks.comment_posting import post_comment_for_article
+
+    dispatched = []
+
+    for ai_comment_id in ai_comment_ids:
+        task_chain = chain(
+            prepare_article_content.si(ai_comment_id),
+            generate_comment_for_article.si(ai_comment_id),
+        )
+        if not generate_only:
+            task_chain = task_chain | post_comment_for_article.si(ai_comment_id)
+
+        async_result = task_chain.apply_async()
+        dispatched.append(
+            {
+                "ai_comment_id": ai_comment_id,
+                "root_task_id": async_result.id,
+            }
+        )
+
+    return dispatched
+
+
+def _normalize_process_id(process_id: Any, compat_args: tuple[Any, ...]) -> str:
+    """Accept both normal Celery invocation and legacy direct task calls in tests."""
+    if isinstance(process_id, str):
+        return process_id
+    if compat_args and isinstance(compat_args[0], str):
+        return compat_args[0]
+    return str(process_id)
 
 
 @celery_app.task(
@@ -418,7 +478,7 @@ class ArticleDiscoveryTask(BaseTask):
     max_retries=3,
     default_retry_delay=120
 )
-def discover_articles(self, process_id: str) -> Dict[str, Any]:
+def discover_articles(self, process_id: Any, *compat_args: Any) -> Dict[str, Any]:
     """
     Celery task wrapper for article discovery.
 
@@ -436,8 +496,17 @@ def discover_articles(self, process_id: str) -> Dict[str, Any]:
         - status: 'success', 'partial', or 'failed'
     """
     try:
+        process_id = _normalize_process_id(process_id, compat_args)
         logger.info(f"Starting article discovery task for process {process_id}")
         result = asyncio.run(self._discover_articles_async(uuid.UUID(process_id)))
+        created_ai_comment_ids = result.get("created_ai_comment_ids", [])
+        if result.get("status") in {"success", "partial"} and created_ai_comment_ids:
+            result["spawned_chains"] = _dispatch_processing_chains(
+                created_ai_comment_ids,
+                generate_only=bool(result.get("generate_only", False)),
+            )
+        else:
+            result["spawned_chains"] = []
         logger.info(f"Article discovery task completed: {result}")
         return result
 
