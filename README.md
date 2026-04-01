@@ -129,6 +129,11 @@ python cli.py scheduler
 **Database**
 - `DB_SQLITE_FILE` – Database file path (default: `yourmoment.db`)
 
+**Comment Generation**
+- `COMMENT_MIN_LENGTH` – Minimum comment length in characters, excluding AI prefix (default: `50`)
+- `COMMENT_MAX_LENGTH` – Maximum comment length in characters, excluding AI prefix (default: `2000`)
+- `AI_COMMENT_PREFIX` – Required German AI disclosure prefix prepended to every comment
+
 **Celery (Optional)**
 - `CELERY_BROKER_URL` – Redis broker URL (required for background workers)
 - `CELERY_RESULT_BACKEND` – Redis result backend URL
