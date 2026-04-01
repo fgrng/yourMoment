@@ -305,6 +305,18 @@ class MonitoringSettings(BaseSettings):
         description="Required prefix for AI-generated comments"
     )
 
+    COMMENT_MIN_LENGTH: int = Field(
+        default=50,
+        ge=1,
+        description="Minimum character length of generated comment content (excluding AI prefix)"
+    )
+
+    COMMENT_MAX_LENGTH: int = Field(
+        default=2000,
+        ge=1,
+        description="Maximum character length of generated comment content (excluding AI prefix)"
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="",
         case_sensitive=False,

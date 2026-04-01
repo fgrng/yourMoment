@@ -33,17 +33,31 @@ from src.services.scraper_service import (
 logger = logging.getLogger(__name__)
 
 
+def _default_max_comment_length() -> int:
+    return get_settings().monitoring.COMMENT_MAX_LENGTH
+
+
+def _default_min_comment_length() -> int:
+    return get_settings().monitoring.COMMENT_MIN_LENGTH
+
+
 @dataclass
 class CommentGenerationConfig:
     """Configuration for comment generation operations."""
-    max_comment_length: int = 500
-    min_comment_length: int = 50
+    max_comment_length: int = None  # defaults to COMMENT_MAX_LENGTH from settings
+    min_comment_length: int = None  # defaults to COMMENT_MIN_LENGTH from settings
     generation_timeout: int = 30  # seconds
     max_retries: int = 3
     retry_delay: float = 2.0
     enable_content_validation: bool = True
     enable_profanity_filter: bool = True
     fallback_to_next_provider: bool = True
+
+    def __post_init__(self):
+        if self.max_comment_length is None:
+            self.max_comment_length = _default_max_comment_length()
+        if self.min_comment_length is None:
+            self.min_comment_length = _default_min_comment_length()
 
 
 @dataclass
@@ -96,8 +110,8 @@ class ProviderExhaustionError(CommentGenerationError):
 
 def validate_comment(
     comment_content: str,
-    min_length: int = 50,
-    max_length: int = 500,
+    min_length: int = None,
+    max_length: int = None,
     enable_content_validation: bool = True
 ) -> Dict[str, Any]:
     """
@@ -117,6 +131,10 @@ def validate_comment(
     errors = []
 
     settings = get_settings()
+    if min_length is None:
+        min_length = settings.monitoring.COMMENT_MIN_LENGTH
+    if max_length is None:
+        max_length = settings.monitoring.COMMENT_MAX_LENGTH
     ai_prefix = settings.monitoring.AI_COMMENT_PREFIX
     has_ai_prefix = comment_content.startswith(ai_prefix)
     if not has_ai_prefix:
