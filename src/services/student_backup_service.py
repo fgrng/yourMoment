@@ -393,39 +393,57 @@ class StudentBackupService(BaseService):
                 f"Tracked student {tracked_student_id} not found or does not belong to user"
             )
 
+        latest_version = await self._get_latest_article_version(
+            tracked_student_id, mymoment_article_id
+        )
+
+        # Dashboard scraping does not always return every metadata field.
+        # Preserve the latest known value when the current scrape omits it.
+        if latest_version:
+            article_title = article_title if article_title is not None else latest_version.article_title
+            article_url = article_url if article_url is not None else latest_version.article_url
+            article_status = article_status if article_status is not None else latest_version.article_status
+            article_visibility = (
+                article_visibility
+                if article_visibility is not None
+                else latest_version.article_visibility
+            )
+            article_category = (
+                article_category if article_category is not None else latest_version.article_category
+            )
+            article_task = article_task if article_task is not None else latest_version.article_task
+            article_last_modified = (
+                article_last_modified
+                if article_last_modified is not None
+                else latest_version.article_last_modified
+            )
+            extra_metadata = extra_metadata if extra_metadata is not None else latest_version.extra_metadata
+
         # Compute content hash
         content_hash = ArticleVersion.compute_content_hash(article_content or "")
 
         # Check if we should skip creating a new version
-        if self.settings.STUDENT_BACKUP_CONTENT_CHANGES_ONLY:
-            latest_version = await self._get_latest_article_version(
-                tracked_student_id, mymoment_article_id
+        if self.settings.STUDENT_BACKUP_CONTENT_CHANGES_ONLY and latest_version:
+            content_changed = latest_version.content_hash != content_hash
+            metadata_changed = (
+                latest_version.article_title != article_title or
+                latest_version.article_status != article_status or
+                latest_version.article_visibility != article_visibility or
+                latest_version.article_category != article_category or
+                latest_version.article_task != article_task
             )
-            
-            if latest_version:
-                # Check for changes in content OR metadata
-                content_changed = latest_version.content_hash != content_hash
-                
-                # Check metadata changes
-                metadata_changed = (
-                    latest_version.article_title != article_title or
-                    latest_version.article_status != article_status or
-                    latest_version.article_visibility != article_visibility or
-                    latest_version.article_category != article_category or
-                    latest_version.article_task != article_task
+
+            if not (content_changed or metadata_changed):
+                self.logger.debug(
+                    f"Skipping version creation for article {mymoment_article_id}: "
+                    f"content and metadata unchanged"
                 )
-                
-                if not (content_changed or metadata_changed):
-                    self.logger.debug(
-                        f"Skipping version creation for article {mymoment_article_id}: "
-                        f"content and metadata unchanged"
-                    )
-                    return None
-                
-                if metadata_changed and not content_changed:
-                    self.logger.info(
-                        f"Creating new version for article {mymoment_article_id} due to metadata change"
-                    )
+                return None
+
+            if metadata_changed and not content_changed:
+                self.logger.info(
+                    f"Creating new version for article {mymoment_article_id} due to metadata change"
+                )
 
         # Determine version number
         version_number = await self._get_next_version_number(

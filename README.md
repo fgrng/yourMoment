@@ -191,40 +191,15 @@ See `.env.example` for complete configuration reference.
 
 ## Testing
 
-### Test Suites
+The test suite is being rebuilt around a fast unit-only workflow. The current milestone command is:
 
-The test suite 
-
-**Unit Tests** – Isolated component testing:
 ```bash
-pytest tests/unit -q
+.venv/bin/pytest tests/unit -q
 ```
 
-**Contract Tests** – API endpoint validation with full app bootstrap:
-```bash
-pytest tests/contract -q
-```
+Use that command from the repository root for local verification. The rebuilt unit tree is split into `tests/unit/pure`, `tests/unit/db`, `tests/unit/services`, and `tests/unit/tasks`, with shared loaders, factories, scenarios, and stubs under `tests/fixtures/`.
 
-**Integration Tests** – Multi-step workflows (may require Celery):
-```bash
-pytest tests/integration -q
-```
-
-**Performance Tests** – External endpoints testing (myMoment platform, LLM poviders):
-```bash
-pytest tests/performance -q
-```
-
-
-### Test Configuration
-
-Tests use isolated configuration:
-- Separate SQLite database (`yourMoment_testing.db`)
-- Dedicated Redis database (db 1)
-- Test-specific encryption keys
-- Minimal logging output
-
-Set `ENVIRONMENT=testing` for test-specific behavior.
+`tests/conftest.py` sets `ENVIRONMENT=testing`, the SQLite test DB path, and the deterministic encryption key before app imports. See `tests/README.md` for the current test layout, fixture/scenario conventions, and focused unit-only commands.
 
 ## Management CLI
 

@@ -1,0 +1,133 @@
+{
+  "captured_at": "2026-04-01",
+  "last_schema_review": "2026-04-02",
+  "source_policy": "read-only GET requests against live myMoment pages, then sanitized and partially normalized for deterministic tests",
+  "fixtures": [
+    {
+      "file": "accounts_login.html",
+      "source_url": "https://www.mymoment.ch/accounts/login/",
+      "source_type": "sanitized_capture",
+      "covers": [
+        "guest login page parsing",
+        "csrf form extraction"
+      ],
+      "covered_parser_methods": [
+        "extract_csrf_token"
+      ],
+      "required_assertions": [
+        "csrf token field present in login form",
+        "login form action URL is present"
+      ],
+      "known_omitted_fields": []
+    },
+    {
+      "file": "articles_index.html",
+      "source_url": "https://www.mymoment.ch/articles/",
+      "source_type": "sanitized_capture",
+      "covers": [
+        "article discovery",
+        "tab parsing",
+        "category/status/visibility card parsing"
+      ],
+      "covered_parser_methods": [
+        "parse_article_list",
+        "parse_article_tabs"
+      ],
+      "required_assertions": [
+        "at least one article card parsed",
+        "article ID present on each card",
+        "tab labels present"
+      ],
+      "known_omitted_fields": [
+        "pagination state (synthetic fixture has no next page)"
+      ]
+    },
+    {
+      "file": "mymoment_articles_tabs.html",
+      "source_url": "https://www.mymoment.ch/articles/",
+      "source_type": "sanitized_capture",
+      "covers": [
+        "tab parsing"
+      ],
+      "covered_parser_methods": [
+        "parse_article_tabs"
+      ],
+      "required_assertions": [
+        "tab labels present"
+      ],
+      "known_omitted_fields": [],
+      "note": "Alias of articles_index.html for tests and notes that reference the old fixture name."
+    },
+    {
+      "file": "articles_get.html",
+      "source_url": "https://www.mymoment.ch/article/3170/",
+      "source_type": "sanitized_capture",
+      "covers": [
+        "article detail parsing",
+        "comment form parsing",
+        "existing comment rendering"
+      ],
+      "covered_parser_methods": [
+        "parse_article_detail",
+        "extract_comment_form_token",
+        "parse_existing_comments"
+      ],
+      "required_assertions": [
+        "article title present",
+        "comment form csrf token present",
+        "at least one existing comment rendered"
+      ],
+      "known_omitted_fields": [
+        "real author identity (replaced with SampleAuthorXX)"
+      ]
+    },
+    {
+      "file": "articles_get_public.html",
+      "source_url": "https://www.mymoment.ch/article/3270/",
+      "source_type": "sanitized_capture",
+      "covers": [
+        "public article detail parsing",
+        "comment form parsing",
+        "publish modal visibility text"
+      ],
+      "covered_parser_methods": [
+        "parse_article_detail",
+        "extract_comment_form_token"
+      ],
+      "required_assertions": [
+        "article title present",
+        "publish modal or visibility indicator present",
+        "comment form csrf token present"
+      ],
+      "known_omitted_fields": [
+        "real author identity (replaced with SampleAuthorXX)"
+      ]
+    },
+    {
+      "file": "profile.html",
+      "source_url": "https://www.mymoment.ch/accounts/2040/profile/",
+      "source_type": "sanitized_capture",
+      "covers": [
+        "profile form structure",
+        "class membership display"
+      ],
+      "covered_parser_methods": [
+        "parse_profile_page"
+      ],
+      "required_assertions": [
+        "class name field present",
+        "school name field present"
+      ],
+      "known_omitted_fields": [
+        "real class/school names (replaced with Beispielklasse A/B / Testschule)"
+      ]
+    }
+  ],
+  "sanitization": {
+    "account_ids": "normalized to sample account IDs",
+    "usernames": "replaced with SampleUser / SampleAuthorXX / SampleReviewerXX",
+    "csrf_tokens": "replaced with TEST_CSRF_TOKEN",
+    "class_and_school_names": "replaced with Beispielklasse A/B (Testschule)",
+    "article_content": "class and public article bodies normalized to synthetic placeholder content while preserving myMoment DOM structure"
+  }
+}

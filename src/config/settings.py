@@ -460,9 +460,8 @@ class Settings:
 
         # Apply environment-specific overrides only if not explicitly set
         if self.app.ENVIRONMENT == "testing":
-            # Override with test-specific database if not explicitly configured
-            if base_settings.DB_SQLITE_FILE == DatabaseSettings.model_fields["DB_SQLITE_FILE"].default:
-                base_settings.DB_SQLITE_FILE = "yourMoment_testing.db"
+            # In tests, ignore the development DB value from .env
+            base_settings.DB_SQLITE_FILE = "yourMoment_testing.db"
             base_settings.DB_ECHO = False
         elif self.app.ENVIRONMENT == "production":
             # Production should explicitly set DB_SQLITE_FILE, use default if not

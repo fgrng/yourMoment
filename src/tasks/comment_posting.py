@@ -244,6 +244,7 @@ class CommentPostingTask(BaseTask):
         ai_comment_id: uuid.UUID,
         comment_id: str,
         posted_at: datetime,
+        login_id: Optional[uuid.UUID] = None,
         expected_status: str = "generated",
     ) -> bool:
         """
@@ -257,6 +258,16 @@ class CommentPostingTask(BaseTask):
             comment_id: MyMoment comment ID (placeholder)
             posted_at: When the comment was posted
         """
+        values: Dict[str, Any] = {
+            "mymoment_comment_id": comment_id,
+            "status": "posted",
+            "posted_at": posted_at,
+            "error_message": None,
+            "failed_at": None,
+        }
+        if login_id is not None:
+            values["mymoment_login_id"] = login_id
+
         session = await self.get_async_session()
         async with session:
             result = await session.execute(
@@ -267,13 +278,7 @@ class CommentPostingTask(BaseTask):
                         AIComment.status == expected_status,
                     )
                 )
-                .values(
-                    mymoment_comment_id=comment_id,
-                    status="posted",
-                    posted_at=posted_at,
-                    error_message=None,
-                    failed_at=None,
-                )
+                .values(**values)
             )
             if result.rowcount:
                 await session.commit()
@@ -410,6 +415,7 @@ class CommentPostingTask(BaseTask):
             snapshot.id,
             comment_id=comment_id,
             posted_at=posted_at,
+            login_id=snapshot.mymoment_login_id,
             expected_status="generated",
         )
         return {
@@ -560,7 +566,8 @@ class CommentPostingTask(BaseTask):
                                 updated = await self._update_posted_comment(
                                     ai_comment_id=comment_snapshot.id,
                                     comment_id=comment_id,
-                                    posted_at=posted_at
+                                    posted_at=posted_at,
+                                    login_id=comment_snapshot.mymoment_login_id,
                                 )
 
                                 if updated:
