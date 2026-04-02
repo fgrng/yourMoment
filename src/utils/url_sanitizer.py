@@ -87,19 +87,15 @@ def safe_parse_url(url: str) -> Optional[tuple]:
         raise ValueError("URL cannot be empty or None")
 
     try:
-        # Try to parse as-is first
+        # Check if malformed and sanitize before parsing if needed
+        # urlparse("https://host\\path") sees "host\\path" as netloc, which is wrong.
+        if is_url_malformed(url):
+            url = sanitize_url(url)
+            
         parsed = urlparse(url)
         return parsed
-    except Exception:
-        pass
-
-    # Try sanitizing and parsing again
-    try:
-        sanitized = sanitize_url(url)
-        parsed = urlparse(sanitized)
-        return parsed
     except Exception as e:
-        logger.error(f"Failed to parse URL even after sanitization: {url}")
+        logger.error(f"Failed to parse URL: {url}")
         raise ValueError(f"Unable to parse URL: {url}") from e
 
 

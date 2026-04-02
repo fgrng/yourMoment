@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import event
-from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 import logging
@@ -73,16 +72,20 @@ class DatabaseManager:
                 engine_args["poolclass"] = StaticPool
 
             self._engine = create_async_engine(database_url, **engine_args)
+            is_in_memory_sqlite = database_url.rstrip("/").endswith(":memory:")
 
-            # Enable foreign key constraints for SQLite
-            @event.listens_for(Engine, "connect")
+            # Scope SQLite PRAGMAs to this engine instance only. Using WAL on
+            # in-memory SQLite stalls the shared async test harness, so keep the
+            # simpler pragma set there while retaining WAL for file-backed DBs.
+            @event.listens_for(self._engine.sync_engine, "connect")
             def set_sqlite_pragma(dbapi_connection, connection_record):
-                """Enable foreign key constraints for SQLite."""
+                """Enable SQLite pragmas appropriate for the active engine."""
                 cursor = dbapi_connection.cursor()
                 cursor.execute("PRAGMA foreign_keys=ON")
-                cursor.execute("PRAGMA journal_mode=WAL;")    # concurrent reads during writes
-                cursor.execute("PRAGMA synchronous=NORMAL;")  # faster, still safe for WAL
-                cursor.execute("PRAGMA busy_timeout=5000;")   # 5s retry on lock
+                if not is_in_memory_sqlite:
+                    cursor.execute("PRAGMA journal_mode=WAL;")
+                    cursor.execute("PRAGMA synchronous=NORMAL;")
+                cursor.execute("PRAGMA busy_timeout=5000;")
                 cursor.close()
 
             logger.info("SQLite database engine created successfully")

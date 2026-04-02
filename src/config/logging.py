@@ -25,10 +25,11 @@ def _resolve_log_level(level: Optional[Any], default_level_name: str) -> int:
     """Normalize logging levels from strings or integers."""
     if isinstance(level, int):
         return level
+    default_level = getattr(logging, default_level_name.upper(), logging.INFO)
     if isinstance(level, str):
         normalized = level.strip().upper()
-        return getattr(logging, normalized, logging.INFO)
-    return getattr(logging, default_level_name.upper(), logging.INFO)
+        return getattr(logging, normalized, default_level)
+    return default_level
 
 
 def _build_formatter(environment: str) -> logging.Formatter:

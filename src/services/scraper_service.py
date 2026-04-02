@@ -671,36 +671,7 @@ class ScraperService:
             # Extract article cards
             article_list = tab_content.select_one(':scope > div[class*="article-list"]')
             if article_list:
-                post_cards = article_list.find_all('div', recursive=False)
-
-                for card in post_cards:
-                    # Stop when we reach the limit
-                    if len(articles) >= limit:
-                        break
-
-                    try:
-                        article = self._extract_article_metadata(card)
-                        if article:
-                            # Server-side filtering via URL params handles category and task filters
-                            # We only apply client-side search filter if specified
-                            should_include = True
-
-                            # Apply search filter if specified
-                            if search:
-                                search_lower = search.lower()
-                                title_lower = article.title.lower() if article.title else ""
-                                if search_lower not in title_lower:
-                                    should_include = False
-
-                            if should_include:
-                                articles.append(article)
-                                logger.debug(f"Article {article.id} ('{article.title}') included in results")
-                            else:
-                                logger.debug(f"Article {article.id} ('{article.title}') filtered out (search filter)")
-
-                    except Exception as e:
-                        logger.warning(f"Failed to extract article metadata: {e}")
-                        continue
+                articles = self._parse_article_list_elements(article_list, limit, search)
 
             context.last_activity = datetime.utcnow()
             logger.debug(f"HTTP request completed for article discovery (login {context.login_id})")
@@ -711,6 +682,50 @@ class ScraperService:
         except Exception as e:
             logger.error(f"Failed to discover articles for login {context.login_id}: {e}")
             raise ScrapingError(f"Article discovery failed: {e}")
+
+    def _parse_article_list_elements(
+        self,
+        article_list_element: Any,
+        limit: int = 20,
+        search: Optional[str] = None
+    ) -> List[ArticleMetadata]:
+        """
+        Parse article cards from an article list element.
+
+        Args:
+            article_list_element: BeautifulSoup element containing article cards
+            limit: Maximum number of articles to retrieve
+            search: Optional search string to filter articles by title
+
+        Returns:
+            List of parsed ArticleMetadata objects
+        """
+        articles = []
+        post_cards = article_list_element.find_all('div', recursive=False)
+
+        for card in post_cards:
+            # Stop when we reach the limit
+            if len(articles) >= limit:
+                break
+
+            try:
+                article = self._extract_article_metadata(card)
+                if article:
+                    # Apply search filter if specified
+                    if search:
+                        search_lower = search.lower()
+                        title_lower = article.title.lower() if article.title else ""
+                        if search_lower not in title_lower:
+                            continue
+
+                    articles.append(article)
+                    logger.debug(f"Article {article.id} ('{article.title}') included in results")
+
+            except Exception as e:
+                logger.warning(f"Failed to extract article metadata: {e}")
+                continue
+
+        return articles
 
     async def discover_available_tabs(self, context: SessionContext) -> List[TabMetadata]:
         """
@@ -744,44 +759,7 @@ class ScraperService:
                 html = await response.text()
 
             soup = BeautifulSoup(html, 'html.parser')
-
-            # Find the tab navigation (<ul class="nav nav-pills" id="pills-tab">)
-            tabs_nav = soup.find('ul', {'id': 'pills-tab'})
-            if not tabs_nav:
-                logger.warning("No tabs navigation found on articles page")
-                return []
-
-            tabs = []
-
-            # Extract all tab buttons
-            for tab_button in tabs_nav.find_all('button', {'role': 'tab'}):
-                try:
-                    # Extract tab ID from data-bs-target (e.g., "#pills-home" -> "home")
-                    target = tab_button.get('data-bs-target', '')
-                    if not target.startswith('#pills-'):
-                        continue
-
-                    tab_id = target.replace('#pills-', '')
-                    tab_name = tab_button.text.strip()
-
-                    # Determine tab type
-                    if tab_id == 'home':
-                        tab_type = 'home'
-                    elif tab_id == 'alle':
-                        tab_type = 'alle'
-                    else:
-                        # Numeric ID = class tab
-                        tab_type = 'class'
-
-                    tabs.append(TabMetadata(
-                        id=tab_id,
-                        name=tab_name,
-                        tab_type=tab_type
-                    ))
-
-                except Exception as e:
-                    logger.warning(f"Failed to extract tab metadata: {e}")
-                    continue
+            tabs = self._parse_article_tabs(soup)
 
             context.last_activity = datetime.utcnow()
             logger.info(f"Discovered {len(tabs)} tabs for login {context.login_id}")
@@ -791,6 +769,56 @@ class ScraperService:
         except Exception as e:
             logger.error(f"Failed to discover tabs for login {context.login_id}: {e}")
             raise ScrapingError(f"Tab discovery failed: {e}")
+
+    def _parse_article_tabs(self, soup: BeautifulSoup) -> List[TabMetadata]:
+        """
+        Parse available tabs from articles page HTML.
+
+        Args:
+            soup: BeautifulSoup object of the articles page
+
+        Returns:
+            List of TabMetadata objects
+        """
+        # Find the tab navigation (<ul class="nav nav-pills" id="pills-tab">)
+        tabs_nav = soup.find('ul', {'id': 'pills-tab'})
+        if not tabs_nav:
+            logger.warning("No tabs navigation found on articles page")
+            return []
+
+        tabs = []
+
+        # Extract all tab buttons
+        for tab_button in tabs_nav.find_all('button', {'role': 'tab'}):
+            try:
+                # Extract tab ID from data-bs-target (e.g., "#pills-home" -> "home")
+                target = tab_button.get('data-bs-target', '')
+                if not target.startswith('#pills-'):
+                    continue
+
+                tab_id = target.replace('#pills-', '')
+                tab_name = tab_button.text.strip()
+
+                # Determine tab type
+                if tab_id == 'home':
+                    tab_type = 'home'
+                elif tab_id == 'alle':
+                    tab_type = 'alle'
+                else:
+                    # Numeric ID = class tab
+                    tab_type = 'class'
+
+                tabs.append(TabMetadata(
+                    id=tab_id,
+                    name=tab_name,
+                    tab_type=tab_type
+                ))
+
+            except Exception as e:
+                logger.warning(f"Failed to extract tab metadata: {e}")
+                continue
+
+        return tabs
 
     def _extract_article_metadata(self, card_element) -> Optional[ArticleMetadata]:
         """
@@ -902,72 +930,93 @@ class ScraperService:
                 html = await response.text()
 
             soup = BeautifulSoup(html, 'html.parser')
-
-            # Extract title
-            title = 'Unknown Title'
-            title_element = soup.find('h1')
-            if title_element:
-                title_text = title_element.text.strip()
-                if ' von ' in title_text:
-                    title = title_text.split(' von ')[0].strip()
-                else:
-                    title = title_text
-
-            # Extract author
-            author = 'Unknown Author'
-            if title_element and ' von ' in title_element.text:
-                author = title_element.text.split(' von ')[1].strip()
-
-            # Extract content
-            content = ''
-            content_elements = soup.select('.article .highlight-target p')
-            if content_elements:
-                content = '\n'.join([el.text.strip() for el in content_elements])
-            else:
-                # Alternative: try text-to-speech area
-                tts_element = soup.find('textarea', {'id': 'text-to-speech'})
-                if tts_element:
-                    content = tts_element.text.strip()
-
-            # Extract full HTML content
-            full_article_html = soup.find('div', class_='article')
-            if full_article_html:
-                # Remove textarea elements
-                for textarea in full_article_html.find_all('textarea'):
-                    textarea.decompose()
-                full_article_html = str(full_article_html)
-            else:
-                full_article_html = ''
-
-            # Extract category and task IDs from detail page
-            category_id, task_id = self._extract_category_and_task_from_detail(soup)
-
-            # Extract CSRF token for commenting
-            csrf_token = None
-            comment_form = soup.find('form', {'action': re.compile(r'/article/\d+/comment/')})
-            if comment_form:
-                csrf_input = comment_form.find('input', {'name': 'csrfmiddlewaretoken'})
-                if csrf_input:
-                    csrf_token = csrf_input.get('value')
+            article_content = self._parse_article_detail(soup, article_id)
+            article_content['url'] = article_url
 
             context.last_activity = datetime.utcnow()
             logger.debug(f"HTTP request completed for article content (article_id={article_id}, login={context.login_id})")
 
-            return {
-                'id': article_id,
-                'title': title,
-                'author': author,
-                'content': content,
-                'full_html': full_article_html,
-                'category_id': category_id,
-                'task_id': task_id,
-                'csrf_token': csrf_token,
-                'url': article_url
-            }
+            return article_content
 
         except Exception as e:
             logger.error(f"Failed to get article content for {article_id}: {e}")
             raise ScrapingError(f"Article content retrieval failed: {e}")
+
+    def _parse_article_detail(self, soup: BeautifulSoup, article_id: str) -> Dict[str, Any]:
+        """
+        Parse article detail page HTML.
+
+        Args:
+            soup: BeautifulSoup object of the article detail page
+            article_id: Article ID
+
+        Returns:
+            Dictionary with extracted article content
+        """
+        # Extract title
+        title = 'Unknown Title'
+        title_element = soup.find('h1')
+        if title_element:
+            title_text = title_element.text.strip()
+            if ' von ' in title_text:
+                title = title_text.split(' von ')[0].strip()
+            else:
+                title = title_text
+
+        # Extract author
+        author = 'Unknown Author'
+        if title_element and ' von ' in title_element.text:
+            author = title_element.text.split(' von ')[1].strip()
+
+        # Extract content
+        content = ''
+        content_elements = soup.select('.article .highlight-target p')
+        if content_elements:
+            content = '\n'.join([el.text.strip() for el in content_elements])
+        else:
+            # Alternative: try text-to-speech area
+            tts_element = soup.find('textarea', {'id': 'text-to-speech'})
+            if tts_element:
+                content = tts_element.text.strip()
+
+        # Extract full HTML content
+        full_article_html_element = soup.find('div', class_='article')
+        if full_article_html_element:
+            # Create a copy to avoid modifying the original soup
+            import copy
+            full_article_html_copy = copy.copy(full_article_html_element)
+            # Remove textarea elements
+            for textarea in full_article_html_copy.find_all('textarea'):
+                textarea.decompose()
+            full_article_html = str(full_article_html_copy)
+        else:
+            full_article_html = ''
+
+        # Extract category and task IDs from detail page
+        category_id, task_id = self._extract_category_and_task_from_detail(soup)
+
+        # Extract CSRF token for commenting
+        csrf_token = None
+        comment_form = soup.find('form', {'action': re.compile(f'/article/{article_id}/comment/')})
+        if not comment_form:
+            # Try a more generic match if exact article_id doesn't match
+            comment_form = soup.find('form', {'action': re.compile(r'/article/\d+/comment/')})
+            
+        if comment_form:
+            csrf_input = comment_form.find('input', {'name': 'csrfmiddlewaretoken'})
+            if csrf_input:
+                csrf_token = csrf_input.get('value')
+
+        return {
+            'id': article_id,
+            'title': title,
+            'author': author,
+            'content': content,
+            'full_html': full_article_html,
+            'category_id': category_id,
+            'task_id': task_id,
+            'csrf_token': csrf_token
+        }
 
     async def post_comment(
         self,

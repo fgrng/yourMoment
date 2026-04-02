@@ -399,7 +399,7 @@ class MonitoringService:
             # Update login associations if provided
             if login_ids is not None:
                 validated_login_ids = await self._validate_login_associations(user_id, login_ids)
-
+                
                 # Create a set of existing login IDs for quick lookup
                 existing_associations = {assoc.mymoment_login_id: assoc for assoc in process.monitoring_process_logins}
 
@@ -454,7 +454,7 @@ class MonitoringService:
             # Update timestamp
             process.updated_at = datetime.now(timezone.utc)
 
-            await self.db_session.commit()
+            await self.db_session.flush()
 
             logger.info(f"Updated monitoring process {process_id} for user {user_id}")
 

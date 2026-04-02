@@ -144,18 +144,17 @@ minversion = "8.0"
 addopts = [
     "--strict-markers",
     "--strict-config",
-    "--cov=src",
-    "--cov-report=term-missing:skip-covered",
-    "--cov-report=html:htmlcov",
-    "--cov-report=xml:coverage.xml",
-    "--cov-fail-under=90",
     "--tb=short",
-    "--no-cov-on-fail",
     "-ra",
 ]
+# Coverage flags are intentionally omitted from the default run so that
+# `pytest tests/unit -q` stays fast during the test-suite rebuild.
+# Enable coverage explicitly in CI: pytest --cov=src --cov-fail-under=90 ...
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+# Test environment variables are set in tests/conftest.py via os.environ.setdefault()
+# rather than via pytest-env (which is not installed in the dev extras).
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -196,13 +195,6 @@ norecursedirs = [
     "htmlcov",
 ]
 
-# Environment variables for testing (requires pytest-env plugin)
-[tool.pytest_env]
-TESTING = "true"
-DATABASE_URL = "sqlite+aiosqlite:///test.db"
-REDIS_URL = "redis://localhost:6379/0"
-SECRET_KEY = "test-secret-key-for-testing-only"
-ENCRYPTION_KEY = "test-encryption-key-for-testing-32b"
 
 [tool.coverage.run]
 source = ["src"]

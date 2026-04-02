@@ -205,6 +205,12 @@ class EncryptionManager:
 _encryption_manager = None
 
 
+def reset_encryption_manager() -> None:
+    """Reset encryption manager instance (useful for testing)."""
+    global _encryption_manager
+    _encryption_manager = None
+
+
 def get_encryption_manager() -> EncryptionManager:
     """
     Get the global encryption manager instance.
