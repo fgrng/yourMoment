@@ -105,7 +105,7 @@ class DatabaseSettings(BaseSettings):
     )
 
     model_config = SettingsConfigDict(
-        env_prefix="DB_",
+        env_prefix="",
         case_sensitive=False,
         env_file=".env",
         extra="ignore"
