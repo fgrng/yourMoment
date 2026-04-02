@@ -1,7 +1,4 @@
 """Database engine and session management using unified settings."""
-
-import os
-from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import event
@@ -12,6 +9,24 @@ import logging
 from src.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def build_sqlite_database_url(sqlite_file: str, *, async_driver: bool = True) -> str:
+    """Build a SQLAlchemy SQLite URL from a configured database file path."""
+    driver = "sqlite+aiosqlite" if async_driver else "sqlite"
+    return f"{driver}:///{sqlite_file}"
+
+
+def get_async_database_url() -> str:
+    """Return the runtime async database URL from application settings."""
+    settings = get_settings()
+    return build_sqlite_database_url(settings.database.DB_SQLITE_FILE, async_driver=True)
+
+
+def get_alembic_database_url() -> str:
+    """Return the sync database URL Alembic should use for migrations."""
+    settings = get_settings()
+    return build_sqlite_database_url(settings.database.DB_SQLITE_FILE, async_driver=False)
 
 
 class DatabaseManager:
@@ -30,11 +45,7 @@ class DatabaseManager:
         if self._database_url_override is not None:
             database_url = self._database_url_override
         else:
-            settings = get_settings()
-            sqlite_file = Path(settings.database.DB_SQLITE_FILE)
-            if not sqlite_file.is_absolute():
-                sqlite_file = (Path(os.getcwd()) / sqlite_file).resolve()
-            database_url = f"sqlite+aiosqlite:///{sqlite_file}"
+            database_url = get_async_database_url()
 
         if self._echo_override is not None:
             echo = self._echo_override

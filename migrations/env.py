@@ -4,7 +4,6 @@ Alembic migration environment configuration for yourMoment application.
 
 import asyncio
 from logging.config import fileConfig
-import os
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -14,7 +13,7 @@ from alembic import context
 
 # Import the declarative base and all models
 from src.models import Base
-from src.config.database import get_database_manager
+from src.config.database import get_alembic_database_url
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -35,33 +34,6 @@ target_metadata = Base.metadata
 # ... etc.
 
 
-def get_database_url():
-    """Get database URL from environment or configuration."""
-    # Try to get from DB_SQLITE_FILE environment variable (new approach)
-    db_sqlite_file = os.getenv("DB_SQLITE_FILE")
-    if db_sqlite_file:
-        # Ensure absolute path
-        if not os.path.isabs(db_sqlite_file):
-            db_sqlite_file = os.path.abspath(db_sqlite_file)
-        # Return sync SQLite URL for Alembic
-        return f"sqlite:///{db_sqlite_file}"
-
-    # Legacy: Try DATABASE_URL for backward compatibility
-    database_url = os.getenv("DATABASE_URL")
-    if database_url:
-        # Convert async URL to sync URL for Alembic
-        if database_url.startswith("postgresql+asyncpg://"):
-            database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
-        elif database_url.startswith("mysql+aiomysql://"):
-            database_url = database_url.replace("mysql+aiomysql://", "mysql://")
-        elif database_url.startswith("sqlite+aiosqlite:///"):
-            database_url = database_url.replace("sqlite+aiosqlite:///", "sqlite:///")
-        return database_url
-
-    # Fallback to alembic.ini configuration
-    return config.get_main_option("sqlalchemy.url")
-
-
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -73,7 +45,7 @@ def run_migrations_offline() -> None:
     Calls to context.execute() here emit the given string to the
     script output.
     """
-    url = get_database_url()
+    url = get_alembic_database_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -96,7 +68,7 @@ def do_run_migrations(connection: Connection) -> None:
 async def run_async_migrations() -> None:
     """Run migrations in async mode."""
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = get_database_url()
+    configuration["sqlalchemy.url"] = get_alembic_database_url()
 
     connectable = async_engine_from_config(
         configuration,
@@ -119,7 +91,7 @@ def run_migrations_online() -> None:
     # Always use sync engine for migrations
     from sqlalchemy import create_engine
 
-    database_url = get_database_url()
+    database_url = get_alembic_database_url()
 
     connectable = create_engine(
         database_url,
