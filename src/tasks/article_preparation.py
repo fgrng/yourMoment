@@ -16,6 +16,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 from celery import current_task
+from celery.exceptions import MaxRetriesExceededError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, select, update
 
@@ -399,18 +400,7 @@ class ArticlePreparationTask(BaseTask):
                     await scraper.cleanup_session(snapshot.mymoment_login_id)
 
             if not content_data:
-                error_msg = "No content returned by scraper"
-                await self._mark_article_failed(
-                    snapshot.ai_comment_id,
-                    error_msg,
-                    expected_status="discovered",
-                )
-                return {
-                    "ai_comment_id": str(ai_comment_id),
-                    "status": "failed",
-                    "reason": error_msg,
-                    "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
-                }
+                raise RuntimeError("No content returned by scraper")
 
             updated = await self._update_article_content(
                 snapshot.ai_comment_id,
@@ -424,19 +414,12 @@ class ArticlePreparationTask(BaseTask):
             }
 
         except Exception as exc:
-            error_msg = f"Preparation failed for article {snapshot.mymoment_article_id}: {exc}"
-            logger.error(error_msg)
-            await self._mark_article_failed(
-                snapshot.ai_comment_id,
-                error_msg,
-                expected_status="discovered",
+            logger.error(
+                "Preparation failed for article %s: %s",
+                snapshot.mymoment_article_id,
+                exc,
             )
-            return {
-                "ai_comment_id": str(ai_comment_id),
-                "status": "failed",
-                "reason": str(exc),
-                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
-            }
+            raise
 
 
 def _normalize_identifier(identifier: Any, compat_args: tuple[Any, ...]) -> str:
@@ -556,19 +539,40 @@ def _normalize_identifier(identifier: Any, compat_args: tuple[Any, ...]) -> str:
     name='src.tasks.article_preparation.prepare_article_content',
     queue='preparation',
     max_retries=3,
-    default_retry_delay=120
+    default_retry_delay=60
 )
 def prepare_article_content(self, ai_comment_id: Any, *compat_args: Any) -> Dict[str, Any]:
     """Prepare one AIComment row for downstream generation."""
+    ai_comment_id = _normalize_identifier(ai_comment_id, compat_args)
     try:
-        ai_comment_id = _normalize_identifier(ai_comment_id, compat_args)
         logger.info(f"Starting single-article preparation task for AIComment {ai_comment_id}")
         result = asyncio.run(self._prepare_single_article_async(uuid.UUID(ai_comment_id)))
         logger.info(f"Single-article preparation task completed: {result}")
         return result
     except Exception as exc:
-        logger.error(f"Single-article preparation task failed for AIComment {ai_comment_id}: {exc}")
-        self.retry(exc=exc, countdown=120)
+        countdown = min(60 * (2 ** self.request.retries), 300)
+        logger.warning(
+            f"Single-article preparation task failed, retrying "
+            f"(attempt {self.request.retries + 1}/{self.max_retries}, countdown {countdown}s) "
+            f"for AIComment {ai_comment_id}: {exc}"
+        )
+        try:
+            self.retry(exc=exc, countdown=countdown)
+        except MaxRetriesExceededError:
+            logger.error(f"Max retries exhausted for single-article preparation of AIComment {ai_comment_id}")
+            asyncio.run(
+                self._mark_article_failed(
+                    uuid.UUID(ai_comment_id),
+                    f"Max retries exhausted: {exc}",
+                    expected_status="discovered",
+                )
+            )
+            return {
+                "ai_comment_id": ai_comment_id,
+                "status": "failed",
+                "reason": f"Max retries exhausted: {exc}",
+                "execution_time_seconds": 0,
+            }
 
 
 @celery_app.task(

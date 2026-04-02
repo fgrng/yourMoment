@@ -16,6 +16,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 from celery import current_task
+from celery.exceptions import MaxRetriesExceededError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, select, update
 
@@ -395,33 +396,11 @@ class CommentPostingTask(BaseTask):
                                 cleanup_error,
                             )
         except Exception as exc:
-            error_msg = f"Failed to post comment for AIComment {snapshot.id}: {exc}"
-            logger.error(error_msg)
-            await self._mark_comment_failed(
-                snapshot.id,
-                error_msg,
-                expected_status="generated",
-            )
-            return {
-                "ai_comment_id": str(ai_comment_id),
-                "status": "failed",
-                "reason": str(exc),
-                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
-            }
+            logger.error("Failed to post comment for AIComment %s: %s", snapshot.id, exc)
+            raise
 
         if not success:
-            error_msg = "Comment posting returned False"
-            await self._mark_comment_failed(
-                snapshot.id,
-                error_msg,
-                expected_status="generated",
-            )
-            return {
-                "ai_comment_id": str(ai_comment_id),
-                "status": "failed",
-                "reason": error_msg,
-                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
-            }
+            raise RuntimeError("Comment posting returned False")
 
         comment_id = self._generate_placeholder_comment_id(
             snapshot.mymoment_article_id,
@@ -663,15 +642,36 @@ def _normalize_identifier(identifier: Any, compat_args: tuple[Any, ...]) -> str:
 )
 def post_comment_for_article(self, ai_comment_id: Any, *compat_args: Any) -> Dict[str, Any]:
     """Post a single generated AIComment row."""
+    ai_comment_id = _normalize_identifier(ai_comment_id, compat_args)
     try:
-        ai_comment_id = _normalize_identifier(ai_comment_id, compat_args)
         logger.info(f"Starting single-comment posting task for AIComment {ai_comment_id}")
         result = asyncio.run(self._post_single_comment_async(uuid.UUID(ai_comment_id)))
         logger.info(f"Single-comment posting task completed: {result}")
         return result
     except Exception as exc:
-        logger.error(f"Single-comment posting task failed for AIComment {ai_comment_id}: {exc}")
-        self.retry(exc=exc, countdown=60)
+        countdown = min(60 * (2 ** self.request.retries), 300)
+        logger.warning(
+            f"Single-comment posting task failed, retrying "
+            f"(attempt {self.request.retries + 1}/{self.max_retries}, countdown {countdown}s) "
+            f"for AIComment {ai_comment_id}: {exc}"
+        )
+        try:
+            self.retry(exc=exc, countdown=countdown)
+        except MaxRetriesExceededError:
+            logger.error(f"Max retries exhausted for single-comment posting of AIComment {ai_comment_id}")
+            asyncio.run(
+                self._mark_comment_failed(
+                    uuid.UUID(ai_comment_id),
+                    f"Max retries exhausted: {exc}",
+                    expected_status="generated",
+                )
+            )
+            return {
+                "ai_comment_id": ai_comment_id,
+                "status": "failed",
+                "reason": f"Max retries exhausted: {exc}",
+                "execution_time_seconds": 0,
+            }
 
 
 @celery_app.task(
