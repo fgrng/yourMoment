@@ -20,8 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, select, update
 
 from src.tasks.worker import celery_app, BaseTask
+from src.tasks.process_guards import get_process_skip_reason
 from src.models.ai_comment import AIComment
-from src.models.monitoring_process import MonitoringProcess
 from src.models.mymoment_login import MyMomentLogin
 from src.services.scraper_service import ScraperService, ScrapingConfig, SessionContext
 from src.config.database import get_database_manager
@@ -354,24 +354,18 @@ class CommentPostingTask(BaseTask):
                 "execution_time_seconds": 0,
             }
 
-        if snapshot.monitoring_process_id:
-            session = await self.get_async_session()
-            async with session:
-                process = await session.get(MonitoringProcess, snapshot.monitoring_process_id)
-            if not process or not process.is_active or process.status != "running":
-                return {
-                    "ai_comment_id": str(ai_comment_id),
-                    "status": "skipped",
-                    "reason": "process_not_running",
-                    "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
-                }
-            if process.generate_only:
-                return {
-                    "ai_comment_id": str(ai_comment_id),
-                    "status": "skipped",
-                    "reason": "generate_only",
-                    "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
-                }
+        skip_reason = await get_process_skip_reason(
+            self.get_async_session,
+            snapshot.monitoring_process_id,
+            require_posting_enabled=True,
+        )
+        if skip_reason:
+            return {
+                "ai_comment_id": str(ai_comment_id),
+                "status": "skipped",
+                "reason": skip_reason,
+                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+            }
 
         scraping_config = ScrapingConfig.from_settings()
         posted_at = datetime.utcnow()
@@ -467,6 +461,21 @@ class CommentPostingTask(BaseTask):
         failed_count = 0
 
         try:
+            skip_reason = await get_process_skip_reason(
+                self.get_async_session,
+                process_id,
+                require_posting_enabled=True,
+            )
+            if skip_reason:
+                return {
+                    'posted': 0,
+                    'failed': 0,
+                    'errors': [],
+                    'execution_time_seconds': 0,
+                    'status': 'skipped',
+                    'reason': skip_reason,
+                }
+
             # Step 1: Read and cache (Pattern 4)
             comment_snapshots, cached_logins = await self._read_and_cache_for_posting(process_id)
 
@@ -524,6 +533,19 @@ class CommentPostingTask(BaseTask):
                     # Step 3: Post comments one at a time (outside DB sessions)
                     for idx, comment_snapshot in enumerate(comment_snapshots):
                         try:
+                            skip_reason = await get_process_skip_reason(
+                                self.get_async_session,
+                                comment_snapshot.monitoring_process_id,
+                                require_posting_enabled=True,
+                            )
+                            if skip_reason:
+                                logger.info(
+                                    "Skipping posting for AIComment %s: %s",
+                                    comment_snapshot.id,
+                                    skip_reason,
+                                )
+                                continue
+
                             # Find session context for this comment's login
                             context = session_contexts.get(comment_snapshot.mymoment_login_id)
 

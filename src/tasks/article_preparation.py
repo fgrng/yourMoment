@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, select, update
 
 from src.tasks.worker import celery_app, BaseTask
+from src.tasks.process_guards import get_process_skip_reason
 from src.models.ai_comment import AIComment
 from src.models.mymoment_login import MyMomentLogin
 from src.services.scraper_service import ScraperService, ScrapingConfig
@@ -36,6 +37,7 @@ class ArticleSnapshot:
     article_title: str
     article_url: str
     mymoment_login_id: uuid.UUID
+    monitoring_process_id: Optional[uuid.UUID]
     user_id: uuid.UUID
     status: str
 
@@ -86,6 +88,7 @@ class ArticlePreparationTask(BaseTask):
                     article_title=comment.article_title,
                     article_url=comment.article_url,
                     mymoment_login_id=comment.mymoment_login_id,
+                    monitoring_process_id=comment.monitoring_process_id,
                     user_id=comment.user_id,
                     status=comment.status,
                 )
@@ -110,6 +113,7 @@ class ArticlePreparationTask(BaseTask):
                 article_title=ai_comment.article_title,
                 article_url=ai_comment.article_url,
                 mymoment_login_id=ai_comment.mymoment_login_id,
+                monitoring_process_id=ai_comment.monitoring_process_id,
                 user_id=ai_comment.user_id,
                 status=ai_comment.status,
             )
@@ -167,6 +171,18 @@ class ArticlePreparationTask(BaseTask):
                 for idx, article in enumerate(articles):
                     fetch_start = datetime.utcnow()
                     try:
+                        skip_reason = await get_process_skip_reason(
+                            self.get_async_session,
+                            article.monitoring_process_id,
+                        )
+                        if skip_reason:
+                            logger.info(
+                                "Skipping preparation for AIComment %s: %s",
+                                article.ai_comment_id,
+                                skip_reason,
+                            )
+                            continue
+
                         content_data = await scraper.get_article_content(
                             context=context,
                             article_id=article.mymoment_article_id
@@ -354,6 +370,18 @@ class ArticlePreparationTask(BaseTask):
                 "execution_time_seconds": 0,
             }
 
+        skip_reason = await get_process_skip_reason(
+            self.get_async_session,
+            snapshot.monitoring_process_id,
+        )
+        if skip_reason:
+            return {
+                "ai_comment_id": str(ai_comment_id),
+                "status": "skipped",
+                "reason": skip_reason,
+                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+            }
+
         scraping_config = ScrapingConfig.from_settings()
 
         try:
@@ -442,6 +470,20 @@ def _normalize_identifier(identifier: Any, compat_args: tuple[Any, ...]) -> str:
         failed_count = 0
 
         try:
+            skip_reason = await get_process_skip_reason(
+                self.get_async_session,
+                process_id,
+            )
+            if skip_reason:
+                return {
+                    'prepared': 0,
+                    'failed': 0,
+                    'errors': [],
+                    'execution_time_seconds': 0,
+                    'status': 'skipped',
+                    'reason': skip_reason,
+                }
+
             # Step 1: Read discovered articles (short-lived session)
             articles = await self._read_discovered_articles(process_id)
 

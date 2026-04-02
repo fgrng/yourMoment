@@ -22,6 +22,7 @@ from sqlalchemy import and_, select, update
 
 from src.config.logging import format_log_context
 from src.tasks.worker import celery_app, BaseTask
+from src.tasks.process_guards import get_process_skip_reason
 from src.models.ai_comment import AIComment
 from src.models.llm_provider import LLMProviderConfiguration
 from src.models.prompt_template import PromptTemplate
@@ -413,6 +414,18 @@ class CommentGenerationTask(BaseTask):
                 "execution_time_seconds": 0,
             }
 
+        skip_reason = await get_process_skip_reason(
+            self.get_async_session,
+            snapshot.monitoring_process_id,
+        )
+        if skip_reason:
+            return {
+                "ai_comment_id": str(ai_comment_id),
+                "status": "skipped",
+                "reason": skip_reason,
+                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+            }
+
         log_context = self._build_log_context(
             snapshot.monitoring_process_id or uuid.UUID(int=0),
             snapshot,
@@ -569,6 +582,21 @@ class CommentGenerationTask(BaseTask):
         total_generation_time_ms = 0
 
         try:
+            skip_reason = await get_process_skip_reason(
+                self.get_async_session,
+                process_id,
+            )
+            if skip_reason:
+                return {
+                    'generated': 0,
+                    'failed': 0,
+                    'errors': [],
+                    'execution_time_seconds': 0,
+                    'avg_generation_time_ms': 0,
+                    'status': 'skipped',
+                    'reason': skip_reason,
+                }
+
             # Step 1: Read and cache (Pattern 4)
             comment_snapshots, llm_configs, prompt_configs = await self._read_and_cache_for_generation(
                 process_id
@@ -592,6 +620,18 @@ class CommentGenerationTask(BaseTask):
                 log_context = self._build_log_context(process_id, comment_snapshot)
                 log_context_str = format_log_context(**log_context)
                 try:
+                    skip_reason = await get_process_skip_reason(
+                        self.get_async_session,
+                        comment_snapshot.monitoring_process_id,
+                    )
+                    if skip_reason:
+                        logger.info(
+                            "Skipping generation for AIComment %s: %s",
+                            comment_snapshot.id,
+                            skip_reason,
+                        )
+                        continue
+
                     # Get cached configurations
                     llm_config = llm_configs.get(comment_snapshot.llm_provider_id)
                     prompt_config = prompt_configs.get(comment_snapshot.prompt_template_id)
