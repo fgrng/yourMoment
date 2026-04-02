@@ -115,6 +115,74 @@ class MonitoringService:
         self.db_session = db_session
         self.max_concurrent_processes_per_user = max_concurrent_processes_per_user
 
+    @staticmethod
+    def _process_task_fields() -> list[str]:
+        """Return process-level Celery task ID fields tracked in the v3 pipeline."""
+        return [
+            "celery_discovery_task_id",
+            "celery_preparation_task_id",
+            "celery_generation_task_id",
+            "celery_posting_task_id",
+        ]
+
+    def _revoke_process_tasks(self, process: MonitoringProcess) -> Dict[str, str]:
+        """
+        Best-effort revoke any known process-level tasks.
+
+        In the chain-based pipeline only discovery is authoritative at process level,
+        but the additional fields may still exist during transitional deployments.
+        """
+        from src.tasks.worker import celery_app
+
+        revoked_tasks: Dict[str, str] = {}
+
+        for task_field in self._process_task_fields():
+            task_id = getattr(process, task_field, None)
+            if not task_id:
+                continue
+
+            try:
+                celery_app.control.revoke(task_id, terminate=True, signal="SIGTERM")
+                revoked_tasks[task_field] = task_id
+                logger.info("Revoked %s: %s", task_field, task_id)
+            except Exception as e:
+                logger.error("Failed to revoke %s %s: %s", task_field, task_id, e)
+                revoked_tasks[task_field] = f"error: {e}"
+
+        return revoked_tasks
+
+    def _clear_process_task_ids(self, process: MonitoringProcess) -> None:
+        """Clear all persisted process-level task IDs after a stop."""
+        for task_field in self._process_task_fields():
+            setattr(process, task_field, None)
+
+    async def _stop_process_instance(
+        self,
+        process: MonitoringProcess,
+        *,
+        reason: str,
+        commit: bool,
+    ) -> Dict[str, Any]:
+        """Apply the canonical stop transition to a loaded process instance."""
+        revoked_tasks = self._revoke_process_tasks(process)
+
+        now_utc = datetime.now(timezone.utc)
+        process.status = ProcessStatus.STOPPED
+        process.stopped_at = now_utc
+        process.last_activity_at = now_utc
+        self._clear_process_task_ids(process)
+
+        if commit:
+            await self.db_session.commit()
+
+        return {
+            "process_id": str(process.id),
+            "status": "stopped",
+            "stopped_at": now_utc.isoformat(),
+            "reason": reason,
+            "revoked_tasks": revoked_tasks,
+        }
+
     async def create_process(
         self,
         user_id: uuid.UUID,
@@ -525,13 +593,11 @@ class MonitoringService:
         reason: str = "user_requested"
     ) -> Dict[str, Any]:
         """
-        Stop a running monitoring process by revoking all stage-specific Celery tasks (v3.0+).
+        Stop a running monitoring process in the chain-based pipeline.
 
-        Revokes all four pipeline stage tasks:
-        - celery_discovery_task_id
-        - celery_preparation_task_id
-        - celery_generation_task_id
-        - celery_posting_task_id
+        Process status is the durable source of truth for whether queued downstream
+        work may continue. Task revocation is best-effort for any known process-level
+        task IDs, primarily discovery.
 
         Args:
             process_id: Process ID to stop
@@ -555,54 +621,14 @@ class MonitoringService:
                     'current_status': process.status
                 }
 
-            # Revoke all stage-specific tasks (v3.0+)
-            from src.tasks.worker import celery_app
-            revoked_tasks = {}
-
-            for task_field in ['celery_discovery_task_id', 'celery_preparation_task_id',
-                               'celery_generation_task_id', 'celery_posting_task_id']:
-                task_id = getattr(process, task_field, None)
-                if task_id:
-                    try:
-                        celery_app.control.revoke(task_id, terminate=True)
-                        revoked_tasks[task_field] = task_id
-                        logger.info(f"Revoked {task_field}: {task_id}")
-                    except Exception as e:
-                        logger.error(f"Failed to revoke {task_field} {task_id}: {e}")
-                        revoked_tasks[task_field] = f"error: {e}"
-
-            # Also revoke legacy celery_task_id if present (for backward compatibility)
-            if hasattr(process, 'celery_task_id') and process.celery_task_id:
-                try:
-                    celery_app.control.revoke(process.celery_task_id, terminate=True)
-                    revoked_tasks['legacy_celery_task_id'] = process.celery_task_id
-                    logger.info(f"Revoked legacy Celery task {process.celery_task_id} for process {process_id}")
-                except Exception as e:
-                    logger.error(f"Failed to revoke legacy task {process.celery_task_id}: {e}")
-
-            # Update process status
-            now_utc = datetime.now(timezone.utc)
-            process.status = ProcessStatus.STOPPED if reason == "user_requested" else ProcessStatus.FAILED
-            process.stopped_at = now_utc
-            process.last_activity_at = now_utc
-
-            await self.db_session.commit()
+            stop_result = await self._stop_process_instance(
+                process,
+                reason=reason,
+                commit=True,
+            )
 
             logger.info(f"Stopped monitoring process {process_id} (reason: {reason})")
-
-            return {
-                'process_id': str(process_id),
-                'status': 'stopped',
-                'stopped_at': process.stopped_at.isoformat(),
-                'reason': reason,
-                'revoked_tasks': revoked_tasks,
-                'final_stats': {
-                    'articles_discovered': process.articles_discovered,
-                    'comments_generated': process.comments_generated,
-                    'comments_posted': process.comments_posted,
-                    'errors_encountered': process.errors_encountered
-                }
-            }
+            return stop_result
 
         except Exception as e:
             logger.error(f"Failed to stop process {process_id}: {e}")
@@ -639,12 +665,6 @@ class MonitoringService:
                 'last_activity_at': process.last_activity_at.isoformat() if process.last_activity_at else None,
                 'max_duration_minutes': process.max_duration_minutes,
                 'duration_exceeded': process.duration_exceeded,
-                'statistics': {
-                    'articles_discovered': process.articles_discovered,
-                    'comments_generated': process.comments_generated,
-                    'comments_posted': process.comments_posted,
-                    'errors_encountered': process.errors_encountered
-                },
                 'filters': {
                     'category_filter': process.category_filter,
                     'search_filter': process.search_filter,
@@ -657,12 +677,13 @@ class MonitoringService:
                 }
             }
 
-            # Add Celery task information if exists
-            if process.celery_task_id:
+            # Discovery is the only process-level task that remains authoritative.
+            if process.celery_discovery_task_id:
                 from celery.result import AsyncResult
-                task = AsyncResult(process.celery_task_id)
+                task = AsyncResult(process.celery_discovery_task_id)
                 status_info['celery_task'] = {
-                    'task_id': process.celery_task_id,
+                    'task_id': process.celery_discovery_task_id,
+                    'stage': 'discovery',
                     'state': task.state,  # PENDING, STARTED, SUCCESS, FAILURE, RETRY, REVOKED
                     'info': str(task.info) if task.info else None
                 }

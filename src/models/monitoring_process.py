@@ -5,7 +5,7 @@ This model represents monitoring processes that users create to
 track myMoment articles and automatically generate AI comments.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List
 import uuid
 
@@ -57,18 +57,6 @@ class MonitoringProcess(BaseModel):
     stopped_at = Column(DateTime(timezone=True), nullable=True)
     last_activity_at = Column(DateTime(timezone=True), nullable=True)
 
-    # Stage-specific progress tracking (v3.0+)
-    articles_discovered = Column(Integer, default=0, nullable=False)
-    articles_prepared = Column(Integer, default=0, nullable=False)
-    comments_generated = Column(Integer, default=0, nullable=False)
-    comments_posted = Column(Integer, default=0, nullable=False)
-
-    # Stage-specific error tracking (v3.0+)
-    errors_encountered_in_discovery = Column(Integer, default=0, nullable=False)
-    errors_encountered_in_preparation = Column(Integer, default=0, nullable=False)
-    errors_encountered_in_generation = Column(Integer, default=0, nullable=False)
-    errors_encountered_in_posting = Column(Integer, default=0, nullable=False)
-
     # Status tracking
     is_active = Column(Boolean, nullable=False, default=True)
 
@@ -99,13 +87,23 @@ class MonitoringProcess(BaseModel):
     def __repr__(self) -> str:
         return f"<MonitoringProcess(id={self.id}, name='{self.name}', status='{self.status}', user_id={self.user_id})>"
 
+    @staticmethod
+    def _normalize_utc(dt: datetime | None) -> datetime | None:
+        """Treat naive datetimes as UTC for consistent lifecycle comparisons."""
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
     @property
     def duration_exceeded(self) -> bool:
         """Check if the process has exceeded its maximum duration."""
         if not self.started_at or self.status != "running":
             return False
 
-        duration = datetime.utcnow() - self.started_at
+        started_at = self._normalize_utc(self.started_at)
+        duration = datetime.now(timezone.utc) - started_at
         max_duration = timedelta(minutes=self.max_duration_minutes)
         return duration > max_duration
 
@@ -123,13 +121,7 @@ class MonitoringProcess(BaseModel):
     def error_message(self) -> str:
         """Get error message if process failed."""
         if self.status == "failed":
-            total_errors = (
-                self.errors_encountered_in_discovery +
-                self.errors_encountered_in_preparation +
-                self.errors_encountered_in_generation +
-                self.errors_encountered_in_posting
-            )
-            return f"Process failed after {total_errors} errors"
+            return "Process failed"
         return None
 
     @property
@@ -137,7 +129,8 @@ class MonitoringProcess(BaseModel):
         """Calculate when the process will automatically expire."""
         if not self.started_at:
             return None
-        return self.started_at + timedelta(minutes=self.max_duration_minutes)
+        started_at = self._normalize_utc(self.started_at)
+        return started_at + timedelta(minutes=self.max_duration_minutes)
 
     @property
     def prompt_template_ids(self) -> List[uuid.UUID]:
