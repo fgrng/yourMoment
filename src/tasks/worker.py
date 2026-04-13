@@ -351,7 +351,7 @@ def clear_queue(queue_name: str = None) -> Dict[str, Any]:
 
 
 # CLI helper functions
-def start_worker(loglevel='info', queues=None, concurrency=None):
+def start_worker(loglevel='info', queues=None, concurrency=None, pool=None):
     """
     Start Celery worker programmatically.
 
@@ -359,6 +359,7 @@ def start_worker(loglevel='info', queues=None, concurrency=None):
         loglevel: Log level (debug, info, warning, error)
         queues: List of queues to consume from
         concurrency: Number of worker processes
+        pool: Worker pool implementation (e.g. solo, prefork, threads)
     """
     os.environ["YOURMOMENT_SERVICE_NAME"] = "worker"
     setup_project_logging(service_name="worker", log_level=loglevel)
@@ -373,6 +374,9 @@ def start_worker(loglevel='info', queues=None, concurrency=None):
 
     if concurrency:
         argv.append(f'--concurrency={concurrency}')
+
+    if pool:
+        argv.append(f'--pool={pool}')
 
     celery_app.worker_main(argv)
 

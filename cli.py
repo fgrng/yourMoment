@@ -94,6 +94,7 @@ def cmd_worker(args: argparse.Namespace) -> None:
         loglevel=args.loglevel,
         queues=args.queues,
         concurrency=args.concurrency,
+        pool=args.pool,
     )
 
 
@@ -501,6 +502,7 @@ def main() -> None:
     worker_parser.add_argument('--loglevel', default='info', choices=['debug', 'info', 'warning', 'error'])
     worker_parser.add_argument('--queues', nargs='+', help='Queues to consume')
     worker_parser.add_argument('--concurrency', type=int, default=4, help='Number of worker processes')
+    worker_parser.add_argument('--pool', default=None, help='Worker pool implementation (e.g. solo, prefork, threads)')
 
     # Scheduler command
     scheduler_parser = subparsers.add_parser('scheduler', help='Start Celery beat scheduler')
