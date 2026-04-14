@@ -549,13 +549,15 @@ class MonitoringService:
                 f"Triggering scheduler to spawn pipeline tasks immediately."
             )
 
-            # Trigger scheduler task immediately to spawn tasks
-            # This ensures first run happens immediately, not waiting up to 3 minutes
+            # Trigger scheduler task immediately in process-scoped mode.
+            # This ensures first run happens immediately (without scanning all
+            # running processes) and still keeps the in-flight task-state guard.
             try:
                 from src.tasks.scheduler import trigger_monitoring_pipeline
-                # Use force_immediate=True to spawn tasks regardless of state
-                trigger_monitoring_pipeline.delay(force_immediate=True)
-                logger.info(f"Spawned immediate scheduler task for process {process_id}")
+                trigger_monitoring_pipeline.delay(process_ids=[str(process_id)])
+                logger.info(
+                    f"Spawned process-scoped immediate scheduler task for process {process_id}"
+                )
             except Exception as e:
                 logger.warning(
                     f"Failed to trigger immediate scheduler for process {process_id}: {e}. "

@@ -1,6 +1,6 @@
 import pytest
-import uuid
-from unittest.mock import patch, MagicMock
+from datetime import timezone
+from unittest.mock import patch
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.monitoring_service import (
@@ -11,7 +11,7 @@ from src.services.monitoring_service import (
 )
 from tests.fixtures.factories.users import create_user
 from tests.fixtures.factories.mymoment import create_mymoment_login
-from tests.fixtures.factories.prompts import create_user_prompt_template, create_system_prompt_template
+from tests.fixtures.factories.prompts import create_user_prompt_template
 from tests.fixtures.factories.providers import create_llm_provider
 from tests.fixtures.factories.monitoring import create_monitoring_process
 from tests.fixtures.factories.comments import (
@@ -22,10 +22,9 @@ from tests.fixtures.factories.comments import (
     create_failed_ai_comment,
 )
 
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from src.models.monitoring_process import MonitoringProcess
-from src.models.monitoring_process_login import MonitoringProcessLogin
 
 @pytest.mark.asyncio
 async def test_create_process(db_session: AsyncSession):
@@ -104,8 +103,8 @@ async def test_update_process(db_session: AsyncSession):
     assert active_logins[0].mymoment_login_id == login2.id
 
 @pytest.mark.asyncio
-async def test_start_process(db_session: AsyncSession):
-    """Test starting a process triggers scheduler."""
+async def test_start_process_triggers_process_scoped_scheduler_delay(db_session: AsyncSession):
+    """Test starting a process dispatches the scheduler in process-scoped mode."""
     user = await create_user(db_session)
     login = await create_mymoment_login(db_session, user=user)
     prompt = await create_user_prompt_template(db_session, user=user)
@@ -123,10 +122,23 @@ async def test_start_process(db_session: AsyncSession):
     with patch("src.tasks.scheduler.trigger_monitoring_pipeline.delay") as mock_delay:
         result = await service.start_process(process.id, user_id=user.id)
         
+        assert result["process_id"] == str(process.id)
         assert result["status"] == "scheduled"
+        assert result["message"].startswith("Process marked as running.")
+        assert result["associated_logins"] == 1
+        assert result["associated_prompts"] == 1
+        assert result["max_duration_minutes"] == process.max_duration_minutes
+        assert result["generate_only"] is process.generate_only
         await db_session.refresh(process)
         assert process.status == ProcessStatus.RUNNING
-        mock_delay.assert_called_once_with(force_immediate=True)
+        assert process.started_at is not None
+        assert process.last_activity_at is not None
+        from datetime import datetime
+        result_dt = datetime.fromisoformat(result["started_at"])
+        expected_dt = process.started_at.replace(tzinfo=timezone.utc) if process.started_at.tzinfo is None else process.started_at
+        assert result_dt.replace(tzinfo=timezone.utc) == expected_dt.astimezone(timezone.utc)
+        mock_delay.assert_called_once_with(process_ids=[str(process.id)])
+        assert mock_delay.call_args.args == ()
 
 @pytest.mark.asyncio
 async def test_stop_process(db_session: AsyncSession):

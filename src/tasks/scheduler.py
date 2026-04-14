@@ -34,14 +34,21 @@ class SchedulingTask(BaseTask):
         sessionmaker = await self.db_manager.create_sessionmaker()
         return sessionmaker()
 
-    async def _trigger_pipeline_async(self, force_immediate: bool = False) -> Dict[str, Any]:
+    async def _trigger_pipeline_async(
+        self,
+        force_immediate: bool = False,
+        process_ids: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
         """
         Async implementation of pipeline triggering.
 
         Args:
-            force_immediate: If True, spawn discovery tasks for ALL running processes
-                            immediately. If False (default), only spawn if no discovery
-                            task is currently running.
+            force_immediate: If True, spawn discovery tasks immediately without
+                            checking in-flight task state for selected processes.
+                            If False (default), only spawn if no discovery task is
+                            currently running.
+            process_ids: Optional list of process IDs. If provided, only these
+                        processes are checked/dispatched (process-scoped mode).
         """
         start_time = datetime.utcnow()
 
@@ -51,22 +58,60 @@ class SchedulingTask(BaseTask):
         spawned_tasks = []
         skipped_tasks = []
         errors = []
+        trigger_mode = "process_scoped" if process_ids is not None else "periodic_global"
 
         async with await self.get_async_session() as session:
             try:
-                # Find all running monitoring processes
-                result = await session.execute(
-                    select(MonitoringProcess)
-                    .where(
-                        and_(
-                            MonitoringProcess.status == "running",
-                            MonitoringProcess.is_active == True
+                running_processes: List[MonitoringProcess] = []
+
+                if process_ids is not None:
+                    normalized_process_ids: List[uuid.UUID] = []
+                    for process_id in process_ids:
+                        try:
+                            normalized_process_ids.append(uuid.UUID(str(process_id)))
+                        except (ValueError, TypeError, AttributeError):
+                            error_msg = f"Invalid process ID received for pipeline trigger: {process_id}"
+                            errors.append(error_msg)
+                            logger.warning(error_msg)
+
+                    if normalized_process_ids:
+                        result = await session.execute(
+                            select(MonitoringProcess)
+                            .where(
+                                and_(
+                                    MonitoringProcess.status == "running",
+                                    MonitoringProcess.is_active == True,
+                                    MonitoringProcess.id.in_(normalized_process_ids),
+                                )
+                            )
+                        )
+                        running_processes = result.scalars().all()
+
+                    logger.info(
+                        "Pipeline trigger mode=process_scoped requested=%d valid=%d running=%d force_immediate=%s",
+                        len(process_ids),
+                        len(normalized_process_ids),
+                        len(running_processes),
+                        force_immediate,
+                    )
+                else:
+                    # Find all running monitoring processes
+                    result = await session.execute(
+                        select(MonitoringProcess)
+                        .where(
+                            and_(
+                                MonitoringProcess.status == "running",
+                                MonitoringProcess.is_active == True
+                            )
                         )
                     )
-                )
-                running_processes = result.scalars().all()
+                    running_processes = result.scalars().all()
 
-                logger.info(f"Found {len(running_processes)} running monitoring processes")
+                    logger.info(
+                        "Pipeline trigger mode=periodic_global running=%d force_immediate=%s",
+                        len(running_processes),
+                        force_immediate,
+                    )
 
                 # For each process, check and spawn discovery only. Per-article
                 # prepare/generate/post tasks are chained from discovery.
@@ -99,6 +144,7 @@ class SchedulingTask(BaseTask):
                 )
 
                 return {
+                    'trigger_mode': trigger_mode,
                     'processes_checked': len(running_processes),
                     'tasks_spawned': len(spawned_tasks),
                     'tasks_skipped': len(skipped_tasks),
@@ -116,6 +162,7 @@ class SchedulingTask(BaseTask):
 
                 execution_time = (datetime.utcnow() - start_time).total_seconds()
                 return {
+                    'trigger_mode': trigger_mode,
                     'processes_checked': 0,
                     'tasks_spawned': 0,
                     'tasks_skipped': 0,
@@ -231,12 +278,15 @@ class SchedulingTask(BaseTask):
     name='src.tasks.scheduler.trigger_monitoring_pipeline',
     queue='scheduler'
 )
-def trigger_monitoring_pipeline(force_immediate: bool = False) -> Dict[str, Any]:
+def trigger_monitoring_pipeline(
+    force_immediate: bool = False,
+    process_ids: Optional[List[str]] = None
+) -> Dict[str, Any]:
     """
     Periodically trigger pipeline stage tasks for all active monitoring processes.
 
     This task runs every few minutes and ensures continuous monitoring by:
-    1. Finding all running monitoring processes
+    1. Finding all running monitoring processes (or only process_ids if provided)
     2. For each process, checking the discovery stage
     3. Spawning discovery only if no discovery task is currently running
 
@@ -244,16 +294,39 @@ def trigger_monitoring_pipeline(force_immediate: bool = False) -> Dict[str, Any]
     tasks are chained from newly discovered AIComment rows.
 
     Args:
-        force_immediate: If True, immediately trigger for newly started processes
-                        (called from MonitoringService after process.start_process)
+        force_immediate: Legacy flag. If True, bypasses the in-flight task guard
+                        for all selected processes. Previously used by
+                        MonitoringService.start_process(); superseded by
+                        process_ids for process-scoped immediate triggers.
+                        Kept for backward compatibility with older callers.
+        process_ids: Optional list of process IDs to scope the trigger to specific
+                    processes instead of a global scan. Preferred over
+                    force_immediate=True for process-startup kickoffs.
 
     Returns:
         Dictionary with spawned task counts and details
     """
     try:
+        if process_ids is not None:
+            logger.info(
+                "Received process-scoped pipeline trigger for %d process ids (force_immediate=%s)",
+                len(process_ids),
+                force_immediate,
+            )
+        else:
+            logger.info(
+                "Received periodic global pipeline trigger (force_immediate=%s)",
+                force_immediate,
+            )
+
         # Create instance of SchedulingTask and run async method
         scheduler = SchedulingTask()
-        result = asyncio.run(scheduler._trigger_pipeline_async(force_immediate=force_immediate))
+        result = asyncio.run(
+            scheduler._trigger_pipeline_async(
+                force_immediate=force_immediate,
+                process_ids=process_ids,
+            )
+        )
         return result
     except Exception as exc:
         logger.error(f"Pipeline trigger failed: {exc}")
