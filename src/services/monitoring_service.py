@@ -541,6 +541,9 @@ class MonitoringService:
             process.status = ProcessStatus.RUNNING
             process.started_at = now_utc
             process.last_activity_at = now_utc
+            process.next_discovery_at = now_utc
+            process.discovery_empty_streak = 0
+            process.discovery_queued_at = None
 
             await self.db_session.commit()
 

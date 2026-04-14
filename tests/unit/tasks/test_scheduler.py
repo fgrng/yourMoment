@@ -54,7 +54,7 @@ async def test_trigger_pipeline_async_process_scoped_filters_to_requested_runnin
     task = _bind_task_sessions(SchedulingTask(), db_engine)
     seen_process_ids: list[str] = []
 
-    async def fake_spawn(process, discover_articles_task, force_immediate=False):
+    async def fake_spawn(session, process, discover_articles_task, force_immediate=False):
         seen_process_ids.append(str(process.id))
         return {
             "spawned": [
@@ -105,7 +105,7 @@ async def test_trigger_pipeline_async_process_scoped_reports_invalid_ids(
     task = _bind_task_sessions(SchedulingTask(), db_engine)
     seen_process_ids: list[str] = []
 
-    async def fake_spawn(process, discover_articles_task, force_immediate=False):
+    async def fake_spawn(session, process, discover_articles_task, force_immediate=False):
         seen_process_ids.append(str(process.id))
         return {
             "spawned": [
@@ -150,7 +150,7 @@ async def test_trigger_pipeline_async_periodic_global_scans_all_running_active_p
     task = _bind_task_sessions(SchedulingTask(), db_engine)
     seen_process_ids: list[str] = []
 
-    async def fake_spawn(process, discover_articles_task, force_immediate=False):
+    async def fake_spawn(session, process, discover_articles_task, force_immediate=False):
         seen_process_ids.append(str(process.id))
         return {
             "spawned": [

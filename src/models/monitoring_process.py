@@ -56,6 +56,9 @@ class MonitoringProcess(BaseModel):
     started_at = Column(DateTime(timezone=True), nullable=True)
     stopped_at = Column(DateTime(timezone=True), nullable=True)
     last_activity_at = Column(DateTime(timezone=True), nullable=True)
+    next_discovery_at = Column(DateTime(timezone=True), nullable=True)
+    discovery_empty_streak = Column(Integer, nullable=False, default=0, server_default="0")
+    discovery_queued_at = Column(DateTime(timezone=True), nullable=True)
 
     # Status tracking
     is_active = Column(Boolean, nullable=False, default=True)

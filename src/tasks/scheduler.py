@@ -8,7 +8,7 @@ and basic maintenance operations.
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,9 +16,11 @@ from sqlalchemy import select, and_, func
 from celery.result import AsyncResult
 
 from src.tasks.worker import celery_app, BaseTask
+from src.models.ai_comment import AIComment
 from src.models.monitoring_process import MonitoringProcess
 from src.models.mymoment_session import MyMomentSession
 from src.config.database import get_database_manager
+from src.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +28,13 @@ logger = logging.getLogger(__name__)
 class SchedulingTask(BaseTask):
     """Base class for scheduling tasks."""
 
+    DISCOVERY_LEASE_SECONDS = 30
+    DISCOVERY_MIN_BACKOFF_SECONDS = 30
+    DISCOVERY_MAX_BACKOFF_SECONDS = 600
+
     def __init__(self):
         self.db_manager = get_database_manager()
+        self.settings = get_settings()
 
     async def get_async_session(self) -> AsyncSession:
         """Get async database session."""
@@ -43,10 +50,8 @@ class SchedulingTask(BaseTask):
         Async implementation of pipeline triggering.
 
         Args:
-            force_immediate: If True, spawn discovery tasks immediately without
-                            checking in-flight task state for selected processes.
-                            If False (default), only spawn if no discovery task is
-                            currently running.
+            force_immediate: Legacy flag retained for compatibility. Durable
+                            backpressure and in-flight guards still apply.
             process_ids: Optional list of process IDs. If provided, only these
                         processes are checked/dispatched (process-scoped mode).
         """
@@ -115,9 +120,11 @@ class SchedulingTask(BaseTask):
 
                 # For each process, check and spawn discovery only. Per-article
                 # prepare/generate/post tasks are chained from discovery.
+                discovery_metrics = []
                 for process in running_processes:
                     try:
                         process_spawned = await self._spawn_stage_tasks_for_process(
+                            session,
                             process,
                             discover_articles,
                             force_immediate=force_immediate
@@ -125,6 +132,8 @@ class SchedulingTask(BaseTask):
 
                         spawned_tasks.extend(process_spawned['spawned'])
                         skipped_tasks.extend(process_spawned['skipped'])
+                        if process_spawned.get('discovery_metrics'):
+                            discovery_metrics.append(process_spawned['discovery_metrics'])
 
                     except Exception as e:
                         error_msg = f"Failed to trigger tasks for process {process.id}: {str(e)}"
@@ -139,7 +148,7 @@ class SchedulingTask(BaseTask):
                 logger.info(
                     f"Pipeline trigger completed: "
                     f"{len(spawned_tasks)} tasks spawned, "
-                    f"{len(skipped_tasks)} tasks skipped (already running), "
+                    f"{len(skipped_tasks)} tasks skipped, "
                     f"{len(errors)} errors"
                 )
 
@@ -150,6 +159,7 @@ class SchedulingTask(BaseTask):
                     'tasks_skipped': len(skipped_tasks),
                     'spawned_details': spawned_tasks,
                     'skipped_details': skipped_tasks,
+                    'discovery_metrics': discovery_metrics,
                     'errors': errors,
                     'execution_time_seconds': execution_time,
                     'timestamp': datetime.utcnow().isoformat()
@@ -168,31 +178,183 @@ class SchedulingTask(BaseTask):
                     'tasks_skipped': 0,
                     'spawned_details': [],
                     'skipped_details': [],
+                    'discovery_metrics': [],
                     'errors': errors,
                     'execution_time_seconds': execution_time,
                     'timestamp': datetime.utcnow().isoformat()
                 }
 
+    @staticmethod
+    def _utcnow() -> datetime:
+        """Return an aware UTC timestamp for scheduler durability fields."""
+        return datetime.now(timezone.utc)
+
+    def _compute_discovery_backoff_seconds(self, empty_streak: int) -> int:
+        """Compute exponential discovery backoff with a floor and cap."""
+        base_interval = max(
+            int(self.settings.monitoring.ARTICLE_DISCOVERY_INTERVAL_SECONDS),
+            self.DISCOVERY_MIN_BACKOFF_SECONDS,
+        )
+        return min(
+            base_interval * (2 ** max(empty_streak - 1, 0)),
+            self.DISCOVERY_MAX_BACKOFF_SECONDS,
+        )
+
+    async def _count_discovered_backlog(
+        self,
+        session: AsyncSession,
+        process_id: uuid.UUID,
+    ) -> int:
+        """Count exact discovered-stage backlog for a monitoring process."""
+        result = await session.execute(
+            select(func.count(AIComment.id)).where(
+                and_(
+                    AIComment.monitoring_process_id == process_id,
+                    AIComment.status == "discovered",
+                )
+            )
+        )
+        return int(result.scalar_one() or 0)
+
+    def _extract_discovered_count(self, task_result: AsyncResult) -> Optional[int]:
+        """Extract the discovered count from a terminal discovery task result."""
+        result_payload = task_result.result
+        if isinstance(result_payload, dict):
+            discovered = result_payload.get("discovered")
+            try:
+                return int(discovered) if discovered is not None else None
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    def _refresh_discovery_state_from_terminal_result(
+        self,
+        process: MonitoringProcess,
+        current_task_id: Optional[str],
+    ) -> Dict[str, Any]:
+        """
+        Consume terminal discovery task state to update durable cooldown/backoff.
+
+        The scheduler sees the previous discovery task's result; we convert that
+        into the next eligibility window before evaluating whether to enqueue again.
+        """
+        if not current_task_id:
+            return {
+                "task_state": None,
+                "last_discovered_count": None,
+            }
+
+        try:
+            task_result = AsyncResult(current_task_id)
+            task_state = task_result.state
+            last_discovered_count = None
+
+            if task_state in {"SUCCESS", "FAILURE", "REVOKED"}:
+                now_utc = self._utcnow()
+                discovered_count = self._extract_discovered_count(task_result)
+                last_discovered_count = discovered_count
+
+                if discovered_count is not None:
+                    if discovered_count == 0:
+                        process.discovery_empty_streak = (process.discovery_empty_streak or 0) + 1
+                        delay_seconds = self._compute_discovery_backoff_seconds(
+                            process.discovery_empty_streak
+                        )
+                        process.next_discovery_at = now_utc + timedelta(seconds=delay_seconds)
+                    else:
+                        process.discovery_empty_streak = 0
+                        process.next_discovery_at = now_utc
+                else:
+                    # FAILURE or REVOKED with no parseable result: apply a minimum
+                    # cooldown (one base interval) to prevent tight-loop retries on
+                    # persistent scraping/auth errors. Do not increment the streak
+                    # because this is not a zero-hit discovery, it is an error.
+                    min_delay = max(
+                        int(self.settings.monitoring.ARTICLE_DISCOVERY_INTERVAL_SECONDS),
+                        self.DISCOVERY_MIN_BACKOFF_SECONDS,
+                    )
+                    process.next_discovery_at = now_utc + timedelta(seconds=min_delay)
+
+                process.discovery_queued_at = None
+                process.celery_discovery_task_id = None
+
+                logger.info(
+                    "Discovery task %s for process %s reached terminal state %s (discovered=%s, streak=%s, next_discovery_at=%s)",
+                    current_task_id,
+                    process.id,
+                    task_state,
+                    discovered_count,
+                    process.discovery_empty_streak,
+                    process.next_discovery_at.isoformat() if process.next_discovery_at else None,
+                )
+
+            return {
+                "task_state": task_state,
+                "last_discovered_count": last_discovered_count,
+            }
+        except Exception as exc:
+            logger.warning(
+                "Could not refresh terminal state for discovery task %s on process %s: %s",
+                current_task_id,
+                process.id,
+                exc,
+            )
+            return {
+                "task_state": None,
+                "last_discovered_count": None,
+            }
+
+    def _build_discovery_metrics(
+        self,
+        process: MonitoringProcess,
+        pending_backlog_count: int,
+        skip_reason: Optional[str],
+        last_discovered_count: Optional[int],
+    ) -> Dict[str, Any]:
+        """Build scheduler discovery metrics for a single process."""
+        next_eligible_at = MonitoringProcess._normalize_utc(process.next_discovery_at)
+        queued_at = MonitoringProcess._normalize_utc(process.discovery_queued_at)
+
+        if queued_at is not None:
+            lease_until = queued_at + timedelta(seconds=self.DISCOVERY_LEASE_SECONDS)
+            if next_eligible_at is None or lease_until > next_eligible_at:
+                next_eligible_at = lease_until
+
+        return {
+            "process_id": str(process.id),
+            "process_name": process.name,
+            "last_discovered_count": last_discovered_count,
+            "zero_hit_streak": int(process.discovery_empty_streak or 0),
+            "pending_backlog_count": pending_backlog_count,
+            "next_eligible_discovery_at": (
+                next_eligible_at.isoformat() if next_eligible_at is not None else None
+            ),
+            "skip_reason": skip_reason,
+        }
+
     async def _spawn_stage_tasks_for_process(
         self,
+        session: AsyncSession,
         process: MonitoringProcess,
         discover_articles_task,
         force_immediate: bool = False
-    ) -> Dict[str, List[Dict[str, str]]]:
+    ) -> Dict[str, Any]:
         """
         Spawn discovery task for a single process, checking if the task is already running.
 
         Args:
+            session: Database session used for backlog counting and state persistence
             process: MonitoringProcess instance
             discover_articles_task: Discovery task callable
-            force_immediate: If True, spawn discovery regardless of previous state.
-                            Useful for initial process start.
+            force_immediate: Legacy flag retained for compatibility. Durable
+                            backpressure and in-flight guards still apply.
 
         Returns:
             Dictionary with 'spawned' and 'skipped' task lists
         """
         spawned = []
         skipped = []
+        discovery_metrics: Optional[Dict[str, Any]] = None
 
         stages = [
             {
@@ -212,12 +374,89 @@ class SchedulingTask(BaseTask):
                 })
                 continue
 
+            current_task_id = getattr(process, stage['task_id_field'], None)
+            terminal_state = self._refresh_discovery_state_from_terminal_result(
+                process,
+                current_task_id,
+            )
+            current_task_id = getattr(process, stage['task_id_field'], None)
+            last_discovered_count = terminal_state["last_discovered_count"]
+            pending_backlog_count = await self._count_discovered_backlog(session, process.id)
+
+            if pending_backlog_count > 0:
+                reason = 'pending_discovered_backlog'
+                skipped.append({
+                    'process_id': str(process.id),
+                    'stage': stage['name'],
+                    'reason': reason,
+                    'pending_backlog_count': pending_backlog_count,
+                })
+                discovery_metrics = self._build_discovery_metrics(
+                    process,
+                    pending_backlog_count,
+                    reason,
+                    last_discovered_count,
+                )
+                logger.info(
+                    "Skipping discovery for process %s due to discovered backlog=%d",
+                    process.id,
+                    pending_backlog_count,
+                )
+                continue
+
+            now_utc = self._utcnow()
+            next_discovery_at = MonitoringProcess._normalize_utc(process.next_discovery_at)
+            if next_discovery_at is not None and next_discovery_at > now_utc:
+                reason = 'cooldown_active'
+                skipped.append({
+                    'process_id': str(process.id),
+                    'stage': stage['name'],
+                    'reason': reason,
+                    'next_discovery_at': next_discovery_at.isoformat(),
+                })
+                discovery_metrics = self._build_discovery_metrics(
+                    process,
+                    pending_backlog_count,
+                    reason,
+                    last_discovered_count,
+                )
+                logger.info(
+                    "Skipping discovery for process %s due to cooldown until %s",
+                    process.id,
+                    next_discovery_at.isoformat(),
+                )
+                continue
+
+            queued_at = MonitoringProcess._normalize_utc(process.discovery_queued_at)
+            lease_cutoff = now_utc - timedelta(seconds=self.DISCOVERY_LEASE_SECONDS)
+            if queued_at is not None and queued_at > lease_cutoff:
+                reason = 'discovery_lease_active'
+                skipped.append({
+                    'process_id': str(process.id),
+                    'stage': stage['name'],
+                    'reason': reason,
+                    'discovery_queued_at': queued_at.isoformat(),
+                })
+                discovery_metrics = self._build_discovery_metrics(
+                    process,
+                    pending_backlog_count,
+                    reason,
+                    last_discovered_count,
+                )
+                logger.info(
+                    "Skipping discovery for process %s due to active queue lease set at %s",
+                    process.id,
+                    queued_at.isoformat(),
+                )
+                continue
+
             # Get current task ID for this stage
             current_task_id = getattr(process, stage['task_id_field'], None)
 
-            # Check if task is still running (unless force_immediate)
+            # Check if task is still running. This remains an additional guard,
+            # not the primary backpressure mechanism.
             is_running = False
-            if not force_immediate and current_task_id:
+            if current_task_id:
                 try:
                     task_result = AsyncResult(current_task_id)
                     # PENDING means "unknown or queued" in Celery — it is also the
@@ -234,6 +473,12 @@ class SchedulingTask(BaseTask):
                             'state': task_result.state,
                             'reason': 'already running'
                         })
+                        discovery_metrics = self._build_discovery_metrics(
+                            process,
+                            pending_backlog_count,
+                            'already running',
+                            last_discovered_count,
+                        )
                         continue
                 except Exception as e:
                     logger.warning(
@@ -247,6 +492,7 @@ class SchedulingTask(BaseTask):
 
                 # Update task ID in process
                 setattr(process, stage['task_id_field'], new_task.id)
+                process.discovery_queued_at = now_utc
 
                 spawned.append({
                     'process_id': str(process.id),
@@ -254,6 +500,12 @@ class SchedulingTask(BaseTask):
                     'stage': stage['name'],
                     'task_id': new_task.id
                 })
+                discovery_metrics = self._build_discovery_metrics(
+                    process,
+                    pending_backlog_count,
+                    None,
+                    last_discovered_count,
+                )
 
                 logger.info(
                     f"Spawned {stage['name']} task {new_task.id} "
@@ -269,8 +521,18 @@ class SchedulingTask(BaseTask):
                     'stage': stage['name'],
                     'reason': f'spawn failed: {str(e)}'
                 })
+                discovery_metrics = self._build_discovery_metrics(
+                    process,
+                    pending_backlog_count,
+                    f'spawn failed: {str(e)}',
+                    last_discovered_count,
+                )
 
-        return {'spawned': spawned, 'skipped': skipped}
+        return {
+            'spawned': spawned,
+            'skipped': skipped,
+            'discovery_metrics': discovery_metrics,
+        }
 
 
 # Register the task as a Celery task
@@ -294,14 +556,11 @@ def trigger_monitoring_pipeline(
     tasks are chained from newly discovered AIComment rows.
 
     Args:
-        force_immediate: Legacy flag. If True, bypasses the in-flight task guard
-                        for all selected processes. Previously used by
-                        MonitoringService.start_process(); superseded by
-                        process_ids for process-scoped immediate triggers.
-                        Kept for backward compatibility with older callers.
+        force_immediate: Legacy flag retained for backward compatibility.
+                        Durable backpressure and in-flight guards still apply.
         process_ids: Optional list of process IDs to scope the trigger to specific
                     processes instead of a global scan. Preferred over
-                    force_immediate=True for process-startup kickoffs.
+                    force_immediate for process-startup kickoffs.
 
     Returns:
         Dictionary with spawned task counts and details
