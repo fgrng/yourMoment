@@ -482,16 +482,24 @@ Acceptance criteria:
 
 ### Phase 5: Persist and restore session cookies
 
-1. Add cookie serialization helpers in `ScraperService`.
-2. Persist the cookie jar into `MyMomentSession.session_data` after successful login.
-3. Restore persisted cookies during `_initialize_single_session()`.
+**Feasibility note (2026-04-14):** Phase 5 is fully independent of Phases 3 and 4 and is higher ROI to implement first. In the benchmark run, all 225 logins would benefit from cookie restore. After batching (Phases 3+4), only ~10 logins remain — so the savings are ~224 logins now vs. ~9 logins after batching.
+
+1. Add cookie serialization helpers in `ScraperService`:
+   - Serialize cookies as a list of dicts capturing `name`, `value`, `domain`, `path`, and `expires`.
+   - Include `csrf_token` in the session_data JSON alongside cookies.
+2. Persist the cookie jar (and CSRF token) into `MyMomentSession.session_data` after successful login.
+3. Restore persisted cookies during `_initialize_single_session()`: if an active session record with non-empty `session_data` exists, restore cookies into the new `aiohttp` session and set `context.csrf_token` if present.
 4. Validate restored cookies with `_check_authentication_status()`.
-5. Fall back to full login only when validation fails.
-6. On success, `touch` or renew the session record so active session metadata stays current. If the desired session TTL is rolling, call out explicitly that `touch_session()` alone updates `last_accessed` but does not extend `expires_at`.
-7. Log whether a session was restored or fully re-authenticated.
+5. Fall back to full login only when validation fails; log a warning if restore fails so it is diagnosable.
+6. On successful restore, call `session_service.renew_session()` (not just `touch_session()`) to provide a rolling 24-hour TTL. `touch_session()` alone updates `last_accessed` but does not extend `expires_at`.
+7. Log whether a session was restored or fully re-authenticated (`logger.info` with `login_id` and outcome).
+
+Implementation notes:
+- Concurrency: the in-process `session_lock` only prevents races within one Celery worker. Concurrent workers may both find a session missing/expired and each do a full login independently — this is a benign race; the last writer wins. Do not add cross-worker locking.
+- Any failure in decryption or cookie restoration must fall through to `_authenticate_session()` gracefully, not raise.
 
 Acceptance criteria:
-- Full login count drops materially on repeated discovery cycles (the dominant remaining auth source after Phases 3 and 4 are in place).
+- Full login count drops materially on repeated discovery cycles (benefit is immediate even without Phases 3 and 4).
 - Restored sessions succeed often enough to justify the extra code path (target: >80% cookie-restore hit rate on discovery).
 - Failed cookie restores degrade cleanly into normal login without breaking the pipeline.
 
@@ -696,3 +704,43 @@ The original scheduler had only one guard: `AsyncResult.state in {STARTED, RETRY
 - `discovery_metrics` key in wrapper test: not a regression (test mocks `_trigger_pipeline_async` and returns hardcoded dict; test still passes)
 - SQLite batch_alter_table, timezone-awareness, double-fetch of task ID after terminal refresh — all confirmed correct
 - All 18 existing tests pass after updating `fake_spawn` signatures to accept the new `session` parameter
+
+### Phase 5 — Persist and restore session cookies (2026-04-14)
+
+**Status:** Complete
+
+**Files changed:**
+- `src/services/scraper_service.py`
+
+**What was done:**
+
+1. **Feasibility assessment (Gemini, pre-implementation):** Phase 5 is fully independent of Phases 3 and 4. Gemini confirmed it is higher ROI to implement now: the benchmark run had 225 full logins; cookie persistence benefits all of them immediately. After batching (Phases 3+4), only ~10 logins remain. The TODO Phase 5 implementation plan was updated to reflect this and to clarify two additional specifics: use `renew_session()` (not `touch_session()`) for rolling TTL, and note that cross-worker concurrency races are benign (last writer wins).
+
+2. **New helper `_serialize_cookie_jar(http_session, csrf_token=None) -> dict`:** Iterates `http_session.cookie_jar`, serializes each `Morsel` to a dict (`name`, `value`, `domain`, `path`, `expires` as ISO string). Includes `csrf_token` and `saved_at`. Returns `{"cookies": [...], "csrf_token": ..., "saved_at": ...}`. Uses `parsedate_to_datetime` for HTTP-date → ISO conversion; gracefully stores `None` for cookies with no `expires` attribute.
+
+3. **New helper `_restore_cookies_to_session(http_session, session_data) -> Optional[str]`:** Validates `session_data` has a non-empty `cookies` list. Restores each cookie via `SimpleCookie` + `http_session.cookie_jar.update_cookies(sc, response_url=URL(...))` so domain/path scoping is preserved. Returns `session_data.get('csrf_token')`. Wrapped in full `try/except` — on any failure, logs a warning and returns `None` (never raises).
+
+4. **Modified `_authenticate_session()`:** After successful full login, wraps `touch_session()` + `_serialize_cookie_jar()` + `update_session_data()` in a `try/except` so a DB write failure cannot break an otherwise successful authentication. Logs a warning on failure.
+
+5. **Modified `_initialize_single_session()`:** Between session context creation and authentication, attempts cookie restore:
+   - Reads `session_data` from `session_record.get_session_data(as_dict=True)` in a `try/except`.
+   - If `session_data` has a non-empty `cookies` list: calls `_restore_cookies_to_session`, sets `context.csrf_token` if returned, then calls `_check_authentication_status()`.
+   - On validation success: `context.is_authenticated = True`, `renew_session()` (rolling 24h TTL), returns early.
+   - On validation failure or any exception: falls through to `_authenticate_session()`.
+   - Uses `auth_needed` flag to ensure `_authenticate_session()` is called **exactly once** in all fallback paths — eliminates the double-call bug that Gemini flagged (original code could call `_authenticate_session` twice if it raised inside the fallback path).
+
+**Rationale:**
+
+Before this change, every Celery task invocation triggered a full myMoment login: scrape fresh login page → extract CSRF → POST credentials → validate. Cookies were never persisted. The `MyMomentSession` model already had `session_data_encrypted` + `get/set_session_data()` infrastructure but it was unused by the scraper. Phase 5 activates this infrastructure: after the first login, the authenticated cookie jar is stored encrypted in the DB and restored on the next task execution. Stale cookies fall back to full login without breaking the pipeline.
+
+**Expected impact:**
+
+In a run equivalent to the benchmark (2 processes, 153 discovery tasks + 36 prep + 36 posting = 225 auth events), Phase 5 reduces full logins to 1 per login credential per 24-hour session TTL. Subsequent tasks that hit the same login within 24 hours restore cookies and skip the full login sequence entirely.
+
+**Gemini review findings (2026-04-14):**
+- `cookie.key` and `cookie['domain']` access on `aiohttp.Morsel` confirmed correct
+- `SimpleCookie` + `update_cookies` with `response_url` is the correct approach for aiohttp
+- CSRF token restore is safe: `post_comment` fetches a fresh token from the article page before posting; stored CSRF is only for initial context
+- **Flagged**: double-call bug in restore fallback — if `_authenticate_session()` raised inside the inner try, the except block would call it again → **fixed**: refactored to `auth_needed` flag, `_authenticate_session()` called exactly once after all restore paths
+- **Flagged**: `update_session_data` in `_authenticate_session` was inside the outer try/except → a DB write failure would raise `AuthenticationError` despite successful login → **fixed**: wrapped in dedicated `try/except` with `logger.warning`
+- All 194 existing unit tests pass after fixes

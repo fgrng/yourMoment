@@ -12,7 +12,9 @@ import uuid
 import aiohttp
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime, parsedate_to_datetime
+from http.cookies import SimpleCookie
 from typing import List, Dict, Any, Optional, Set, Tuple
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
@@ -20,6 +22,7 @@ from contextlib import asynccontextmanager
 from bs4 import BeautifulSoup
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
+from yarl import URL
 
 from src.models.ai_comment import AIComment
 from src.models.mymoment_login import MyMomentLogin
@@ -374,14 +377,132 @@ class ScraperService:
             async with self.session_lock:
                 self.active_sessions[login_id] = context
 
-            # Attempt authentication
-            await self._authenticate_session(context)
+            session_data = None
+
+            try:
+                session_data = session_record.get_session_data(as_dict=True)
+            except Exception as e:
+                logger.warning(f"Failed to load stored session data for login {login_id}: {e}")
+
+            cookies = session_data.get('cookies') if isinstance(session_data, dict) else None
+
+            auth_needed = True
+            if isinstance(cookies, list) and cookies:
+                try:
+                    logger.info(f"Attempting cookie restore for login {login_id}")
+                    csrf_token = self._restore_cookies_to_session(http_session, session_data)
+                    if csrf_token is not None:
+                        context.csrf_token = csrf_token
+
+                    if await self._check_authentication_status(context):
+                        context.is_authenticated = True
+                        await self.session_service.renew_session(context.session_id)
+                        logger.info(f"Restored session for login {login_id}")
+                        auth_needed = False
+                    else:
+                        logger.warning(f"Restored cookies expired for login {login_id}")
+                except Exception as e:
+                    logger.warning(f"Cookie restore failed for login {login_id}: {e}")
+
+            if auth_needed:
+                # Full login path — only called once
+                await self._authenticate_session(context)
 
             return context
 
         except Exception as e:
             logger.error(f"Failed to initialize session for login {login_id}: {e}")
             raise SessionError(f"Session initialization failed: {e}")
+
+    def _serialize_cookie_jar(
+        self,
+        http_session: aiohttp.ClientSession,
+        csrf_token: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Serialize the aiohttp cookie jar into a persistable dictionary.
+        """
+        cookies = []
+
+        for cookie in http_session.cookie_jar:
+            expires = None
+            expires_value = cookie['expires']
+            if expires_value:
+                try:
+                    expires = parsedate_to_datetime(expires_value).isoformat()
+                except (TypeError, ValueError, IndexError):
+                    expires = None
+
+            cookies.append({
+                'name': cookie.key,
+                'value': cookie.value,
+                'domain': cookie['domain'] or None,
+                'path': cookie['path'] or '/',
+                'expires': expires
+            })
+
+        return {
+            'cookies': cookies,
+            'csrf_token': csrf_token,
+            'saved_at': datetime.utcnow().isoformat()
+        }
+
+    def _restore_cookies_to_session(
+        self,
+        http_session: aiohttp.ClientSession,
+        session_data: Dict[str, Any]
+    ) -> Optional[str]:
+        """
+        Restore persisted cookies into an aiohttp session cookie jar.
+        """
+        try:
+            cookies = session_data.get('cookies') if isinstance(session_data, dict) else None
+            if not isinstance(cookies, list) or not cookies:
+                return None
+
+            base_url = URL(self.config.base_url)
+
+            for cookie_data in cookies:
+                simple_cookie = SimpleCookie()
+                simple_cookie[cookie_data['name']] = cookie_data['value']
+                morsel = simple_cookie[cookie_data['name']]
+
+                domain = cookie_data.get('domain')
+                if domain:
+                    morsel['domain'] = domain
+
+                path = cookie_data.get('path') or '/'
+                morsel['path'] = path
+
+                expires = cookie_data.get('expires')
+                if expires:
+                    expires_dt = datetime.fromisoformat(expires)
+                    if expires_dt.tzinfo is None:
+                        expires_dt = expires_dt.replace(tzinfo=timezone.utc)
+                    else:
+                        expires_dt = expires_dt.astimezone(timezone.utc)
+                    morsel['expires'] = format_datetime(expires_dt, usegmt=True)
+
+                cookie_domain = (domain or base_url.host or '').lstrip('.')
+                cookie_path = path if path.startswith('/') else f'/{path}'
+                if cookie_domain:
+                    response_url = URL.build(
+                        scheme=base_url.scheme or 'https',
+                        host=cookie_domain,
+                        path=cookie_path
+                    )
+                else:
+                    response_url = base_url.with_path(cookie_path)
+
+                http_session.cookie_jar.update_cookies(
+                    simple_cookie,
+                    response_url=response_url
+                )
+
+            return session_data.get('csrf_token') or None
+        except Exception as e:
+            logger.warning(f"Failed to restore cookies to session: {e}")
+            return None
 
     async def _authenticate_session(self, context: SessionContext) -> bool:
         """
@@ -454,8 +575,17 @@ class ScraperService:
                 context.is_authenticated = True
                 context.last_activity = datetime.utcnow()
 
-                # Update session record
-                await self.session_service.touch_session(context.session_id)
+                # Persist cookies for future restore (best-effort — must not break auth on failure)
+                try:
+                    await self.session_service.touch_session(context.session_id)
+                    data = self._serialize_cookie_jar(
+                        context.aiohttp_session,
+                        context.csrf_token
+                    )
+                    await self.session_service.update_session_data(context.session_id, data)
+                    logger.info(f"Persisted cookie jar for login {context.login_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to persist session data for login {context.login_id}: {e}")
 
                 logger.info(f"Successfully authenticated session for login {context.login_id}")
                 return True
