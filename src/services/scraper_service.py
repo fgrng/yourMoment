@@ -802,6 +802,12 @@ class ScraperService:
             article_list = tab_content.select_one(':scope > div[class*="article-list"]')
             if article_list:
                 articles = self._parse_article_list_elements(article_list, limit, search)
+            else:
+                # Try extracting from table (Teacher view)
+                # Note: table might be nested inside .table-responsive
+                table = tab_content.find('table')
+                if table:
+                    articles = self._parse_article_table_elements(table, limit, search)
 
             context.last_activity = datetime.utcnow()
             logger.debug(f"HTTP request completed for article discovery (login {context.login_id})")
@@ -856,6 +862,110 @@ class ScraperService:
                 continue
 
         return articles
+
+    def _parse_article_table_elements(
+        self,
+        table_element: Any,
+        limit: int = 20,
+        search: Optional[str] = None
+    ) -> List[ArticleMetadata]:
+        """
+        Parse article rows from a table element (Teacher view).
+
+        Args:
+            table_element: BeautifulSoup element containing the articles table
+            limit: Maximum number of articles to retrieve
+            search: Optional search string to filter articles by title
+
+        Returns:
+            List of parsed ArticleMetadata objects
+        """
+        articles = []
+        rows = table_element.select('tbody tr')
+
+        for row in rows:
+            # Stop when we reach the limit
+            if len(articles) >= limit:
+                break
+
+            try:
+                article = self._extract_article_metadata_from_row(row)
+                if article:
+                    # Apply search filter if specified
+                    if search:
+                        search_lower = search.lower()
+                        title_lower = article.title.lower() if article.title else ""
+                        if search_lower not in title_lower:
+                            continue
+
+                    articles.append(article)
+                    logger.debug(f"Article {article.id} ('{article.title}') included in results (Table)")
+
+            except Exception as e:
+                logger.warning(f"Failed to extract article metadata from row: {e}")
+                continue
+
+        return articles
+
+    def _extract_article_metadata_from_row(self, row_element) -> Optional[ArticleMetadata]:
+        """
+        Extract article metadata from a table row (Teacher view).
+
+        Args:
+            row_element: BeautifulSoup element containing a table row
+
+        Returns:
+            ArticleMetadata object or None if extraction fails
+        """
+        try:
+            cells = row_element.find_all('td')
+            if len(cells) < 7:
+                return None
+
+            # Column 0: Title link
+            title_link = cells[0].find('a')
+            if not title_link:
+                return None
+
+            title = title_link.get_text(strip=True)
+            href = title_link.get('href', '')
+            post_id = None
+            if '/article/' in href:
+                post_id = href.strip('/').split('/')[-1]
+
+            if not post_id:
+                return None
+
+            # Column 1: Author
+            author = cells[1].get_text(strip=True)
+
+            # Column 2: Visibility
+            visibility = cells[2].get_text(strip=True)
+
+            # Column 5: Status
+            status = cells[5].get_text(strip=True)
+
+            # Column 6: Date
+            date = cells[6].get_text(strip=True)
+
+            # URL
+            base_url = self.config.base_url.rstrip('/')
+            url = f"{base_url}/article/{post_id}/"
+
+            return ArticleMetadata(
+                id=post_id,
+                title=title,
+                author=author,
+                date=date,
+                status=status,
+                category_id=None,
+                task_id=None,
+                visibility=visibility,
+                url=url
+            )
+        except Exception as e:
+            logger.debug(f"Row parsing failed: {e}")
+            return None
 
     async def discover_available_tabs(self, context: SessionContext) -> List[TabMetadata]:
         """

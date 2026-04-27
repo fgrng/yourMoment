@@ -146,3 +146,33 @@ def test_parse_student_dashboard_articles(scraper):
     assert articles[0].title == "Test Article"
     assert articles[0].status == "Publiziert"
     assert articles[0].category == "Unterhalten"
+
+
+def test_parse_article_table_elements(scraper):
+    """Should extract articles from a teacher article table."""
+    teacher_html = """
+    <table>
+        <tbody>
+            <tr>
+                <td><a href="/article/3170/">Title 1</a></td>
+                <td>Author 1</td>
+                <td>Class A</td>
+                <td><ul><li>Category 1</li></ul></td>
+                <td><ul><li>Task 1</li></ul></td>
+                <td>Publiziert</td>
+                <td>04.02.2026 um 18:04 Uhr</td>
+            </tr>
+        </tbody>
+    </table>
+    """
+    soup = BeautifulSoup(teacher_html, "html.parser")
+    table = soup.find('table')
+    articles = scraper._parse_article_table_elements(table, limit=5)
+
+    assert len(articles) == 1
+    assert articles[0].id == "3170"
+    assert articles[0].title == "Title 1"
+    assert articles[0].author == "Author 1"
+    assert articles[0].visibility == "Class A"
+    assert articles[0].status == "Publiziert"
+    assert articles[0].date == "04.02.2026 um 18:04 Uhr"
