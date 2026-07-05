@@ -229,9 +229,14 @@ GEMINI.md
 *.db-wal
 
 # ignore project specific folders
+.codex
+deployment/
 examples/
 docs/
 devlog/
+production_logs/
+scripts/
 
 # ignore key files
+.env*
 .encryption_key*
