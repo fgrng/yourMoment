@@ -15,7 +15,6 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-from celery import current_task
 from celery.exceptions import MaxRetriesExceededError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, select, update
@@ -24,7 +23,12 @@ from src.tasks.worker import celery_app, BaseTask
 from src.tasks.process_guards import get_process_skip_reason
 from src.models.ai_comment import AIComment
 from src.models.mymoment_login import MyMomentLogin
-from src.services.scraper_service import ScraperService, ScrapingConfig, SessionContext
+from src.services.scraper_service import (
+    ScraperService,
+    ScrapingConfig,
+    ScrapingError,
+    SessionContext,
+)
 from src.config.database import get_database_manager
 
 logger = logging.getLogger(__name__)
@@ -191,7 +195,7 @@ class CommentPostingTask(BaseTask):
             hide_comment: Whether to hide the comment on myMoment
 
         Returns:
-            True if posting succeeded, False otherwise
+            True if posting succeeded, False if myMoment returned an unsuccessful response
         """
         try:
             success = await scraper.post_comment(
@@ -210,7 +214,7 @@ class CommentPostingTask(BaseTask):
 
         except Exception as e:
             logger.error(f"Failed to post comment to article {article_id}: {e}")
-            return False
+            raise
 
     def _generate_placeholder_comment_id(
         self,
@@ -239,16 +243,48 @@ class CommentPostingTask(BaseTask):
         logger.debug(f"Generated placeholder comment ID: {placeholder_id}")
         return placeholder_id
 
-    async def _update_posted_comment(
+    async def _claim_comment_for_posting(
+        self,
+        ai_comment_id: uuid.UUID,
+    ) -> bool:
+        """Atomically claim a generated comment before any external POST occurs."""
+        session = await self.get_async_session()
+        async with session:
+            result = await session.execute(
+                update(AIComment)
+                .where(
+                    and_(
+                        AIComment.id == ai_comment_id,
+                        AIComment.status == "generated",
+                    )
+                )
+                .values(status="posted")
+            )
+            if result.rowcount:
+                await session.commit()
+                logger.debug("Claimed AIComment %s for posting", ai_comment_id)
+                return True
+
+            ai_comment = await session.get(AIComment, ai_comment_id)
+            if ai_comment:
+                logger.info(
+                    "Skipping stale posting claim for AIComment %s with current status=%s",
+                    ai_comment_id,
+                    ai_comment.status,
+                )
+            else:
+                logger.info("Skipping posting claim for missing AIComment %s", ai_comment_id)
+            return False
+
+    async def _finalize_posted_comment(
         self,
         ai_comment_id: uuid.UUID,
         comment_id: str,
         posted_at: datetime,
         login_id: Optional[uuid.UUID] = None,
-        expected_status: str = "generated",
     ) -> bool:
         """
-        Update AIComment with posted status.
+        Finalize a claimed AIComment after successful posting.
 
         Uses Pattern 3: Iterative Single-Record Updates.
         Short-lived session for single update operation.
@@ -260,7 +296,6 @@ class CommentPostingTask(BaseTask):
         """
         values: Dict[str, Any] = {
             "mymoment_comment_id": comment_id,
-            "status": "posted",
             "posted_at": posted_at,
             "error_message": None,
             "failed_at": None,
@@ -275,30 +310,76 @@ class CommentPostingTask(BaseTask):
                 .where(
                     and_(
                         AIComment.id == ai_comment_id,
-                        AIComment.status == expected_status,
+                        AIComment.status == "posted",
                     )
                 )
                 .values(**values)
             )
             if result.rowcount:
                 await session.commit()
-                logger.debug(f"Updated AIComment {ai_comment_id} to status='posted'")
+                logger.debug(f"Finalized posted AIComment {ai_comment_id}")
                 return True
 
             ai_comment = await session.get(AIComment, ai_comment_id)
-            if not ai_comment:
-                raise ValueError(f"AIComment {ai_comment_id} not found")
-            if ai_comment.status == "posted":
-                logger.info("Skipping stale posting update for AIComment %s already posted", ai_comment_id)
-                return True
+            if ai_comment:
+                logger.info(
+                    "Skipping stale posting finalize for AIComment %s with current status=%s",
+                    ai_comment_id,
+                    ai_comment.status,
+                )
+            else:
+                logger.info("Skipping posting finalize for missing AIComment %s", ai_comment_id)
+            return False
+
+    async def _revert_comment_claim(
+        self,
+        ai_comment_id: uuid.UUID,
+    ) -> bool:
+        """Best-effort revert of a posting claim. Never raises."""
+        try:
+            session = await self.get_async_session()
+            async with session:
+                result = await session.execute(
+                    update(AIComment)
+                    .where(
+                        and_(
+                            AIComment.id == ai_comment_id,
+                            AIComment.status == "posted",
+                        )
+                    )
+                    .values(
+                        status="generated",
+                        mymoment_comment_id=None,
+                        posted_at=None,
+                        error_message=None,
+                        failed_at=None,
+                    )
+                )
+                if result.rowcount:
+                    await session.commit()
+                    logger.debug("Reverted posting claim for AIComment %s", ai_comment_id)
+                    return True
+
+                ai_comment = await session.get(AIComment, ai_comment_id)
+                if ai_comment:
+                    logger.info(
+                        "Skipping stale posting claim revert for AIComment %s with current status=%s",
+                        ai_comment_id,
+                        ai_comment.status,
+                    )
+                else:
+                    logger.info("Skipping posting claim revert for missing AIComment %s", ai_comment_id)
+                return False
+        except Exception as exc:
+            logger.warning("Best-effort revert failed for AIComment %s: %s", ai_comment_id, exc)
             return False
 
     async def _mark_comment_failed(
         self,
         ai_comment_id: uuid.UUID,
         error_msg: str,
-        expected_status: str = "generated",
-    ) -> None:
+        expected_status: str = "posted",
+    ) -> bool:
         """
         Mark AIComment as failed with error message.
 
@@ -323,13 +404,15 @@ class CommentPostingTask(BaseTask):
                     status="failed",
                     error_message=error_msg,
                     failed_at=datetime.utcnow(),
+                    mymoment_comment_id=None,
+                    posted_at=None,
                     retry_count=AIComment.retry_count + 1,
                 )
             )
             if result.rowcount:
                 await session.commit()
                 logger.debug(f"Updated AIComment {ai_comment_id} to status='failed'")
-                return
+                return True
 
             ai_comment = await session.get(AIComment, ai_comment_id)
             if not ai_comment:
@@ -339,6 +422,46 @@ class CommentPostingTask(BaseTask):
                 ai_comment_id,
                 ai_comment.status,
             )
+            return False
+
+    async def _mark_comment_failed_safe(
+        self,
+        ai_comment_id: uuid.UUID,
+        error_msg: str,
+    ) -> bool:
+        """
+        Mark a comment as failed, trying generated first and falling back to posted.
+
+        This handles terminal paths where retry cleanup may already have reverted the claim,
+        while still covering stuck-claim edge cases.
+        """
+        updated = await self._mark_comment_failed(
+            ai_comment_id,
+            error_msg,
+            expected_status="generated",
+        )
+        if updated:
+            return True
+        return await self._mark_comment_failed(
+            ai_comment_id,
+            error_msg,
+            expected_status="posted",
+        )
+
+    def _is_retryable_posting_error(self, exc: Exception) -> bool:
+        """Classify posting failures so auth/config issues do not loop through retries."""
+        if isinstance(exc, ValueError):
+            return False
+
+        if isinstance(exc, ScrapingError):
+            error_text = str(exc).lower()
+            non_retryable_fragments = (
+                "failed to authenticate with mymoment",
+                "session not authenticated",
+            )
+            return not any(fragment in error_text for fragment in non_retryable_fragments)
+
+        return True
 
     async def _post_single_comment_async(self, ai_comment_id: uuid.UUID) -> Dict[str, Any]:
         """Post one generated comment if the process is still allowed to publish."""
@@ -374,7 +497,18 @@ class CommentPostingTask(BaseTask):
             }
 
         scraping_config = ScrapingConfig.from_settings()
-        posted_at = datetime.utcnow()
+        claimed = await self._claim_comment_for_posting(
+            snapshot.id,
+        )
+        if not claimed:
+            return {
+                "ai_comment_id": str(ai_comment_id),
+                "status": "skipped",
+                "reason": "already_claimed",
+                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+            }
+
+        posted_to_mymoment = False
         try:
             session = await self.get_async_session()
             async with session:
@@ -400,29 +534,46 @@ class CommentPostingTask(BaseTask):
                                 snapshot.mymoment_login_id,
                                 cleanup_error,
                             )
+
+            if not success:
+                await self._revert_comment_claim(snapshot.id)
+                raise RuntimeError("Comment posting returned False")
+
+            posted_to_mymoment = True
+            posted_at = datetime.utcnow()
+            comment_id = self._generate_placeholder_comment_id(
+                snapshot.mymoment_article_id,
+                snapshot.id,
+            )
+            try:
+                updated = await self._finalize_posted_comment(
+                    snapshot.id,
+                    comment_id=comment_id,
+                    posted_at=posted_at,
+                    login_id=snapshot.mymoment_login_id,
+                )
+            except Exception as finalize_error:
+                logger.error(
+                    "Comment posted to myMoment for AIComment %s but finalization failed: %s",
+                    snapshot.id,
+                    finalize_error,
+                )
+                return {
+                    "ai_comment_id": str(ai_comment_id),
+                    "status": "posted",
+                    "reason": "finalization_failed",
+                    "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+                }
+            return {
+                "ai_comment_id": str(ai_comment_id),
+                "status": "posted" if updated else "skipped",
+                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+            }
         except Exception as exc:
+            if not posted_to_mymoment:
+                await self._revert_comment_claim(snapshot.id)
             logger.error("Failed to post comment for AIComment %s: %s", snapshot.id, exc)
             raise
-
-        if not success:
-            raise RuntimeError("Comment posting returned False")
-
-        comment_id = self._generate_placeholder_comment_id(
-            snapshot.mymoment_article_id,
-            snapshot.id,
-        )
-        updated = await self._update_posted_comment(
-            snapshot.id,
-            comment_id=comment_id,
-            posted_at=posted_at,
-            login_id=snapshot.mymoment_login_id,
-            expected_status="generated",
-        )
-        return {
-            "ai_comment_id": str(ai_comment_id),
-            "status": "posted" if updated else "skipped",
-            "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
-        }
 
     async def _post_comments_async(self, process_id: uuid.UUID) -> Dict[str, Any]:
         """
@@ -537,7 +688,11 @@ class CommentPostingTask(BaseTask):
                             if not context:
                                 error_msg = f"No session found for login {comment_snapshot.mymoment_login_id}"
                                 logger.error(error_msg)
-                                await self._mark_comment_failed(comment_snapshot.id, error_msg)
+                                await self._mark_comment_failed(
+                                    comment_snapshot.id,
+                                    error_msg,
+                                    expected_status="generated",
+                                )
                                 failed_count += 1
                                 continue
 
@@ -545,30 +700,52 @@ class CommentPostingTask(BaseTask):
                             if idx > 0:
                                 await asyncio.sleep(scraping_config.rate_limit_delay)
 
-                            # Post comment (outside DB session)
-                            posted_at = datetime.utcnow()
-                            success = await self._post_single_comment(
-                                context=context,
-                                article_id=comment_snapshot.mymoment_article_id,
-                                comment_content=comment_snapshot.comment_content,
-                                scraper=scraper,
-                                hide_comment=comment_snapshot.is_hidden
+                            claimed = await self._claim_comment_for_posting(
+                                ai_comment_id=comment_snapshot.id,
                             )
 
-                            if success:
-                                # Generate placeholder comment ID
-                                comment_id = self._generate_placeholder_comment_id(
-                                    comment_snapshot.mymoment_article_id,
-                                    comment_snapshot.id
+                            if not claimed:
+                                logger.info(
+                                    "Skipping stale posting claim for AIComment %s inside batch posting",
+                                    comment_snapshot.id,
+                                )
+                                continue
+
+                            posted_to_mymoment = False
+                            try:
+                                success = await self._post_single_comment(
+                                    context=context,
+                                    article_id=comment_snapshot.mymoment_article_id,
+                                    comment_content=comment_snapshot.comment_content,
+                                    scraper=scraper,
+                                    hide_comment=comment_snapshot.is_hidden
                                 )
 
-                                # Update AIComment with posted status (separate session)
-                                updated = await self._update_posted_comment(
-                                    ai_comment_id=comment_snapshot.id,
-                                    comment_id=comment_id,
-                                    posted_at=posted_at,
-                                    login_id=comment_snapshot.mymoment_login_id,
+                                if not success:
+                                    await self._revert_comment_claim(comment_snapshot.id)
+                                    raise RuntimeError("Comment posting returned False")
+
+                                posted_to_mymoment = True
+                                posted_at = datetime.utcnow()
+                                comment_id = self._generate_placeholder_comment_id(
+                                    comment_snapshot.mymoment_article_id,
+                                    comment_snapshot.id,
                                 )
+                                try:
+                                    updated = await self._finalize_posted_comment(
+                                        ai_comment_id=comment_snapshot.id,
+                                        comment_id=comment_id,
+                                        posted_at=posted_at,
+                                        login_id=comment_snapshot.mymoment_login_id,
+                                    )
+                                except Exception as finalize_error:
+                                    logger.error(
+                                        "Comment posted to myMoment for AIComment %s but finalization failed: %s",
+                                        comment_snapshot.id,
+                                        finalize_error,
+                                    )
+                                    posted_count += 1
+                                    continue
 
                                 if updated:
                                     posted_count += 1
@@ -581,12 +758,10 @@ class CommentPostingTask(BaseTask):
                                         "Skipping stale posting completion for AIComment %s",
                                         comment_snapshot.id,
                                     )
-                            else:
-                                # Mark as failed
-                                error_msg = "Comment posting returned False"
-                                await self._mark_comment_failed(comment_snapshot.id, error_msg)
-                                failed_count += 1
-                                errors.append(f"Article {comment_snapshot.mymoment_article_id}: {error_msg}")
+                            except Exception:
+                                if not posted_to_mymoment:
+                                    await self._revert_comment_claim(comment_snapshot.id)
+                                raise
 
                         except Exception as e:
                             error_msg = f"Failed to post comment for AIComment {comment_snapshot.id}: {str(e)}"
@@ -594,7 +769,10 @@ class CommentPostingTask(BaseTask):
                             logger.error(error_msg)
 
                             try:
-                                await self._mark_comment_failed(comment_snapshot.id, str(e))
+                                await self._mark_comment_failed_safe(
+                                    comment_snapshot.id,
+                                    str(e),
+                                )
                             except Exception as mark_error:
                                 logger.error(f"Failed to mark comment as failed: {mark_error}")
 
@@ -650,35 +828,75 @@ def _normalize_identifier(identifier: Any, compat_args: tuple[Any, ...]) -> str:
 def post_comment_for_article(self, ai_comment_id: Any, *compat_args: Any) -> Dict[str, Any]:
     """Post a single generated AIComment row."""
     ai_comment_id = _normalize_identifier(ai_comment_id, compat_args)
+    ai_comment_uuid = uuid.UUID(ai_comment_id)
     try:
         logger.info(f"Starting single-comment posting task for AIComment {ai_comment_id}")
-        result = asyncio.run(self._post_single_comment_async(uuid.UUID(ai_comment_id)))
+        result = asyncio.run(self._post_single_comment_async(ai_comment_uuid))
         logger.info(f"Single-comment posting task completed: {result}")
         return result
     except Exception as exc:
         countdown = min(60 * (2 ** self.request.retries), 300)
-        logger.warning(
-            f"Single-comment posting task failed, retrying "
-            f"(attempt {self.request.retries + 1}/{self.max_retries}, countdown {countdown}s) "
-            f"for AIComment {ai_comment_id}: {exc}"
-        )
-        try:
-            self.retry(exc=exc, countdown=countdown)
-        except MaxRetriesExceededError:
-            logger.error(f"Max retries exhausted for single-comment posting of AIComment {ai_comment_id}")
-            asyncio.run(
-                self._mark_comment_failed(
-                    uuid.UUID(ai_comment_id),
-                    f"Max retries exhausted: {exc}",
-                    expected_status="generated",
-                )
+        retryable = self._is_retryable_posting_error(exc)
+        retries_exhausted = self.request.retries >= self.max_retries
+        retry_recovery_failed = False
+
+        if retryable and not retries_exhausted:
+            logger.warning(
+                f"Single-comment posting task failed, retrying "
+                f"(attempt {self.request.retries + 1}/{self.max_retries}, countdown {countdown}s) "
+                f"for AIComment {ai_comment_id}: {exc}"
             )
-            return {
-                "ai_comment_id": ai_comment_id,
-                "status": "failed",
-                "reason": f"Max retries exhausted: {exc}",
-                "execution_time_seconds": 0,
-            }
+            try:
+                reverted = asyncio.run(
+                    self._revert_comment_claim(ai_comment_uuid)
+                )
+            except Exception as revert_error:
+                logger.error(
+                    "Failed to revert posting claim for AIComment %s before retry: %s",
+                    ai_comment_id,
+                    revert_error,
+                )
+                reverted = False
+
+            if not reverted:
+                try:
+                    retry_snapshot = asyncio.run(self._read_comment_snapshot(ai_comment_uuid))
+                    reverted = bool(retry_snapshot and retry_snapshot.status == "generated")
+                except Exception as snapshot_error:
+                    logger.error(
+                        "Failed to verify retry readiness for AIComment %s after revert attempt: %s",
+                        ai_comment_id,
+                        snapshot_error,
+                    )
+
+            if reverted:
+                try:
+                    self.retry(exc=exc, countdown=countdown)
+                except MaxRetriesExceededError:
+                    retries_exhausted = True
+            else:
+                retries_exhausted = True
+                retry_recovery_failed = True
+
+        if retry_recovery_failed:
+            terminal_reason = f"Retry recovery failed after posting error: {exc}"
+        elif retryable and retries_exhausted:
+            terminal_reason = f"Max retries exhausted: {exc}"
+        else:
+            terminal_reason = str(exc)
+        logger.error(f"Single-comment posting failed permanently for AIComment {ai_comment_id}: {terminal_reason}")
+        asyncio.run(
+            self._mark_comment_failed_safe(
+                ai_comment_uuid,
+                terminal_reason,
+            )
+        )
+        return {
+            "ai_comment_id": ai_comment_id,
+            "status": "failed",
+            "reason": terminal_reason,
+            "execution_time_seconds": 0,
+        }
 
 
 @celery_app.task(
