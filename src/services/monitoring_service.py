@@ -94,7 +94,7 @@ class MonitoringService:
        - Resource cleanup on failures
 
     6. Pipeline Status Monitoring:
-       - Track AIComment counts by status (discovered/prepared/generated/posted/failed)
+       - Track AIComment counts by status (discovered/prepared/generated/posting/posted/failed)
        - Real-time pipeline progress visibility
        - Per-stage error tracking
        - Overall workflow completion tracking
@@ -709,7 +709,7 @@ class MonitoringService:
 
         This method returns detailed statistics about the pipeline stages
         by counting AIComment records in each status (discovered, prepared,
-        generated, posted, failed).
+        generated, posting, posted, failed).
 
         Args:
             process_id: Process ID to get pipeline status for
@@ -722,6 +722,7 @@ class MonitoringService:
                 'discovered': int,
                 'prepared': int,
                 'generated': int,
+                'posting': int,
                 'posted': int,
                 'failed': int,
                 'total': int
@@ -754,6 +755,7 @@ class MonitoringService:
                 'discovered': status_counts.get('discovered', 0),
                 'prepared': status_counts.get('prepared', 0),
                 'generated': status_counts.get('generated', 0),
+                'posting': status_counts.get('posting', 0),
                 'posted': status_counts.get('posted', 0),
                 'failed': status_counts.get('failed', 0),
             }
@@ -763,6 +765,7 @@ class MonitoringService:
                 pipeline_status['discovered'],
                 pipeline_status['prepared'],
                 pipeline_status['generated'],
+                pipeline_status['posting'],
                 pipeline_status['posted'],
                 pipeline_status['failed']
             ])
@@ -772,6 +775,7 @@ class MonitoringService:
                 f"discovered={pipeline_status['discovered']}, "
                 f"prepared={pipeline_status['prepared']}, "
                 f"generated={pipeline_status['generated']}, "
+                f"posting={pipeline_status['posting']}, "
                 f"posted={pipeline_status['posted']}, "
                 f"failed={pipeline_status['failed']}"
             )

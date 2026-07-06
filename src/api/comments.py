@@ -66,7 +66,7 @@ def serialize_ai_comment(comment: AIComment) -> AICommentResponse:
 
 @router.get("/index", response_model=AICommentListResponse)
 async def get_user_ai_comments(
-    status_filter: Optional[str] = Query(None, description="Filter by status: generated, posted, failed, deleted"),
+    status_filter: Optional[str] = Query(None, description="Filter by status: generated, posting, posted, failed, deleted"),
     mymoment_login_id: Optional[uuid.UUID] = Query(None, description="Filter by myMoment login ID"),
     monitoring_process_id: Optional[uuid.UUID] = Query(None, description="Filter by monitoring process ID"),
     limit: int = Query(20, ge=1, le=100, description="Number of comments to return"),
@@ -81,7 +81,7 @@ async def get_user_ai_comments(
     Each comment includes the article snapshot captured at generation time.
 
     **Filters:**
-    - `status`: Filter by comment status (generated, posted, failed, deleted)
+    - `status`: Filter by comment status (generated, posting, posted, failed, deleted)
     - `mymoment_login_id`: Filter by login used to post
     - `monitoring_process_id`: Filter by monitoring process that generated the comment
     """
@@ -93,10 +93,10 @@ async def get_user_ai_comments(
         ]
 
         if status_filter:
-            if status_filter not in ["generated", "posted", "failed", "deleted"]:
+            if status_filter not in ["generated", "posting", "posted", "failed", "deleted"]:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid status filter. Must be: generated, posted, failed, or deleted"
+                    detail="Invalid status filter. Must be: generated, posting, posted, failed, or deleted"
                 )
             conditions.append(AIComment.status == status_filter)
 
@@ -274,7 +274,7 @@ async def post_comment_to_mymoment(
 
     **Requirements:**
     - Comment must exist and belong to the current user
-    - Comment status must be 'generated' (not already 'posted')
+    - Comment status must be 'generated' (not already 'posting' or 'posted')
     - Associated myMoment login credentials must be active
 
     **Process:**
@@ -308,6 +308,18 @@ async def post_comment_to_mymoment(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Comment has already been posted to myMoment"
+            )
+
+        if ai_comment.status == "posting":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Comment is already being posted to myMoment"
+            )
+
+        if ai_comment.status != "generated":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only generated comments can be posted to myMoment"
             )
 
         # Check if comment content exists

@@ -129,6 +129,7 @@ function renderProcessDetails() {
     const discoveredCount = pipelineStatus ? pipelineStatus.discovered : 0;
     const preparedCount = pipelineStatus ? pipelineStatus.prepared : 0;
     const generatedCount = pipelineStatus ? pipelineStatus.generated : 0;
+    const postingCount = pipelineStatus ? pipelineStatus.posting : 0;
     const postedCount = pipelineStatus ? pipelineStatus.posted : 0;
     const failedCount = pipelineStatus ? pipelineStatus.failed : 0;
     const totalCount = pipelineStatus ? pipelineStatus.total : 0;
@@ -172,6 +173,10 @@ function renderProcessDetails() {
                     <div class="col-6 col-lg-2">
                         <div class="text-muted small">Generiert</div>
                         <div class="fw-bold text-warning fs-5">${generatedCount}</div>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <div class="text-muted small">Wird veroeffentlicht</div>
+                        <div class="fw-bold text-info fs-5">${postingCount}</div>
                     </div>
                     <div class="col-6 col-lg-2">
                         <div class="text-muted small">Veroeffentlicht</div>
@@ -379,7 +384,7 @@ function renderComments(comments) {
                         class="btn ${comment.status === 'generated' ? 'btn-success' : 'btn-outline-success'} btn-sm post-comment-btn"
                         data-comment-id="${comment.id}"
                         ${comment.status === 'generated' ? '' : 'disabled'}>
-                        <i class="bi bi-send me-1"></i>${comment.status === 'posted' ? 'Veroeffentlicht' : 'Auf myMoment veroeffentlichen'}
+                        <i class="bi bi-send me-1"></i>${comment.status === 'posted' ? 'Veroeffentlicht' : comment.status === 'posting' ? 'Wird veroeffentlicht' : 'Auf myMoment veroeffentlichen'}
                     </button>
                 </div>
             </div>
@@ -422,6 +427,7 @@ function getStatusMeta(status) {
         discovered: { label: 'Entdeckt', badgeClass: 'bg-secondary' },
         prepared: { label: 'Vorbereitet', badgeClass: 'bg-primary' },
         generated: { label: 'Generiert', badgeClass: 'bg-warning text-dark' },
+        posting: { label: 'Wird veroeffentlicht', badgeClass: 'bg-info text-dark' },
         posted: { label: 'Veroeffentlicht', badgeClass: 'bg-success' },
         failed: { label: 'Fehlgeschlagen', badgeClass: 'bg-danger' },
         deleted: { label: 'Geloescht', badgeClass: 'bg-dark' }
@@ -461,6 +467,9 @@ function buildGenerationMeta(comment) {
 function buildPostingMeta(comment) {
     if (comment.status === 'posted') {
         return `Veroeffentlicht: ${formatDate(comment.posted_at, 'Unbekannt')}`;
+    }
+    if (comment.status === 'posting') {
+        return 'Veroeffentlichung laeuft';
     }
     if (comment.status === 'failed') {
         return `Fehlgeschlagen: ${formatDate(comment.failed_at, 'Unbekannt')}`;

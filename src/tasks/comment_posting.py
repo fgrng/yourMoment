@@ -258,7 +258,7 @@ class CommentPostingTask(BaseTask):
                         AIComment.status == "generated",
                     )
                 )
-                .values(status="posted")
+                .values(status="posting")
             )
             if result.rowcount:
                 await session.commit()
@@ -310,10 +310,10 @@ class CommentPostingTask(BaseTask):
                 .where(
                     and_(
                         AIComment.id == ai_comment_id,
-                        AIComment.status == "posted",
+                        AIComment.status == "posting",
                     )
                 )
-                .values(**values)
+                .values(status="posted", **values)
             )
             if result.rowcount:
                 await session.commit()
@@ -344,7 +344,7 @@ class CommentPostingTask(BaseTask):
                     .where(
                         and_(
                             AIComment.id == ai_comment_id,
-                            AIComment.status == "posted",
+                            AIComment.status == "posting",
                         )
                     )
                     .values(
@@ -378,7 +378,7 @@ class CommentPostingTask(BaseTask):
         self,
         ai_comment_id: uuid.UUID,
         error_msg: str,
-        expected_status: str = "posted",
+        expected_status: str = "posting",
     ) -> bool:
         """
         Mark AIComment as failed with error message.
@@ -430,7 +430,7 @@ class CommentPostingTask(BaseTask):
         error_msg: str,
     ) -> bool:
         """
-        Mark a comment as failed, trying generated first and falling back to posted.
+        Mark a comment as failed, trying generated first and falling back to posting.
 
         This handles terminal paths where retry cleanup may already have reverted the claim,
         while still covering stuck-claim edge cases.
@@ -445,7 +445,7 @@ class CommentPostingTask(BaseTask):
         return await self._mark_comment_failed(
             ai_comment_id,
             error_msg,
-            expected_status="posted",
+            expected_status="posting",
         )
 
     def _is_retryable_posting_error(self, exc: Exception) -> bool:
@@ -560,7 +560,7 @@ class CommentPostingTask(BaseTask):
                 )
                 return {
                     "ai_comment_id": str(ai_comment_id),
-                    "status": "posted",
+                    "status": "posting",
                     "reason": "finalization_failed",
                     "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
                 }

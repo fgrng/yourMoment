@@ -23,6 +23,7 @@ from tests.fixtures.factories import (
     create_monitoring_process,
     create_mymoment_login,
     create_mymoment_session,
+    create_posting_ai_comment,
     create_posted_ai_comment,
     create_prepared_ai_comment,
     create_tracked_student,
@@ -133,6 +134,14 @@ async def test_ai_comment_factories_cover_pipeline_variants(db_session):
         prompt_template=prompt,
         llm_provider=provider,
     )
+    posting = await create_posting_ai_comment(
+        db_session,
+        user=user,
+        monitoring_process=process,
+        mymoment_login=login,
+        prompt_template=prompt,
+        llm_provider=provider,
+    )
     posted = await create_posted_ai_comment(
         db_session,
         user=user,
@@ -150,6 +159,7 @@ async def test_ai_comment_factories_cover_pipeline_variants(db_session):
     assert_ai_comment_state(discovered, "discovered")
     assert_ai_comment_state(prepared, "prepared")
     assert_ai_comment_state(generated, "generated")
+    assert_ai_comment_state(posting, "posting")
     assert_ai_comment_state(posted, "posted")
     assert_ai_comment_state(failed, "failed")
 

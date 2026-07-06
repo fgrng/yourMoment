@@ -17,6 +17,7 @@ from tests.fixtures.factories import (
     create_llm_provider,
     create_monitoring_process,
     create_mymoment_login,
+    create_posting_ai_comment,
     create_posted_ai_comment,
     create_prepared_ai_comment,
     create_user,
@@ -71,6 +72,14 @@ async def test_pipeline_state_factories_cover_current_status_helpers(db_session)
         llm_provider=bundle["provider"],
         article_title="X" * 150,
     )
+    posting = await create_posting_ai_comment(
+        db_session,
+        user=bundle["user"],
+        monitoring_process=bundle["process"],
+        mymoment_login=bundle["login"],
+        prompt_template=bundle["prompt"],
+        llm_provider=bundle["provider"],
+    )
     posted = await create_posted_ai_comment(
         db_session,
         user=bundle["user"],
@@ -88,17 +97,20 @@ async def test_pipeline_state_factories_cover_current_status_helpers(db_session)
     assert_ai_comment_state(discovered, "discovered")
     assert_ai_comment_state(prepared, "prepared")
     assert_ai_comment_state(generated, "generated")
+    assert_ai_comment_state(posting, "posting")
     assert_ai_comment_state(posted, "posted")
     assert_ai_comment_state(failed, "failed")
 
     assert discovered.is_discovered is True
     assert prepared.is_prepared is True
     assert generated.is_generated is True
+    assert posting.is_posting is True
     assert posted.is_posted is True
     assert failed.is_failed is True
     assert discovered.short_content == "(Comment not yet generated)"
     assert generated.short_title.endswith("...")
     assert len(generated.short_title) == 100
+    assert posting.posting_status_display == "Posting to myMoment"
     assert posted.posting_status_display == "Posted to myMoment"
     assert failed.posting_status_display == "Posting failed"
 

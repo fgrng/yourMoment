@@ -22,11 +22,11 @@ def _apply_state_defaults(status: str, kwargs: dict[str, Any]) -> dict[str, Any]
     defaults = dict(kwargs)
     prefix = get_settings().monitoring.AI_COMMENT_PREFIX
 
-    if status in {"prepared", "generated", "posted", "failed"}:
+    if status in {"prepared", "generated", "posting", "posted", "failed"}:
         _set_default(defaults, "article_content", "This is a prepared article body.")
         _set_default(defaults, "article_raw_html", "<div class='article'><p>This is a prepared article body.</p></div>")
 
-    if status in {"generated", "posted"}:
+    if status in {"generated", "posting", "posted"}:
         _set_default(
             defaults,
             "comment_content",
@@ -146,6 +146,11 @@ async def create_prepared_ai_comment(session: AsyncSession, **kwargs: Any) -> AI
 async def create_generated_ai_comment(session: AsyncSession, **kwargs: Any) -> AIComment:
     """Persist a `generated` AI comment."""
     return await create_ai_comment(session, status="generated", **kwargs)
+
+
+async def create_posting_ai_comment(session: AsyncSession, **kwargs: Any) -> AIComment:
+    """Persist a `posting` AI comment."""
+    return await create_ai_comment(session, status="posting", **kwargs)
 
 
 async def create_posted_ai_comment(session: AsyncSession, **kwargs: Any) -> AIComment:

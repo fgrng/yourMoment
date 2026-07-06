@@ -18,6 +18,7 @@ from tests.fixtures.factories.comments import (
     create_discovered_ai_comment,
     create_prepared_ai_comment,
     create_generated_ai_comment,
+    create_posting_ai_comment,
     create_posted_ai_comment,
     create_failed_ai_comment,
 )
@@ -165,6 +166,7 @@ async def test_get_pipeline_status(db_session: AsyncSession):
     await create_discovered_ai_comment(db_session, user=user, monitoring_process=process)
     await create_prepared_ai_comment(db_session, user=user, monitoring_process=process)
     await create_generated_ai_comment(db_session, user=user, monitoring_process=process)
+    await create_posting_ai_comment(db_session, user=user, monitoring_process=process)
     await create_posted_ai_comment(db_session, user=user, monitoring_process=process)
     await create_failed_ai_comment(db_session, user=user, monitoring_process=process)
     await create_failed_ai_comment(db_session, user=user, monitoring_process=process)
@@ -175,6 +177,7 @@ async def test_get_pipeline_status(db_session: AsyncSession):
     assert status["discovered"] == 1
     assert status["prepared"] == 1
     assert status["generated"] == 1
+    assert status["posting"] == 1
     assert status["posted"] == 1
     assert status["failed"] == 2
-    assert status["total"] == 6
+    assert status["total"] == 7

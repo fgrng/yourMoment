@@ -581,6 +581,7 @@ async def get_pipeline_status(
     - discovered: Articles scraped but content not yet fetched
     - prepared: Articles with content prepared for generation
     - generated: AI comments generated but not yet posted
+    - posting: Comments currently claimed for posting to myMoment
     - posted: Comments successfully posted to myMoment
     - failed: Comments that failed at any stage
 

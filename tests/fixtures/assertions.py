@@ -49,6 +49,11 @@ def assert_ai_comment_state(comment: Any, expected_status: str) -> None:
         assert comment.article_content
         assert comment.comment_content
         assert comment.posted_at is None
+    if expected_status == "posting":
+        assert comment.article_content
+        assert comment.comment_content
+        assert comment.posted_at is None
+        assert comment.mymoment_comment_id is None
     if expected_status == "posted":
         assert comment.comment_content
         assert comment.posted_at is not None

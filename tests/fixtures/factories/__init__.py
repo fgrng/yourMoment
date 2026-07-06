@@ -5,6 +5,7 @@ from tests.fixtures.factories.comments import (
     create_discovered_ai_comment,
     create_failed_ai_comment,
     create_generated_ai_comment,
+    create_posting_ai_comment,
     create_posted_ai_comment,
     create_prepared_ai_comment,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "create_monitoring_process_prompt",
     "create_mymoment_login",
     "create_mymoment_session",
+    "create_posting_ai_comment",
     "create_posted_ai_comment",
     "create_prepared_ai_comment",
     "create_prompt_template",

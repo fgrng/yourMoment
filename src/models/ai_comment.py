@@ -16,6 +16,7 @@ Status workflow:
 - discovered: Article discovered, basic metadata captured (no content yet)
 - prepared: Article content fetched and ready for comment generation
 - generated: AI comment generated but not yet posted
+- posting: Comment is claimed by a worker for posting to myMoment
 - posted: Comment successfully posted to myMoment
 - failed: Operation failed at any stage
 - deleted: Soft-deleted record
@@ -137,7 +138,7 @@ class AIComment(BaseModel):
         nullable=False,
         default=lambda: "discovered",
         index=True
-    )  # discovered, prepared, generated, posted, failed, deleted
+    )  # discovered, prepared, generated, posting, posted, failed, deleted
 
     # Comment generation metadata
     ai_model_name = Column(String(100), nullable=True)  # e.g., "claude-3-opus-20240229"
@@ -167,7 +168,7 @@ class AIComment(BaseModel):
     # Constraints
     __table_args__ = (
         CheckConstraint(
-            "status IN ('discovered', 'prepared', 'generated', 'posted', 'failed', 'deleted')",
+            "status IN ('discovered', 'prepared', 'generated', 'posting', 'posted', 'failed', 'deleted')",
             name="check_ai_comment_status"
         ),
         CheckConstraint(
@@ -245,6 +246,11 @@ class AIComment(BaseModel):
         return self.status == "generated"
 
     @property
+    def is_posting(self) -> bool:
+        """Check if this comment is currently claimed for posting."""
+        return self.status == "posting"
+
+    @property
     def has_valid_ai_prefix(self) -> bool:
         """
         Check if this AI comment follows the required German prefix (FR-006).
@@ -318,6 +324,7 @@ class AIComment(BaseModel):
             "discovered": "Article discovered",
             "prepared": "Article content prepared",
             "generated": "Comment generated (not posted)",
+            "posting": "Posting to myMoment",
             "posted": "Posted to myMoment",
             "failed": "Posting failed",
             "deleted": "Deleted"

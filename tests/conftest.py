@@ -6,6 +6,7 @@ setting os.environ here guarantees that pydantic-settings and os.getenv()
 calls inside the app read the correct test values on first access.
 """
 
+import asyncio
 import os
 
 # ---------------------------------------------------------------------------
@@ -39,6 +40,23 @@ pytest_plugins = ["tests.support.database"]
 # Imports after env-var setup so app code reads the right values.
 # ---------------------------------------------------------------------------
 import pytest  # noqa: E402
+
+
+@pytest.fixture(scope="session")
+def event_loop_policy():
+    """
+    Use uvloop for async tests when available.
+
+    Python 3.13.1's default asyncio loop can leave aiosqlite connection
+    futures unwoken after the worker thread has set their result, which makes
+    DB fixtures hang during first connection setup.
+    """
+    try:
+        import uvloop
+    except ImportError:
+        return asyncio.DefaultEventLoopPolicy()
+
+    return uvloop.EventLoopPolicy()
 
 
 @pytest.fixture(autouse=True)

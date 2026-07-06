@@ -450,6 +450,7 @@ function formatPipelineStatus(process) {
                     <span class="badge bg-secondary" title="Artikel entdeckt">Entdeckt: ${pipelineStatus.discovered}</span>
                     <span class="badge bg-primary" title="Inhalte vorbereitet">Vorbereitet: ${pipelineStatus.prepared}</span>
                     <span class="badge bg-warning" title="Kommentare generiert">Generiert: ${pipelineStatus.generated}</span>
+                    <span class="badge bg-info text-dark" title="Kommentare werden veröffentlicht">Posting: ${pipelineStatus.posting}</span>
                     <span class="badge bg-success" title="Kommentare veröffentlicht">Veröffentlicht: ${pipelineStatus.posted}</span>
                     <span class="badge bg-danger" title="Fehlerhafte Artikel">Fehler: ${pipelineStatus.failed}</span>
                 </div>
