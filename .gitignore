@@ -219,9 +219,6 @@ __marimo__/
 # LLM related ignores
 .claude/
 .specify/
-AGENTS.md
-CLAUDE.md
-GEMINI.md
 
 # ignore database
 *.db
@@ -229,13 +226,14 @@ GEMINI.md
 *.db-wal
 
 # ignore project specific folders
+.sandcastle
 .codex
 deployment/
 examples/
-docs/
 devlog/
 production_logs/
 scripts/
+docs/_old
 
 # ignore key files
 .env*

@@ -191,11 +191,21 @@ See `.env.example` for complete configuration reference.
 
 ## Testing
 
-The test suite is being rebuilt around a fast unit-only workflow. The current milestone command is:
+The test suite is being rebuilt around a fast unit-only workflow. In a clean
+environment, first install the test dependencies (the base `requirements.txt`
+does **not** include a test runner), then run the suite:
 
 ```bash
+# One-time: install runtime + test dependencies into the virtualenv
+pip install -r requirements-dev.txt      # or: pip install -e '.[test]'
+
+# Current milestone command
 .venv/bin/pytest tests/unit -q
 ```
+
+Both install paths are self-contained — they pull everything the suite needs
+(including `uvloop`, which the DB fixtures rely on under Python 3.13.1) so the
+tests never fall back on globally installed packages.
 
 Use that command from the repository root for local verification. The rebuilt unit tree is split into `tests/unit/pure`, `tests/unit/db`, `tests/unit/services`, and `tests/unit/tasks`, with shared loaders, factories, scenarios, and stubs under `tests/fixtures/`.
 
