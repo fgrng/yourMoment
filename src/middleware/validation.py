@@ -1,7 +1,7 @@
 """
 Request validation middleware for yourMoment application.
 
-Provides enhanced request validation, input sanitization, and security checks
+Provides enhanced request validation and security checks
 using Pydantic for consistent data validation across all API endpoints.
 """
 
@@ -10,9 +10,9 @@ import logging
 import re
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set
 
-from fastapi import Request, Response, status
+from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError, Field
 
@@ -44,7 +44,6 @@ class RequestValidationConfig(BaseModel):
     )
     require_content_length: bool = Field(default=True, description="Require Content-Length header")
     validate_json_structure: bool = Field(default=True, description="Validate JSON structure and depth")
-    sanitize_strings: bool = Field(default=True, description="Sanitize string inputs")
 
 
 class SecurityValidationResult(BaseModel):
@@ -52,14 +51,13 @@ class SecurityValidationResult(BaseModel):
     is_valid: bool
     errors: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
-    sanitized_data: Optional[Dict[str, Any]] = None
 
 
 class RequestValidationMiddleware:
     """
     Middleware for comprehensive request validation and security checks.
 
-    Performs input validation, sanitization, and security checks on all
+    Performs input validation and security checks on all
     incoming requests before they reach the API endpoints.
     """
 
@@ -142,7 +140,6 @@ class RequestValidationMiddleware:
         """
         errors = []
         warnings = []
-        sanitized_data = None
 
         # Validate request size
         content_length = request.headers.get("content-length")
@@ -171,15 +168,18 @@ class RequestValidationMiddleware:
         # Validate request body if present
         if request.method in {"POST", "PUT", "PATCH"} and body:
             try:
-                sanitized_data = await self._validate_and_sanitize_body(body, request, errors, warnings)
+                content_type = request.headers.get("content-type", "").split(";")[0].strip()
+                if content_type == "application/json":
+                    self._validate_json_body(body, errors, warnings)
+                elif content_type == "application/x-www-form-urlencoded":
+                    self._validate_form_body(body, errors, warnings)
             except Exception as e:
                 errors.append(f"Failed to validate request body: {str(e)}")
 
         return SecurityValidationResult(
             is_valid=len(errors) == 0,
             errors=errors,
-            warnings=warnings,
-            sanitized_data=sanitized_data
+            warnings=warnings
         )
 
     def _validate_headers(self, request: Request, errors: List[str], warnings: List[str]) -> None:
@@ -230,25 +230,8 @@ class RequestValidationMiddleware:
             if self._contains_malicious_content(value):
                 errors.append(f"Malicious content in query parameter '{key}'")
 
-    async def _validate_and_sanitize_body(
-        self,
-        body: bytes,
-        request: Request,
-        errors: List[str],
-        warnings: List[str]
-    ) -> Optional[Dict[str, Any]]:
-        """Validate and sanitize request body."""
-        content_type = request.headers.get("content-type", "").split(";")[0].strip()
-
-        if content_type == "application/json":
-            return self._validate_json_body(body, errors, warnings)
-        elif content_type == "application/x-www-form-urlencoded":
-            return self._validate_form_body(body, errors, warnings)
-
-        return None
-
     def _validate_json_body(self, body: bytes, errors: List[str], warnings: List[str]) -> Optional[Dict[str, Any]]:
-        """Validate and sanitize JSON request body."""
+        """Validate JSON request body."""
         try:
             # Parse JSON
             data = json.loads(body.decode("utf-8"))
@@ -256,11 +239,6 @@ class RequestValidationMiddleware:
             # Validate structure
             if self.config.validate_json_structure:
                 self._validate_json_structure(data, errors, warnings)
-
-            # Sanitize content
-            if self.config.sanitize_strings:
-                sanitized_data = self._sanitize_json_data(data, errors, warnings)
-                return sanitized_data
 
             return data
 
@@ -330,34 +308,6 @@ class RequestValidationMiddleware:
             if len(data) > self.config.max_string_length:
                 errors.append(f"JSON string too long (max: {self.config.max_string_length})")
 
-    def _sanitize_json_data(self, data: Any, errors: List[str], warnings: List[str]) -> Any:
-        """Recursively sanitize JSON data."""
-        if isinstance(data, dict):
-            return {key: self._sanitize_json_data(value, errors, warnings) for key, value in data.items()}
-        elif isinstance(data, list):
-            return [self._sanitize_json_data(item, errors, warnings) for item in data]
-        elif isinstance(data, str):
-            sanitized = self._sanitize_string(data)
-            if sanitized != data:
-                warnings.append("String content was sanitized")
-            return sanitized
-        else:
-            return data
-
-    def _sanitize_string(self, text: str) -> str:
-        """Sanitize a string value."""
-        # Remove null bytes
-        text = text.replace("\x00", "")
-
-        # Remove or escape potentially dangerous patterns
-        for pattern in self._compiled_patterns:
-            text = pattern.sub("", text)
-
-        # Normalize whitespace
-        text = re.sub(r"\s+", " ", text).strip()
-
-        return text
-
     def _contains_malicious_content(self, text: str) -> bool:
         """Check if text contains potentially malicious patterns."""
         for pattern in self._compiled_patterns:
@@ -389,61 +339,3 @@ class RequestValidationMiddleware:
                 "timestamp": datetime.utcnow().isoformat()
             }
         )
-
-
-# Utility functions for custom validation
-
-# def validate_uuid_string(value: str) -> bool:
-#     """Validate if string is a valid UUID."""
-#     try:
-#         uuid.UUID(value)
-#         return True
-#     except ValueError:
-#         return False
-
-
-# def validate_email_format(value: str) -> bool:
-#     """Validate basic email format."""
-#     pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-#     return bool(re.match(pattern, value))
-
-
-# def validate_password_strength(password: str) -> List[str]:
-#     """Validate password strength and return list of issues."""
-#     issues = []
-
-#     if len(password) < 8:
-#         issues.append("Password must be at least 8 characters long")
-
-#     if len(password) > 100:
-#         issues.append("Password must be no more than 100 characters long")
-
-#     if not re.search(r"[a-z]", password):
-#         issues.append("Password must contain at least one lowercase letter")
-
-#     if not re.search(r"[A-Z]", password):
-#         issues.append("Password must contain at least one uppercase letter")
-
-#     if not re.search(r"\d", password):
-#         issues.append("Password must contain at least one digit")
-
-#     if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
-#         issues.append("Password must contain at least one special character")
-
-#     return issues
-
-
-# def sanitize_filename(filename: str) -> str:
-#     """Sanitize filename for safe storage."""
-#     # Remove or replace dangerous characters
-#     filename = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", filename)
-
-#     # Remove leading/trailing periods and spaces
-#     filename = filename.strip(". ")
-
-#     # Limit length
-#     if len(filename) > 255:
-#         name, ext = filename.rsplit(".", 1) if "." in filename else (filename, "")
-#         filename = name[:250] + ("." + ext if ext else "")
-
-#     return filename

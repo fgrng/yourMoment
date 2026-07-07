@@ -98,8 +98,7 @@ def create_app() -> FastAPI:
         max_array_length=1000,
         max_string_length=10000,
         require_content_length=True,
-        validate_json_structure=True,
-        sanitize_strings=True
+        validate_json_structure=True
     )
 
     # Add middleware in reverse order (last added is first executed)
