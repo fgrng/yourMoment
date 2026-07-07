@@ -80,6 +80,7 @@ dev = [
     "pytest>=8.4.2,<9.0.0",
     "pytest-asyncio>=1.2.0,<2.0.0",
     "pytest-cov>=7.0.0,<8.0.0",
+    "uvloop>=0.21.0,<0.23.0",   # See [test] extra: load-bearing DB-fixture loop on 3.13.1
     "httpx>=0.28.1,<0.30.0",
     "pytest-mock>=3.15.1,<4.0.0",
 
@@ -96,39 +97,23 @@ dev = [
     "watchfiles>=1.1.0,<2.0.0",
 ]
 
+# Minimal, self-contained set to run the rebuilt unit suite (`pytest tests/unit`)
+# in a clean environment. Kept in sync with requirements-dev.txt. Anything the
+# current suite does not actually import lives out of here on purpose — add a
+# dependency back only when a test starts using it.
 test = [
-    # Core testing framework
+    # Test runner + async support — the rebuilt suite runs on these alone.
     "pytest>=8.4.2,<9.0.0",
     "pytest-asyncio>=1.2.0,<2.0.0",
+
+    # uvloop event-loop policy — load-bearing on Python 3.13.1, where the
+    # default asyncio loop can leave aiosqlite futures unwoken and hang the DB
+    # fixtures (see tests/conftest.py). Pulled in transitively by litellm on
+    # Linux, but pinned here so a clean env never silently drops it.
+    "uvloop>=0.21.0,<0.23.0",
+
+    # Coverage for the opt-in CI command: pytest --cov=src --cov-fail-under=90
     "pytest-cov>=7.0.0,<8.0.0",
-    "pytest-mock>=3.15.1,<4.0.0",
-    "pytest-xdist>=3.6.1,<4.0.0",           # Parallel test execution
-    "pytest-timeout>=2.3.1,<3.0.0",         # Test timeouts for async operations
-    "pytest-env>=1.1.5,<2.0.0",             # Environment variable management
-
-    # FastAPI testing
-    "httpx>=0.28.1,<0.30.0",                 # Async HTTP client for FastAPI testing
-    "fastapi[testing]>=0.118.0,<0.120.0",    # FastAPI test utilities
-
-    # Database testing
-    "pytest-redis>=3.1.0,<4.0.0",          # Redis test fixtures
-    "alembic>=1.16.5,<2.0.0",              # Database migration testing
-
-    # Mock and fixtures
-    "responses>=0.25.3,<0.26.0",            # HTTP response mocking
-    "pytest-factoryboy>=2.7.0,<3.0.0",     # Test data factories
-    "freezegun>=1.5.1,<2.0.0",             # Time mocking for testing
-
-    # Performance and load testing
-    "pytest-benchmark>=5.1.0,<6.0.0",      # Performance benchmarking
-    "locust>=2.34.0,<3.0.0",               # Load testing framework
-
-    # Security testing
-    "bandit>=1.8.0,<2.0.0",                # Security vulnerability scanner
-
-    # Testing utilities
-    "faker>=34.0.0,<35.0.0",                # Test data generation
-    "dirty-equals>=0.8.0,<0.9.0",          # Flexible equality testing
 ]
 
 [project.urls]
@@ -138,6 +123,13 @@ Issues = "https://github.com/fgrng/yourMoment/issues"
 
 [project.scripts]
 yourMoment = "src.main:app"
+
+# The application is imported as the top-level `src` package (e.g.
+# `from src.services import ...`), so tell hatchling to ship `src/` as-is.
+# Without this, `pip install .` / `pip install -e '.[test]'` fails because
+# hatchling cannot auto-detect a package named `yourmoment`.
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

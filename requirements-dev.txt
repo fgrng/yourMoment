@@ -5,6 +5,10 @@
 pytest>=8.4.2,<9.0.0
 pytest-asyncio>=1.2.0,<2.0.0
 pytest-cov>=7.0.0,<8.0.0
+# uvloop: load-bearing on Python 3.13.1 — the default asyncio loop can hang the
+# aiosqlite-backed DB fixtures (see tests/conftest.py). Transitive via litellm on
+# Linux, pinned explicitly so a clean env never silently drops it.
+uvloop>=0.21.0,<0.23.0
 httpx>=0.28.1,<0.30.0
 pytest-mock>=3.15.1,<4.0.0
 
