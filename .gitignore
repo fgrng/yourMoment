@@ -226,7 +226,8 @@ __marimo__/
 *.db-wal
 
 # ignore project specific folders
-.sandcastle
+# Note: .sandcastle is tracked, but its own .sandcastle/.gitignore excludes
+# .env, logs/, and worktrees/ so secrets and runtime artifacts stay untracked.
 .codex
 deployment/
 examples/
