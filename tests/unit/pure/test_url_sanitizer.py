@@ -8,10 +8,8 @@ import pytest
 from src.utils.url_sanitizer import (
     sanitize_url,
     is_url_malformed,
-    safe_parse_url,
-    join_url_with_path,
-    reconstruct_url_from_parts
 )
+import src.utils.url_sanitizer as url_sanitizer
 
 
 def test_sanitize_url():
@@ -43,47 +41,11 @@ def test_is_url_malformed():
     assert is_url_malformed(None) is False
 
 
-def test_safe_parse_url():
-    """Should correctly parse both valid and malformed URLs."""
-    # Valid URL
-    parsed = safe_parse_url("https://example.com/path?query=1#frag")
-    assert parsed.scheme == "https"
-    assert parsed.netloc == "example.com"
-    assert parsed.path == "/path"
-    assert parsed.query == "query=1"
-    assert parsed.fragment == "frag"
-
-    # Malformed URL
-    parsed = safe_parse_url("https://example.com\\path")
-    assert parsed.scheme == "https"
-    assert parsed.netloc == "example.com"
-    assert parsed.path == "/path"
-
-
-def test_reconstruct_url_from_parts():
-    """Should correctly reconstruct a URL from its components."""
-    url = reconstruct_url_from_parts(
-        "https", "example.com", "/path", query="q=1"
-    )
-    assert url == "https://example.com/path?q=1"
-
-
-def test_join_url_with_path():
-    """Should correctly join base URL and path, handling malformations."""
-    # Base URL with backslash
-    base = "https://www.mymoment.ch:443\\"
-    path = "/accounts/login/"
-    expected = "https://www.mymoment.ch:443/accounts/login/"
-    assert join_url_with_path(base, path) == expected
-
-    # Relative path without leading slash
-    base = "https://host/app"
-    path = "api/v1"
-    expected = "https://host/app/api/v1"
-    assert join_url_with_path(base, path) == expected
-
-    # Base URL with trailing slash, path with leading slash
-    base = "https://host/app/"
-    path = "/api/v1/"
-    expected = "https://host/app/api/v1/"
-    assert join_url_with_path(base, path) == expected
+def test_dead_url_helpers_stay_removed():
+    """Unused parser/reconstruction helpers should not return."""
+    for helper_name in (
+        "safe_parse_url",
+        "reconstruct_url_from_parts",
+        "join_url_with_path",
+    ):
+        assert not hasattr(url_sanitizer, helper_name)
