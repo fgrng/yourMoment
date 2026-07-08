@@ -8,13 +8,14 @@ using Pydantic for consistent data validation across all API endpoints.
 import json
 import logging
 import re
+import urllib.parse
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ValidationError, Field
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +141,8 @@ class RequestValidationMiddleware:
         """
         errors = []
         warnings = []
+        method_has_body = request.method in {"POST", "PUT", "PATCH"}
+        content_type = self._request_content_type(request)
 
         # Validate request size
         content_length = request.headers.get("content-length")
@@ -150,12 +153,11 @@ class RequestValidationMiddleware:
                     errors.append(f"Request size {size} exceeds maximum allowed {self.config.max_request_size}")
             except ValueError:
                 errors.append("Invalid Content-Length header")
-        elif self.config.require_content_length and request.method in {"POST", "PUT", "PATCH"}:
+        elif self.config.require_content_length and method_has_body:
             warnings.append("Missing Content-Length header")
 
         # Validate content type for body requests
-        if request.method in {"POST", "PUT", "PATCH"}:
-            content_type = request.headers.get("content-type", "").split(";")[0].strip()
+        if method_has_body:
             if content_type and content_type not in self.config.allowed_content_types:
                 errors.append(f"Content type '{content_type}' not allowed")
 
@@ -166,9 +168,8 @@ class RequestValidationMiddleware:
         self._validate_url(request, errors, warnings)
 
         # Validate request body if present
-        if request.method in {"POST", "PUT", "PATCH"} and body:
+        if method_has_body and body:
             try:
-                content_type = request.headers.get("content-type", "").split(";")[0].strip()
                 if content_type == "application/json":
                     self._validate_json_body(body, errors, warnings)
                 elif content_type == "application/x-www-form-urlencoded":
@@ -181,6 +182,10 @@ class RequestValidationMiddleware:
             errors=errors,
             warnings=warnings
         )
+
+    def _request_content_type(self, request: Request) -> str:
+        """Return the request Content-Type without parameters."""
+        return request.headers.get("content-type", "").split(";")[0].strip()
 
     def _validate_headers(self, request: Request, errors: List[str], warnings: List[str]) -> None:
         """Validate request headers for security issues."""
@@ -233,10 +238,8 @@ class RequestValidationMiddleware:
     def _validate_json_body(self, body: bytes, errors: List[str], warnings: List[str]) -> Optional[Dict[str, Any]]:
         """Validate JSON request body."""
         try:
-            # Parse JSON
             data = json.loads(body.decode("utf-8"))
 
-            # Validate structure
             if self.config.validate_json_structure:
                 self._validate_json_structure(data, errors, warnings)
 
@@ -252,19 +255,15 @@ class RequestValidationMiddleware:
     def _validate_form_body(self, body: bytes, errors: List[str], warnings: List[str]) -> Optional[Dict[str, Any]]:
         """Validate form-encoded request body."""
         try:
-            # Basic form validation
             form_data = {}
             pairs = body.decode("utf-8").split("&")
 
             for pair in pairs:
                 if "=" in pair:
                     key, value = pair.split("=", 1)
-                    # URL decode
-                    import urllib.parse
                     key = urllib.parse.unquote_plus(key)
                     value = urllib.parse.unquote_plus(value)
 
-                    # Validate
                     if len(value) > self.config.max_string_length:
                         errors.append(f"Form field '{key}' value too long")
 
