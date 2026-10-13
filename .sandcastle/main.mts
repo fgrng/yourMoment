@@ -1,142 +1,116 @@
-// Sequential Reviewer — implement-then-review loop
+// Paralleler Planner: Plan → Implement → Review → Merge
 //
-// This template drives a two-phase workflow per issue:
-//   Phase 1 (Implement): A sonnet agent picks an open issue, works on it
-//                        on a dedicated branch, commits the changes, and signals
-//                        completion.
-//   Phase 2 (Review):    A second sonnet agent reviews the branch diff and either
-//                        approves it or makes corrections directly on the branch.
+// Der Treiber verdrahtet die echten Schnittstellen Tracker (gh), Repo (git)
+// und Agents (Sandcastle) mit dem Ablauf in iteration.mts und führt die
+// äußere Schleife:
+//   Update:    Einmal zu Laufbeginn holt `git fetch origin` den Stand von
+//              GitHub. Gemessen wird danach immer gegen origin/main, nie gegen
+//              das lokale main. origin/main wird in jeden aktiven
+//              Integrations-Branch gemergt (`spec/<n>` einer offenen Spec und
+//              `sandcastle/standalone`, falls vorhanden), ohne den Checkout
+//              des Hosts zu berühren. Nur ein Konflikt startet einen Merger;
+//              scheitert er, bleibt der Branch, wie er war, und der Lauf
+//              meldet ihn.
+//   Host:      Einen Integrations-Branch, den der Checkout des Hosts gerade
+//              ausgecheckt hat, lässt der Lauf aus: kein Update, keine Tickets,
+//              keine Abschlussphase. Das Log meldet ihn.
+//   Plan:      Der Tracker liefert die unblockierten Tickets (`ready-for-agent`,
+//              nicht `Spec`, nicht `is:blocked`). Der Treiber verwirft Tickets,
+//              deren Blocker aus einer anderen Spec stammt, die noch offen
+//              oder nicht nach origin/main gemergt ist, oder deren Blocker ohne
+//              Spec noch nicht auf origin/main liegt, und mit `--spec <n>`
+//              jedes Ticket außerhalb von Spec <n>, ebenso Tickets, die die
+//              Suche noch führt, obwohl sie schon geschlossen sind. Der Planner
+//              bekommt diese Liste, stellt Tickets zurück, die einander wohl in
+//              die Quere kommen, und benennt jeden Branch; bei höchstens einem
+//              Ticket entfällt er.
+//   Implement: Ein Implementer je Ticket, mehrere zugleich. Ein Ticket mit
+//              Eltern-Spec <n> zweigt von seinem Integrations-Branch `spec/<n>`
+//              ab (fehlt er, entsteht er von origin/main); ein Ticket ohne
+//              Spec zweigt von `sandcastle/standalone` ab.
+//   Review:    Nur für Branches, deren Implementer das Abschlusssignal gab.
+//   Merge:     Ein Merger je Integrations-Branch mergt dessen reviewte
+//              Ticket-Branches, immer in einem eigenen Worktree. Ein einzelner
+//              Branch, der per Fast-Forward passt, landet ohne Merger; der
+//              Treiber setzt den Integrations-Branch nur vor. Endet er ohne
+//              Abschlusssignal, steht der Integrations-Branch wieder auf dem
+//              Stand davor. Sonst schließt der Treiber jedes Ticket, dessen
+//              Branch gelandet ist. Eine Spec bleibt offen; ihr PR schließt sie.
+//   Publish:   Am Ende jeder Iteration pusht der Treiber `sandcastle/standalone`,
+//              wenn es Commits trägt, die origin/main fehlen, und legt dessen
+//              PR an oder ergänzt ihn. Ist der PR gemergt, beginnt der Branch
+//              im nächsten Lauf vor dem Update neu von origin/main.
+//   Finish:    Am Ende jeder Iteration bekommt jede Spec, deren Sub-Issues alle
+//              geschlossen sind und deren `spec/<n>` keinen offenen PR hat,
+//              ihre Abschlussphase, höchstens einmal je Lauf: ein
+//              `code-review` der ganzen Spec gegen origin/main, ein
+//              Fix-Implementer für die Standards- und Korrektheitsbefunde, ein
+//              PR-Text mit dem Skill `pr`, dann pusht der Treiber und legt den
+//              PR an. Spec-Befunde landen als „Offene Punkte“ im PR-Text, der
+//              mit `Closes #<n>` endet.
 //
-// Both phases share a single sandbox created via createSandbox(), so the
-// implementer and reviewer work on the same explicit branch.
+// Die äußere Schleife läuft höchstens MAX_ITERATIONS-mal und endet früher,
+// sobald der Backlog leer ist (ein Plan ohne Tickets).
 //
-// The outer loop repeats up to MAX_ITERATIONS times, processing one issue per
-// iteration and stopping early once the backlog is exhausted (an implement
-// phase that produces no commits). This is a middle-complexity option between
-// the simple-loop (no review gate) and the parallel-planner (concurrent
-// execution with a planning phase).
-//
-// Usage:
-//   npx tsx .sandcastle/main.mts
-// Or add to package.json:
-//   "scripts": { "sandcastle": "npx tsx .sandcastle/main.mts" }
+// Aufruf:
+//   npm run sandcastle                  — Line-up Claude Code (Default)
+//   npm run sandcastle -- --agent codex — Line-up Codex
+//   npm run sandcastle:codex            — dasselbe, ohne `--`
+//   npm run sandcastle -- --spec 321    — nur Spec #321: ihre Sub-Issues, nur spec/321
 
-import * as sandcastle from "@ai-hero/sandcastle";
-import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+import { parseArgs } from "node:util";
+import { DEFAULT_LINEUP, LINEUPS, sandcastleAgents } from "./agents.mts";
+import { type IterationDeps, runIteration, updateIntegrationBranches } from "./iteration.mts";
+import { gitRepo } from "./repo.mts";
+import { githubTracker } from "./tracker.mts";
 
-// ---------------------------------------------------------------------------
-// Configuration
-// ---------------------------------------------------------------------------
-
-// Configure mount for .codex folder containing auth info.
-// <user>
-import os from "node:os";
-import path from "node:path";
-
-const hostCodexHome = path.join(os.homedir(), ".codex");
-const sandboxCodexMount = "/mnt/host-codex";
-const sandboxCodexHome = "/home/agent/.codex";
-// </user>
-
-// Maximum number of implement→review cycles to run before stopping.
-// Each cycle works on one issue. Raise this to process more issues per run.
+// Höchstzahl der Iterationen aus Plan, Ausführung und Merge je Lauf.
 const MAX_ITERATIONS = 10;
 
-// Hooks run inside the sandbox before the agent starts each iteration.
-// npm install ensures the sandbox always has fresh dependencies.
-const hooks = {
-  sandbox: { onSandboxReady: [
-    { command: "npm install" },
-    { command: [
-        `mkdir -p "${sandboxCodexHome}"`,
-        `test -f "${sandboxCodexMount}/auth.json"`,
-        `cp "${sandboxCodexMount}/auth.json" "${sandboxCodexHome}/auth.json"`,
-        `if [ -f "${sandboxCodexMount}/config.toml" ]; then cp "${sandboxCodexMount}/config.toml" "${sandboxCodexHome}/config.toml"; fi`,
-      ].join(" && "),
-    }
-  ] },
+const { values: cliArgs } = parseArgs({
+  options: {
+    agent: { type: "string", short: "a", default: DEFAULT_LINEUP },
+    spec: { type: "string" },
+  },
+});
+
+const lineupName = cliArgs.agent ?? DEFAULT_LINEUP;
+const lineup = LINEUPS[lineupName];
+
+if (!lineup) {
+  console.error(
+    `Unknown --agent "${lineupName}". Available: ${Object.keys(LINEUPS).join(", ")}`,
+  );
+  process.exit(1);
+}
+
+const spec = cliArgs.spec === undefined ? undefined : Number(cliArgs.spec);
+if (spec !== undefined && !Number.isInteger(spec)) {
+  console.error(`--spec expects an issue number, got "${cliArgs.spec}".`);
+  process.exit(1);
+}
+
+console.log(`Agent line-up: ${lineupName}`);
+if (spec !== undefined) console.log(`Limited to the sub-issues of spec #${spec}.`);
+
+const deps: IterationDeps = {
+  tracker: githubTracker,
+  repo: gitRepo,
+  agents: sandcastleAgents(lineup),
+  spec,
+  finishAttempted: new Set(),
 };
 
-// Copy node_modules from the host into the worktree before each sandbox
-// starts. Avoids a full npm install from scratch; the hook above handles
-// platform-specific binaries and any packages added since the last copy.
-const copyToWorktree = ["node_modules"];
-
-// ---------------------------------------------------------------------------
-// Main loop
-// ---------------------------------------------------------------------------
+console.log(`\n=== Fetching origin, updating integration branches ===\n`);
+const { failed } = await updateIntegrationBranches(deps);
+if (failed.length > 0) {
+  console.log(`origin/main could not be merged into: ${failed.join(", ")}`);
+}
 
 for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
-
-  // Generate a unique branch name for this iteration.
-  const branch = `sandcastle/sequential-reviewer/${Date.now()}`;
-
-  // Create a single sandbox that both the implementer and reviewer share.
-  // This gives both agents a real, named branch that persists across phases.
-  // User: Everything inside docker({…}) added by user.
-  const sandbox = await sandcastle.createSandbox({
-    branch,
-    sandbox: docker({
-        env: { CODEX_HOME: sandboxCodexHome },
-        mounts: [{ hostPath: hostCodexHome, sandboxPath: sandboxCodexMount, readonly: true, }],
-    }),
-    hooks,
-    copyToWorktree,
-  });
-
-  try {
-    // -----------------------------------------------------------------------
-    // Phase 1: Implement
-    //
-    // A sonnet agent picks the next open issue, writes the
-    // implementation (using RGR: Red → Green → Repeat → Refactor), and
-    // commits the result.
-    //
-    // The agent signals completion via <promise>COMPLETE</promise> when done.
-    // -----------------------------------------------------------------------
-    // One iteration so each outer pass implements a single issue on its own
-    // branch, then hands it to the reviewer. A higher value lets the agent
-    // drain the whole backlog onto this one branch in a single pass, which
-    // defeats the per-issue review.
-    const implement = await sandbox.run({
-      name: "implementer",
-      maxIterations: 1,
-      agent: sandcastle.codex("gpt-5.5", { effort: "medium" }),
-      promptFile: "./.sandcastle/implement-prompt.md",
-    });
-
-    if (!implement.commits.length) {
-      // No commits means the backlog is empty or every remaining issue is
-      // blocked — there is nothing left to implement or review, so stop.
-      console.log("Implementation agent made no commits. Stopping.");
-      break;
-    }
-
-    console.log(`\nImplementation complete on branch: ${branch}`);
-    console.log(`Commits: ${implement.commits.length}`);
-
-    // -----------------------------------------------------------------------
-    // Phase 2: Review
-    //
-    // A second sonnet agent reviews the diff of the branch produced by
-    // Phase 1. It uses the {{BRANCH}} prompt argument to inspect the right
-    // branch, and either approves or makes corrections directly on the branch.
-    // -----------------------------------------------------------------------
-    await sandbox.run({
-      name: "reviewer",
-      maxIterations: 1,
-      agent: sandcastle.codex("gpt-5.5", { effort: "high" }),
-      promptFile: "./.sandcastle/review-prompt.md",
-      promptArgs: {
-        BRANCH: branch,
-      },
-    });
-
-    console.log("\nReview complete.");
-  } finally {
-    await sandbox.close();
-  }
+  const { planned } = await runIteration(deps);
+  if (planned === 0) break;
 }
 
 console.log("\nAll done.");

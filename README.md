@@ -271,6 +271,10 @@ See [CLI.md](./CLI.md) for systemd service examples configuration.
 
 See `AGENTS.md` for detailed codebase architecture and development guidelines.
 
+### Autonomous agents (Sandcastle)
+
+`.sandcastle/` contains a driver for [Sandcastle](https://github.com/mattpocock/sandcastle) that works open GitHub issues labelled `ready-for-agent` in Docker sandboxes and delivers the result as pull requests from integration branches. Setup and commands are in `AGENTS.md`; the branch and closing rules are in `docs/agents/issue-tracker.md`.
+
 ## License
 
 ### Application Code

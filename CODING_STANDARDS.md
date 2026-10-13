@@ -26,6 +26,30 @@ Red flags:
 - Test name describes HOW not WHAT
 - Verifying through external means (e.g. querying a DB) instead of through the interface
 
+### What Tests Never Check
+
+**Never the wording of documentation** (README, AGENTS.md, ADRs, GLOSSARY.md). An acceptance criterion "the docs name X" is met by updating the docs, not by a test.
+
+- Bad: `assert "ArticleMonitor" in Path("README.md").read_text()`
+- Good: no test; the commit updates the docs.
+
+**Never source code** (template markup, JS expressions, Python AST). Exceptions: import-graph guards and lint-style rules over _all_ files of a kind.
+
+- Bad: `assert "display: none" in Path("static/css/app.css").read_text()`
+- Good: render the page and assert on what the user gets, e.g. the element is missing from the response.
+
+**Never expected values from the module under test.** Take them from a fixed literal, a worked example or a spec, not from the module's constants or calculations.
+
+- Bad: `assert result == MAX_RETRIES` with `MAX_RETRIES` imported from the module, or an expected value recomputed with the module's own helper.
+- Good: `assert result == 3`, with the 3 taken from the spec.
+
+Enum members (e.g. a status enum) are fine as expected values when the test checks _which_ state results; they name the state, they don't compute it. Where the stored spelling itself is the promise (an export, an API contract), expect the literal.
+
+**Never the absence of fields or methods.** Removed code is gone; a test for `not hasattr(Article, "title")` guards nothing a caller can observe.
+
+- Bad: `assert not hasattr(Article, "title")`
+- Good: no test; if the removal changes behaviour, test the behaviour.
+
 ### Mocking
 
 Mock at **system boundaries** only:

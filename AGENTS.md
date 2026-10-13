@@ -54,13 +54,32 @@ alembic revision -m "description"  # Create new migration
 #    DB file set by DB_SQLITE_FILE in .env (e.g. yourmoment_development.db).
 ```
 
-## Coding Agent Guidance
+### Sandcastle (autonomous agents)
+
+`.sandcastle/` holds a [Sandcastle](https://github.com/mattpocock/sandcastle) driver that works open issues labelled `ready-for-agent` (not `Spec`, not blocked) in Docker sandboxes: plan, implement, review, merge, then a PR per integration branch. Coding standards the reviewer enforces live in `CODING_STANDARDS.md`. Prerequisites: Node, Docker, and credentials from `.sandcastle/.env.example` copied to `.sandcastle/.env`.
+
+```bash
+npm install
+npm run sandcastle:build-image      # required once, and after changes to .sandcastle/Dockerfile or requirements*.txt
+npm run sandcastle                  # Claude Code line-up (default)
+npm run sandcastle:codex            # Codex line-up
+npm run sandcastle -- --spec <n>    # only spec <n>: its sub-issues, only spec/<n>
+npm run sandcastle:refresh-tools    # rebuild only the Codex / Claude Code layers of the image
+npm run test:sandcastle             # the driver's own tests (fakes, no Docker)
+```
+
+Branch and closing rules are in `docs/agents/issue-tracker.md` (section "Finishing work").
+
+## Agent skills
 
 ### Issue tracker
 
-Issues live as GitHub issues in `fgrng/yourMoment`; external PRs are also a triage surface. See `docs/agents/issue-tracker.md`.
+Issues live as GitHub issues in `fgrng/yourMoment` (via the `gh` CLI). See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-Default canonical labels. Agent provider support is detailed here. See `docs/agents/triage.md`.
+Default canonical labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
 
+### Domain docs
+
+Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.

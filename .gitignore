@@ -239,3 +239,6 @@ docs/_old
 # ignore key files
 .env*
 .encryption_key*
+
+# Node-Abhängigkeiten des Sandcastle-Laufs (package.json)
+node_modules/

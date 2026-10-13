@@ -18,6 +18,17 @@ from tests.fixtures.factories.student_backup import (
     create_article_version,
 )
 
+@pytest.fixture(autouse=True)
+def _enable_student_backup(monkeypatch):
+    """The service refuses to work while the feature flag is off.
+
+    Like tests/unit/tasks/test_student_backup.py, enable it explicitly: these
+    tests must not depend on a .env file that happens to lie above the
+    interpreter (litellm calls load_dotenv() on import).
+    """
+    monkeypatch.setenv("STUDENT_BACKUP_ENABLED", "true")
+
+
 @pytest.mark.asyncio
 async def test_create_tracked_student(db_session: AsyncSession):
     """Test creating a tracked student with admin login validation."""
