@@ -1,65 +1,40 @@
 """Pure unit tests for request validation middleware behavior."""
 
-import asyncio
-
+from starlette.applications import Starlette
 from starlette.requests import Request
+from starlette.responses import Response
+from starlette.routing import Route
+from starlette.testclient import TestClient
 
-from src.middleware.validation import (
-    RequestValidationConfig,
-    RequestValidationMiddleware,
-    SecurityValidationResult,
-)
-
-
-def _model_fields(model: type) -> dict:
-    return getattr(model, "model_fields", getattr(model, "__fields__", {}))
+from src.middleware.validation import RequestValidationMiddleware
 
 
-def _request(method: str = "POST", headers: dict[str, str] | None = None) -> Request:
-    raw_headers = [
-        (name.lower().encode("latin-1"), value.encode("latin-1"))
-        for name, value in (headers or {}).items()
-    ]
-    return Request(
-        {
-            "type": "http",
-            "method": method,
-            "path": "/api/test",
-            "headers": raw_headers,
-            "query_string": b"",
-            "scheme": "http",
-            "server": ("testserver", 80),
-            "client": ("testclient", 50000),
-        }
+async def _echo(request: Request) -> Response:
+    return Response(await request.body(), media_type="application/json")
+
+
+def _client() -> TestClient:
+    app = Starlette(routes=[Route("/api/echo", _echo, methods=["POST"])])
+    return TestClient(RequestValidationMiddleware(app))
+
+
+def test_json_body_reaches_endpoint_unchanged() -> None:
+    """A valid JSON body is passed through to the endpoint byte for byte."""
+    body = b'{"comment": "Hallo  Welt"}'
+
+    response = _client().post(
+        "/api/echo", content=body, headers={"content-type": "application/json"}
     )
 
-
-def test_validation_result_exposes_no_sanitized_payload() -> None:
-    """Sanitized request data is not part of middleware output."""
-    fields = _model_fields(SecurityValidationResult)
-    assert "sanitized_data" not in fields
+    assert response.content == body
 
 
-def test_config_exposes_no_string_sanitization_flag() -> None:
-    """String sanitization is not a configurable middleware behavior."""
-    fields = _model_fields(RequestValidationConfig)
-    assert "sanitize_strings" not in fields
-
-
-def test_json_body_validation_preserves_validation_without_sanitizing() -> None:
-    """JSON structure validation still runs, but string sanitization does not."""
-    middleware = RequestValidationMiddleware(app=None)
-    body = b'{"comment": "<script>alert(1)</script>"}'
-    request = _request(
-        headers={
-            "content-type": "application/json",
-            "content-length": str(len(body)),
-        }
+def test_malformed_json_body_is_rejected() -> None:
+    """A body that is not valid JSON is rejected before reaching the endpoint."""
+    response = _client().post(
+        "/api/echo",
+        content=b'{"comment": ',
+        headers={"content-type": "application/json"},
     )
 
-    result = asyncio.run(middleware._validate_request(request, body))
-
-    assert result.is_valid is True
-    assert result.errors == []
-    assert "String content was sanitized" not in result.warnings
-    assert not hasattr(middleware, "_sanitize_string")
+    assert response.status_code == 400

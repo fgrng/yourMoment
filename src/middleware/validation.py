@@ -173,7 +173,7 @@ class RequestValidationMiddleware:
                 if content_type == "application/json":
                     self._validate_json_body(body, errors, warnings)
                 elif content_type == "application/x-www-form-urlencoded":
-                    self._validate_form_body(body, errors, warnings)
+                    self._validate_form_body(body, errors)
             except Exception as e:
                 errors.append(f"Failed to validate request body: {str(e)}")
 
@@ -235,7 +235,7 @@ class RequestValidationMiddleware:
             if self._contains_malicious_content(value):
                 errors.append(f"Malicious content in query parameter '{key}'")
 
-    def _validate_json_body(self, body: bytes, errors: List[str], warnings: List[str]) -> Optional[Dict[str, Any]]:
+    def _validate_json_body(self, body: bytes, errors: List[str], warnings: List[str]) -> None:
         """Validate JSON request body."""
         try:
             data = json.loads(body.decode("utf-8"))
@@ -243,19 +243,14 @@ class RequestValidationMiddleware:
             if self.config.validate_json_structure:
                 self._validate_json_structure(data, errors, warnings)
 
-            return data
-
         except json.JSONDecodeError as e:
             errors.append(f"Invalid JSON: {str(e)}")
-            return None
         except UnicodeDecodeError:
             errors.append("Invalid UTF-8 encoding in JSON body")
-            return None
 
-    def _validate_form_body(self, body: bytes, errors: List[str], warnings: List[str]) -> Optional[Dict[str, Any]]:
+    def _validate_form_body(self, body: bytes, errors: List[str]) -> None:
         """Validate form-encoded request body."""
         try:
-            form_data = {}
             pairs = body.decode("utf-8").split("&")
 
             for pair in pairs:
@@ -270,13 +265,8 @@ class RequestValidationMiddleware:
                     if self._contains_malicious_content(value):
                         errors.append(f"Malicious content in form field '{key}'")
 
-                    form_data[key] = value
-
-            return form_data
-
         except UnicodeDecodeError:
             errors.append("Invalid UTF-8 encoding in form body")
-            return None
 
     def _validate_json_structure(self, data: Any, errors: List[str], warnings: List[str], depth: int = 0) -> None:
         """Validate JSON structure recursively."""

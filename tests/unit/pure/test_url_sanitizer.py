@@ -9,7 +9,6 @@ from src.utils.url_sanitizer import (
     sanitize_url,
     is_url_malformed,
 )
-import src.utils.url_sanitizer as url_sanitizer
 
 
 def test_sanitize_url():
@@ -40,12 +39,3 @@ def test_is_url_malformed():
     assert is_url_malformed("") is False
     assert is_url_malformed(None) is False
 
-
-def test_dead_url_helpers_stay_removed():
-    """Unused parser/reconstruction helpers should not return."""
-    for helper_name in (
-        "safe_parse_url",
-        "reconstruct_url_from_parts",
-        "join_url_with_path",
-    ):
-        assert not hasattr(url_sanitizer, helper_name)
