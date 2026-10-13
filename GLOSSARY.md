@@ -56,6 +56,10 @@ _Avoid_: Tab, Klasse
 Ein vom User konfigurierter, zeitlich begrenzter Hintergrundprozess, der Artikel auf einer Plattform nach festgelegten Kriterien entdeckt und für sie AI Comments erzeugt und optional veröffentlicht. Er nutzt Plattform-Accounts genau einer Plattform und hat einen Status (created, running, stopped, completed, failed).
 _Avoid_: Job, Task
 
+**Ziel**:
+Das, was ein Monitoring Process auf seiner Plattform beobachtet. Welche Dimensionen ein Ziel hat, bestimmt die Plattform; bei myMoment sind es Category, Arrangement und Classroom (Classroom ist Pflicht). Der Suchbegriff gehört nicht zum Ziel, sondern ist ein plattformunabhängiger Titelfilter des Monitoring Process.
+_Avoid_: Filter, Tab, target_filters
+
 **Generate-Only**:
 Ein Modus eines Monitoring Process, in dem AI Comments nur erzeugt, aber nicht veröffentlicht werden. Solche Kommentare können später manuell veröffentlicht werden.
 
