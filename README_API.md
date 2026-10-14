@@ -319,7 +319,7 @@ GET /articles/index?
   "published_at": "2025-01-15T10:00:00Z",
   "discovered_at": "2025-01-15T10:05:00Z",
   "comment_count": 3,
-  "mymoment_url": "https://new.mymoment.ch/articles/..."
+  "mymoment_url": "https://www.mymoment.ch/articles/..."
 }
 ```
 
