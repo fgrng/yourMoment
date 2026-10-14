@@ -7,23 +7,12 @@ Implements FR-001 (email/password authentication) and security requirements.
 
 import uuid
 from datetime import datetime
-from typing import List, TYPE_CHECKING
 
 from sqlalchemy import Column, String, Boolean, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from src.models.base import Base
-
-# Avoid circular imports
-if TYPE_CHECKING:
-    from src.models.llm_provider import LLMProviderConfiguration
-    from src.models.monitoring_process import MonitoringProcess
-    from src.models.mymoment_login import MyMomentLogin
-    from src.models.user_session import UserSession
-    from src.models.prompt_template import PromptTemplate
-    from src.models.tracked_student import TrackedStudent
-    from src.models.article_version import ArticleVersion
 
 
 class User(Base):

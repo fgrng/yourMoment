@@ -102,11 +102,10 @@ async def test_target_filters_and_association_helpers_only_expose_active_links(d
     process = bundle["process"]
     login_primary, login_secondary = bundle["logins"]
     prompt_primary, prompt_secondary = bundle["prompts"]
-    login_link_map = {l.mymoment_login_id: l for l in process.monitoring_process_logins}
+    login_link_map = {link.mymoment_login_id: link for link in process.monitoring_process_logins}
     login_link_primary = login_link_map[login_primary.id]
     login_link_secondary = login_link_map[login_secondary.id]
     prompt_link_map = {p.prompt_template_id: p for p in process.monitoring_process_prompts}
-    prompt_link_primary = prompt_link_map[prompt_primary.id]
     prompt_link_secondary = prompt_link_map[prompt_secondary.id]
 
     assert process.target_filters == {

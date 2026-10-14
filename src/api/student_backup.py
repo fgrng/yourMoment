@@ -7,7 +7,7 @@ All endpoints require authentication and check if the feature is enabled.
 
 import uuid
 import logging
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,7 +40,6 @@ from src.services.student_backup_service import (
     StudentBackupLimitError
 )
 from src.tasks.student_backup import trigger_backup as trigger_backup_task
-from src.api.error_utils import http_error
 
 
 router = APIRouter(prefix="/student-backup", tags=["Student Backup"])

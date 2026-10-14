@@ -7,7 +7,6 @@ Implements FR-017 (encrypted credential storage) and multi-login architecture.
 
 import uuid
 from datetime import datetime
-from typing import List, TYPE_CHECKING, Optional
 
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -15,13 +14,6 @@ from sqlalchemy.orm import relationship
 
 from src.models.base import Base
 from src.config.encryption import encrypt_mymoment_credentials, decrypt_mymoment_credentials
-
-# Avoid circular imports
-if TYPE_CHECKING:
-    from src.models.user import User
-    from src.models.mymoment_session import MyMomentSession
-    from src.models.monitoring_process_login import MonitoringProcessLogin
-    from src.models.tracked_student import TrackedStudent
 
 
 class MyMomentLogin(Base):

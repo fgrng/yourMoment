@@ -8,18 +8,12 @@ enabling tracking of revision activity over time.
 
 import uuid
 import hashlib
-from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Text, func, UUID, JSON
 from sqlalchemy.orm import relationship
 
 from src.models.base import Base
-
-# Avoid circular imports
-if TYPE_CHECKING:
-    from src.models.user import User
-    from src.models.tracked_student import TrackedStudent
 
 
 class ArticleVersion(Base):

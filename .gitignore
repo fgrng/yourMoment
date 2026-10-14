@@ -217,7 +217,8 @@ __marimo__/
 .streamlit/secrets.toml
 
 # LLM related ignores
-.claude/
+.claude/*
+!.claude/skills/
 .specify/
 
 # ignore database

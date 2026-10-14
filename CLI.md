@@ -6,29 +6,29 @@ The `cli.py` script is the unified management interface for yourMoment. It conso
 
 ```bash
 # Start the web server (development mode with auto-reload)
-python cli.py server
+uv run python cli.py server
 
 # Start the web server (production mode)
-ENVIRONMENT=production python cli.py server --workers 4
+ENVIRONMENT=production uv run --no-dev python cli.py server --workers 4
 
 # Start a Celery worker
-python cli.py worker
+uv run python cli.py worker
 
 # Start the Celery beat scheduler
-python cli.py scheduler
+uv run python cli.py scheduler
 
 # Run database migrations
-python cli.py db migrate
+uv run python cli.py db migrate
 
 # Seed database with test data
-python cli.py db seed
+uv run python cli.py db seed
 ```
 
 ## Command Reference
 
 ### Server Commands
 
-#### `python cli.py server`
+#### `uv run python cli.py server`
 Start the web server (FastAPI/Uvicorn).
 
 **Options:**
@@ -44,17 +44,17 @@ Start the web server (FastAPI/Uvicorn).
 **Example:**
 ```bash
 # Development
-python cli.py server
+uv run python cli.py server
 
 # Production
-ENVIRONMENT=production python cli.py server --workers 8 --port 8080
+ENVIRONMENT=production uv run --no-dev python cli.py server --workers 8 --port 8080
 ```
 
 ---
 
 ### Worker Commands
 
-#### `python cli.py worker`
+#### `uv run python cli.py worker`
 Start a Celery worker for background task processing.
 
 **Options:**
@@ -65,16 +65,16 @@ Start a Celery worker for background task processing.
 **Example:**
 ```bash
 # Start worker with default settings
-python cli.py worker
+uv run python cli.py worker
 
 # Start worker for specific queues
-python cli.py worker --queues monitoring articles --concurrency 8
+uv run python cli.py worker --queues monitoring articles --concurrency 8
 
 # Start worker with debug logging
-python cli.py worker --loglevel debug
+uv run python cli.py worker --loglevel debug
 ```
 
-#### `python cli.py scheduler`
+#### `uv run python cli.py scheduler`
 Start the Celery beat scheduler for periodic tasks.
 
 **Options:**
@@ -82,22 +82,22 @@ Start the Celery beat scheduler for periodic tasks.
 
 **Example:**
 ```bash
-python cli.py scheduler
+uv run python cli.py scheduler
 ```
 
 ---
 
 ### Database Commands
 
-#### `python cli.py db migrate`
+#### `uv run python cli.py db migrate`
 Run Alembic database migrations to update schema to latest version.
 
 **Example:**
 ```bash
-python cli.py db migrate
+uv run python cli.py db migrate
 ```
 
-#### `python cli.py db seed`
+#### `uv run python cli.py db seed`
 Seed database with essential data (environment-aware):
 
 **Development mode** (`ENVIRONMENT=development`):
@@ -108,7 +108,7 @@ Seed database with essential data (environment-aware):
 - System prompt templates only
 - Requires confirmation before proceeding
 - **Does NOT** create test users for security
-- Use `python cli.py user create` to create production users securely
+- Use `uv run --no-dev python cli.py user create` to create production users securely
 
 **Options:**
 - `--force` - Force creation of test user even in production (⚠️ dangerous!)
@@ -116,18 +116,18 @@ Seed database with essential data (environment-aware):
 **Examples:**
 ```bash
 # Development: Creates templates + test user
-python cli.py db seed
+uv run python cli.py db seed
 
 # Production: Creates only templates (prompts for confirmation)
-ENVIRONMENT=production python cli.py db seed
+ENVIRONMENT=production uv run --no-dev python cli.py db seed
 
 # Production: Force test user creation (NOT RECOMMENDED)
-ENVIRONMENT=production python cli.py db seed --force
+ENVIRONMENT=production uv run --no-dev python cli.py db seed --force
 ```
 
-**Security Note:** In production, always use `python cli.py user create` to create users with secure, unique passwords.
+**Security Note:** In production, always use `uv run --no-dev python cli.py user create` to create users with secure, unique passwords.
 
-#### `python cli.py db reset`
+#### `uv run python cli.py db reset`
 **⚠️ DESTRUCTIVE:** Drop all tables, recreate schema, and seed with fresh data.
 
 **Options:**
@@ -136,18 +136,18 @@ ENVIRONMENT=production python cli.py db seed --force
 **Example:**
 ```bash
 # With confirmation
-python cli.py db reset
+uv run python cli.py db reset
 
 # Skip confirmation (dangerous!)
-python cli.py db reset --force
+uv run python cli.py db reset --force
 ```
 
-#### `python cli.py db stats`
+#### `uv run python cli.py db stats`
 Show database statistics including counts of users, logins, comments, processes, and templates.
 
 **Example:**
 ```bash
-python cli.py db stats
+uv run python cli.py db stats
 ```
 
 **Output:**
@@ -167,7 +167,7 @@ python cli.py db stats
 
 ### User Commands
 
-#### `python cli.py user create`
+#### `uv run python cli.py user create`
 Interactively create a new user account.
 
 **Prompts:**
@@ -177,19 +177,19 @@ Interactively create a new user account.
 
 **Example:**
 ```bash
-python cli.py user create
+uv run python cli.py user create
 ```
 
 ---
 
 ### Celery Commands
 
-#### `python cli.py celery info`
+#### `uv run python cli.py celery info`
 Display Celery configuration including registered tasks, queues, and beat schedule.
 
 **Example:**
 ```bash
-python cli.py celery info
+uv run python cli.py celery info
 ```
 
 **Output:**
@@ -208,12 +208,12 @@ Beat schedule: 1
   - health-check-schedule
 ```
 
-#### `python cli.py celery health`
+#### `uv run python cli.py celery health`
 Check Celery worker and broker health status.
 
 **Example:**
 ```bash
-python cli.py celery health
+uv run python cli.py celery health
 ```
 
 **Output:**
@@ -227,7 +227,7 @@ Available queues: 2
   - monitoring
 ```
 
-#### `python cli.py celery clear`
+#### `uv run python cli.py celery clear`
 Clear pending tasks from Celery queues.
 
 **Options:**
@@ -236,10 +236,10 @@ Clear pending tasks from Celery queues.
 **Example:**
 ```bash
 # Clear all queues
-python cli.py celery clear
+uv run python cli.py celery clear
 
 # Clear specific queue
-python cli.py celery clear --queue monitoring
+uv run python cli.py celery clear --queue monitoring
 ```
 
 ---
@@ -250,32 +250,38 @@ python cli.py celery clear --queue monitoring
 
 **1. Web Server (multiple instances with load balancer)**
 ```bash
-ENVIRONMENT=production python cli.py server --workers 4
+ENVIRONMENT=production uv run --no-dev python cli.py server --workers 4
 ```
 
 **2. Celery Workers (multiple instances for scalability)**
 ```bash
-python cli.py worker --concurrency 4
+uv run --no-dev python cli.py worker --concurrency 4
 ```
 
 **3. Celery Beat Scheduler (single instance only)**
 ```bash
-python cli.py scheduler
+uv run --no-dev python cli.py scheduler
 ```
 
 **4. Initial Database Setup**
 ```bash
 # Run migrations
-python cli.py db migrate
+uv run --no-dev python cli.py db migrate
 
 # Seed system templates (production-safe)
-ENVIRONMENT=production python cli.py db seed
+ENVIRONMENT=production uv run --no-dev python cli.py db seed
 
 # Create first admin user securely
-python cli.py user create
+uv run --no-dev python cli.py user create
 ```
 
 ### Systemd Service Examples
+
+The services call `.venv/bin/python` directly. Build that virtualenv on the server from `uv.lock` without the dev tooling:
+
+```bash
+uv sync --no-dev
+```
 
 **Web Server** (`/etc/systemd/system/yourmoment-web.service`):
 ```ini
@@ -382,21 +388,21 @@ services:
 
 ```bash
 # 1. Set up database
-python cli.py db migrate
-python cli.py db seed
+uv run python cli.py db migrate
+uv run python cli.py db seed
 
 # 2. Start server (terminal 1)
-python cli.py server
+uv run python cli.py server
 
 # 3. Start worker (terminal 2)
-python cli.py worker
+uv run python cli.py worker
 
 # 4. Start scheduler (terminal 3 - if needed)
-python cli.py scheduler
+uv run python cli.py scheduler
 
 # 5. Check status
-python cli.py db stats
-python cli.py celery health
+uv run python cli.py db stats
+uv run python cli.py celery health
 ```
 
 ---
@@ -406,22 +412,22 @@ python cli.py celery health
 ### Database Issues
 ```bash
 # Check database stats
-python cli.py db stats
+uv run python cli.py db stats
 
 # Reset database (⚠️ destructive)
-python cli.py db reset
+uv run python cli.py db reset
 ```
 
 ### Celery Issues
 ```bash
 # Check Celery health
-python cli.py celery health
+uv run python cli.py celery health
 
 # View Celery configuration
-python cli.py celery info
+uv run python cli.py celery info
 
 # Clear stuck tasks
-python cli.py celery clear
+uv run python cli.py celery clear
 ```
 
 ### Common Errors
@@ -447,16 +453,16 @@ The new `cli.py` replaces three previous scripts:
 
 | Old Script | New Command |
 |------------|-------------|
-| `python manage.py run` | `python cli.py server` |
-| `python manage.py seed` | `python cli.py db seed` |
-| `python manage.py reset` | `python cli.py db reset` |
-| `python manage.py create-user` | `python cli.py user create` |
-| `python manage.py migrate` | `python cli.py db migrate` |
-| `python manage.py db-stats` | `python cli.py db stats` |
-| `python celery_cli.py worker` | `python cli.py worker` |
-| `python celery_cli.py beat` | `python cli.py scheduler` |
-| `python celery_cli.py info` | `python cli.py celery info` |
-| `python celery_cli.py health` | `python cli.py celery health` |
-| `python celery_cli.py clear` | `python cli.py celery clear` |
+| `python manage.py run` | `uv run python cli.py server` |
+| `python manage.py seed` | `uv run python cli.py db seed` |
+| `python manage.py reset` | `uv run python cli.py db reset` |
+| `python manage.py create-user` | `uv run python cli.py user create` |
+| `python manage.py migrate` | `uv run python cli.py db migrate` |
+| `python manage.py db-stats` | `uv run python cli.py db stats` |
+| `python celery_cli.py worker` | `uv run python cli.py worker` |
+| `python celery_cli.py beat` | `uv run python cli.py scheduler` |
+| `python celery_cli.py info` | `uv run python cli.py celery info` |
+| `python celery_cli.py health` | `uv run python cli.py celery health` |
+| `python celery_cli.py clear` | `uv run python cli.py celery clear` |
 
 All old scripts have been removed and replaced with this unified CLI.

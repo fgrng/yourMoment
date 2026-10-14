@@ -1,5 +1,7 @@
 # Coding Standards
 
+Ruff enforces the mechanical lint rules (configured in `pyproject.toml`, pre-commit hook in `.githooks/`, CI); reviews don't check them again.
+
 ## Testing
 
 ### Core Principle

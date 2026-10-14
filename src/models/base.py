@@ -5,7 +5,6 @@ Provides common functionality and SQLAlchemy declarative base for all models.
 """
 
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import DeclarativeBase
 
 # SQLAlchemy declarative base for all models
 Base = declarative_base()

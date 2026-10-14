@@ -5,16 +5,14 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
-from sqlalchemy.orm import selectinload
+from sqlalchemy import select, and_
 
 from src.api.schemas import (
     ArticleResponse,
     ArticleDetailResponse,
     ArticleListResponse,
     TabResponse,
-    TabListResponse,
-    ErrorResponse
+    TabListResponse
 )
 from src.api.auth import get_current_user
 from src.config.database import get_session
@@ -77,7 +75,7 @@ async def get_articles(
     """
     try:
         # Verify user owns the myMoment login
-        login = await verify_login_ownership(mymoment_login_id, current_user.id, session)
+        await verify_login_ownership(mymoment_login_id, current_user.id, session)
 
         logger.info(f"User {current_user.id} scraping articles with login {mymoment_login_id} (tab={tab}, limit={limit})")
 
@@ -168,7 +166,7 @@ async def get_available_tabs(
     """
     try:
         # Verify user owns the myMoment login
-        login = await verify_login_ownership(mymoment_login_id, current_user.id, session)
+        await verify_login_ownership(mymoment_login_id, current_user.id, session)
 
         logger.info(f"User {current_user.id} discovering tabs for login {mymoment_login_id}")
 
@@ -238,7 +236,7 @@ async def get_article_detail(
     """
     try:
         # Verify user owns the myMoment login
-        login = await verify_login_ownership(mymoment_login_id, current_user.id, session)
+        await verify_login_ownership(mymoment_login_id, current_user.id, session)
 
         logger.info(f"User {current_user.id} fetching article {mymoment_article_id} with login {mymoment_login_id}")
 

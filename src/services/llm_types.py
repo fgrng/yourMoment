@@ -5,8 +5,7 @@ This module centralizes Pydantic models used for LLM interactions,
 ensuring consistent data structures across llm_service.py and comment_service.py.
 """
 
-import uuid
-from typing import Optional, Dict, Any
+from typing import Optional, Any
 from pydantic import BaseModel, Field, ConfigDict
 
 

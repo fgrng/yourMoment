@@ -35,20 +35,20 @@ tests/
 
 ## Common Commands
 
-```bash
-# Activate virtual environment first (required for all commands below)
-source .venv/bin/activate
+Dependencies live only in `pyproject.toml` (runtime in `[project] dependencies`, tooling in the `dev` dependency group) and are locked in `uv.lock`. Run every command through `uv run`; it uses the project's `.venv` and keeps it in sync with the lockfile.
+The pre-commit hook (`.githooks/pre-commit`) runs `uv run ruff check` on every commit.
 
-# Install dependencies (clean env). requirements.txt has NO test runner;
-# use requirements-dev.txt (or `pip install -e '.[test]'`) to run the suite.
-pip install -r requirements-dev.txt
+```bash
+# Install dependencies (clean env); includes the dev group with pytest and ruff
+uv sync
+uv add <pkg> / uv add --dev <pkg>   # Add a dependency; updates pyproject.toml and uv.lock
 
 # Run tests
-pytest tests/unit -q            # Unit tests
+uv run pytest tests/unit -q     # Unit tests
 
 # Database migrations
-python cli.py db migrate        # Run pending migrations (loads .env → correct DB file)
-alembic revision -m "description"  # Create new migration
+uv run python cli.py db migrate # Run pending migrations (loads .env → correct DB file)
+uv run alembic revision -m "description"  # Create new migration
 # ⚠️  NEVER run `alembic upgrade head` directly — it does not load .env and
 #    will migrate yourmoment.db (alembic.ini default) instead of the active
 #    DB file set by DB_SQLITE_FILE in .env (e.g. yourmoment_development.db).
@@ -60,7 +60,7 @@ alembic revision -m "description"  # Create new migration
 
 ```bash
 npm install
-npm run sandcastle:build-image      # required once, and after changes to .sandcastle/Dockerfile or requirements*.txt
+npm run sandcastle:build-image      # required once, and after changes to .sandcastle/Dockerfile or uv.lock
 npm run sandcastle                  # Claude Code line-up (default)
 npm run sandcastle:codex            # Codex line-up
 npm run sandcastle -- --spec <n>    # only spec <n>: its sub-issues, only spec/<n>

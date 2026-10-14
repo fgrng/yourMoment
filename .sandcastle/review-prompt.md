@@ -54,7 +54,7 @@ If you cannot start sub-agents, run the two axes one after the other and keep th
 The implementer left the branch green, so there is no starting run.
 
 1. Make the changes and commit them in one commit whose message starts with `RALPH: Review -`.
-2. Run `pytest tests/unit -q` and fix whatever fails, so the branch ends green, also when you made no commit: a branch that fast-forwards lands without another test run. Skip this only if the branch changes only Markdown files.
+2. Run `uv run pytest tests/unit -q` and fix whatever fails, so the branch ends green, also when you made no commit: a branch that fast-forwards lands without another test run. Skip this only if the branch changes only Markdown files.
 
 If the skill reports nothing to fix, make no commit.
 

@@ -1,7 +1,7 @@
 """Development-only utilities for seeding, introspection, and environment diagnostics."""
 
 from typing import Dict, Any
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.database import get_database_manager

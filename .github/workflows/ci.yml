@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  pruefen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # .python-version ist nicht eingecheckt; 3.13 wie im Sandcastle-Image.
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+
+      - run: uv sync --locked
+
+      - run: uv run ruff check
+      # Die Testsuite setzt ihre Umgebung in tests/conftest.py, eine .env
+      # braucht sie nicht.
+      - run: uv run pytest tests/unit -q

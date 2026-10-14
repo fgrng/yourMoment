@@ -7,7 +7,6 @@ client information for privacy and simplicity.
 
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional
 
 from sqlalchemy import Column, String, DateTime, Boolean, UUID, ForeignKey, Index, func
 from sqlalchemy.orm import relationship

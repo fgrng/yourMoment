@@ -4,8 +4,9 @@ Pure unit tests for logging configuration helpers.
 Tests the logging configuration utilities from src/config/logging.py.
 """
 
-import pytest
 import logging
+from unittest.mock import MagicMock
+
 from src.config.logging import (
     _resolve_log_level,
     _build_formatter,
@@ -71,7 +72,3 @@ def test_service_name_filter():
     
     name_filter.filter(record)
     assert record.service == "test-service"
-
-
-# We need MagicMock for the last test
-from unittest.mock import MagicMock

@@ -10,17 +10,16 @@ import re
 import uuid
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Set, Tuple
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
-from sqlalchemy import select, and_, or_, func
+from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from src.models.prompt_template import PromptTemplate
-from src.models.user import User
 from src.api.schemas import PromptTemplateCreate, PromptTemplateUpdate
 from src.services.prompt_placeholders import (
     PlaceholderInfo,

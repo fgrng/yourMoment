@@ -1,7 +1,6 @@
 # Der Build des Sandcastle-Images braucht aus dem Repo nur die
-# Abhängigkeitslisten; alles andere (.venv, node_modules, Datenbanken,
+# pyproject.toml und uv.lock; alles andere (.venv, node_modules, Datenbanken,
 # Worktrees) bleibt draußen.
 *
 !pyproject.toml
-!requirements.txt
-!requirements-dev.txt
+!uv.lock

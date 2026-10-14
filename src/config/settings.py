@@ -249,12 +249,12 @@ class ScraperSettings(BaseSettings):
     """Web scraping and myMoment integration settings."""
 
     MYMOMENT_BASE_URL: str = Field(
-        default="https://new.mymoment.ch",
+        default="https://www.mymoment.ch",
         description="myMoment platform base URL"
     )
 
     MYMOMENT_LOGIN_URL: str = Field(
-        default="https://new.mymoment.ch/accounts/login/",
+        default="https://www.mymoment.ch/accounts/login/",
         description="myMoment login URL"
     )
 

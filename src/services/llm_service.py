@@ -12,8 +12,8 @@ from typing import List, Optional, Dict, Any, Union
 
 import litellm
 import litellm.exceptions
-from pydantic import BaseModel, Field, ValidationError
-from sqlalchemy import select, and_, update, delete
+from pydantic import ValidationError
+from sqlalchemy import select, and_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 

@@ -206,7 +206,7 @@ async def register(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"error": "registration_error", "message": str(e)}
             )
-    except Exception as e:
+    except Exception:
         # Handle unexpected errors
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -267,7 +267,7 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"error": "invalid_credentials", "message": str(e)}
         )
-    except Exception as e:
+    except Exception:
         # Handle unexpected errors
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -325,7 +325,7 @@ async def logout(
                 detail={"error": "invalid_token", "message": "Invalid or expired token"}
             )
 
-    except Exception as e:
+    except Exception:
         # Handle unexpected errors - still clear cookie and return success for security
         # (don't reveal whether token was valid or not)
         response.delete_cookie(key="access_token")

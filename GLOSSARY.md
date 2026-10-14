@@ -7,8 +7,12 @@ yourMoment beobachtet im Auftrag von Lehrpersonen und Forschenden Schüler:innen
 ### Plattformen und Akteure
 
 **Plattform**:
-Die externe Schreibplattform, auf der Students Texte verfassen und kommentiert werden: myMoment oder eine WordPress-Instanz.
-_Avoid_: Scraper, Site, Blog (für die Plattform als Ganzes)
+Eine konkrete externe Schreibplattform, auf der Students Texte verfassen und kommentiert werden, identifiziert über ihre Base-URL: myMoment oder eine bestimmte WordPress-Instanz. IDs von Artikeln, Kommentaren und Students sind nur innerhalb einer Plattform eindeutig.
+_Avoid_: Scraper, Site, Blog (für die Plattform als Ganzes), Instanz (allein)
+
+**Plattform-Typ**:
+Die Art einer Plattform (myMoment oder WordPress); er bestimmt, welcher Adapter mit ihr spricht. Mehrere Plattformen können denselben Plattform-Typ haben.
+_Avoid_: Plattform (für die Art)
 
 **myMoment**:
 Die bestehende Schreibplattform, auf der Primarschüler:innen Texte verfassen, veröffentlichen und einander kommentieren; die erste und bisher einzige angebundene Plattform.
@@ -53,7 +57,7 @@ _Avoid_: Tab, Klasse
 ### Monitoring und Kommentierung
 
 **Monitoring Process**:
-Ein vom User konfigurierter, zeitlich begrenzter Hintergrundprozess, der Artikel auf einer Plattform nach festgelegten Kriterien entdeckt und für sie AI Comments erzeugt und optional veröffentlicht. Er nutzt Plattform-Accounts genau einer Plattform und hat einen Status (created, running, stopped, completed, failed).
+Ein vom User konfigurierter, zeitlich begrenzter Hintergrundprozess, der Artikel auf einer Plattform nach festgelegten Kriterien entdeckt und für sie AI Comments erzeugt und optional veröffentlicht. Er nutzt Plattform-Accounts genau einer Plattform, die nach dem Anlegen fest ist, und hat einen Status (created, running, stopped, completed, failed).
 _Avoid_: Job, Task
 
 **Ziel**:
@@ -95,7 +99,7 @@ _Avoid_: Provider (allein), API-Config
 Das von der Kommentierung getrennte Feature, das die Texte der Tracked Students periodisch sichert und versioniert. Es nutzt ausschliesslich Admin-Accounts.
 
 **Tracked Student**:
-Ein für das Student Backup ausgewählter Student, identifiziert über seine ID auf der Plattform und einem Admin-Account zugeordnet. Ein User kann denselben Student nur einmal verfolgen.
+Ein für das Student Backup ausgewählter Student, identifiziert über seine ID auf der Plattform und einem Admin-Account zugeordnet. Ein User kann denselben Student pro Plattform nur einmal verfolgen.
 
 **Article Version**:
 Ein fortlaufend nummerierter Stand eines Artikels eines Tracked Student; ein inhaltlich unveränderter Artikel erzeugt keine neue Version. Unabhängig vom Article Snapshot der Pipeline.

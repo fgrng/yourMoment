@@ -12,20 +12,17 @@ import uuid
 import aiohttp
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from email.utils import format_datetime, parsedate_to_datetime
 from http.cookies import SimpleCookie
-from typing import List, Dict, Any, Optional, Set, Tuple
+from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
-from contextlib import asynccontextmanager
 
 from bs4 import BeautifulSoup
 from sqlalchemy.ext.asyncio import AsyncSession
 from yarl import URL
 
 from src.models.ai_comment import AIComment
-from src.models.mymoment_login import MyMomentLogin
-from src.models.mymoment_session import MyMomentSession
 from src.services.mymoment_session_service import MyMomentSessionService
 from src.services.mymoment_credentials_service import MyMomentCredentialsService
 from src.config.settings import get_settings
@@ -1417,8 +1414,8 @@ class ScraperService:
             async with context.aiohttp_session.get(dashboard_url) as response:
                 if response.status == 403:
                     raise ScrapingError(
-                        f"Access denied to student dashboard. "
-                        f"Ensure the login is an admin account with dashboard access."
+                        "Access denied to student dashboard. "
+                        "Ensure the login is an admin account with dashboard access."
                     )
                 if response.status == 404:
                     raise ScrapingError(f"Student with ID {student_id} not found")

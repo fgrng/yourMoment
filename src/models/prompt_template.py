@@ -8,12 +8,12 @@ that are used to generate contextual AI comments on myMoment articles.
 import re
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from sqlalchemy import Column, String, Text, Boolean, UUID, ForeignKey, CheckConstraint, DateTime
 from sqlalchemy.orm import relationship
 
-from src.models.base import Base, BaseModel
+from src.models.base import BaseModel
 
 
 class PromptTemplate(BaseModel):

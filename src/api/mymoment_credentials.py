@@ -511,7 +511,7 @@ async def test_credentials(
             "Unable to complete scraping validation for the provided credentials."
         )
 
-    except Exception as e:
+    except Exception:
         # Clean up on unexpected error
         await scraper_service.cleanup_session(credentials_id)
         logger.error(
