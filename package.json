@@ -2,7 +2,7 @@
   "name": "yourmoment-sandcastle",
   "private": true,
   "type": "module",
-  "description": "Node-Abhängigkeiten für den autonomen Sandcastle-Lauf (.sandcastle/). Das Projekt selbst ist eine FastAPI-Anwendung und wird über pip/requirements verwaltet.",
+  "description": "Node-Abhängigkeiten für den autonomen Sandcastle-Lauf (.sandcastle/). Das Projekt selbst ist eine FastAPI-Anwendung und wird mit uv verwaltet (pyproject.toml, uv.lock).",
   "scripts": {
     "sandcastle": "tsx .sandcastle/main.mts",
     "sandcastle:codex": "tsx .sandcastle/main.mts --agent codex",

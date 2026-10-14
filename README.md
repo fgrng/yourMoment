@@ -51,31 +51,27 @@ See also the detailed [documentation of the API layer](./README_API.md), the [bu
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.11+ and [uv](https://docs.astral.sh/uv/)
 - Redis (optional, required for background workers)
 
 ### Installation
 
 ```bash
-# Clone and setup virtual environment (recommeded)
+# Clone and install dependencies (uv builds .venv from uv.lock)
 git clone <repo>
 cd yourMoment
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
+uv sync
 
 # Configure environment
 cp .env.example .env
 # Edit .env with your configuration (see Configuration section)
 
 # Initialize database and seed development data
-python cli.py db migrate
-python cli.py db seed  # Creates system templates + test user in development
+uv run python cli.py db migrate
+uv run python cli.py db seed  # Creates system templates + test user in development
 
 # Start development server
-python cli.py server
+uv run python cli.py server
 ```
 
 Access the application at `http://localhost:8000` (UI) and `http://localhost:8000/api/v1/docs` (API docs).
@@ -84,7 +80,7 @@ Access the application at `http://localhost:8000` (UI) and `http://localhost:800
 - Email: `test@yourmoment.dev`
 - Password: `Valid!Password123`
 
-**Note:** The seed command is environment-aware. In production (`ENVIRONMENT=production`), it only creates system templates and prompts you to use `python cli.py user create` for secure user creation. This is mandatory since user creation with email validation is not implemted in yourMoment right now.
+**Note:** The seed command is environment-aware. In production (`ENVIRONMENT=production`), it only creates system templates and prompts you to use `uv run python cli.py user create` for secure user creation. This is mandatory since user creation with email validation is not implemted in yourMoment right now.
 
 ### Background Workers (Optional)
 
@@ -92,10 +88,10 @@ For automated monitoring processes, start Celery workers:
 
 ```bash
 # Terminal 1: Worker
-python cli.py worker
+uv run python cli.py worker
 
 # Terminal 2: Beat scheduler
-python cli.py scheduler
+uv run python cli.py scheduler
 ```
 
 ### Monitoring Pipeline
@@ -191,21 +187,18 @@ See `.env.example` for complete configuration reference.
 
 ## Testing
 
-The test suite is being rebuilt around a fast unit-only workflow. In a clean
-environment, first install the test dependencies (the base `requirements.txt`
-does **not** include a test runner), then run the suite:
+The test suite is being rebuilt around a fast unit-only workflow. `uv sync`
+installs the `dev` dependency group along with the runtime dependencies, so a
+fresh checkout runs the suite without further setup:
 
 ```bash
-# One-time: install runtime + test dependencies into the virtualenv
-pip install -r requirements-dev.txt      # or: pip install -e '.[test]'
-
 # Current milestone command
-.venv/bin/pytest tests/unit -q
+uv run pytest tests/unit -q
 ```
 
-Both install paths are self-contained — they pull everything the suite needs
-(including `uvloop`, which the DB fixtures rely on under Python 3.13.1) so the
-tests never fall back on globally installed packages.
+The `dev` group pulls everything the suite needs (including `uvloop`, which
+the DB fixtures rely on under Python 3.13.1) so the tests never fall back on
+globally installed packages.
 
 Use that command from the repository root for local verification. The rebuilt unit tree is split into `tests/unit/pure`, `tests/unit/db`, `tests/unit/services`, and `tests/unit/tasks`, with shared loaders, factories, scenarios, and stubs under `tests/fixtures/`.
 
@@ -218,23 +211,23 @@ yourMoment includes a unified `cli.py` script for all management operations. See
 **Common commands:**
 ```bash
 # Server management
-python cli.py server                    # Start web server
-python cli.py worker                    # Start Celery worker
-python cli.py scheduler                 # Start beat scheduler
+uv run python cli.py server                    # Start web server
+uv run python cli.py worker                    # Start Celery worker
+uv run python cli.py scheduler                 # Start beat scheduler
 
 # Database operations
-python cli.py db migrate                # Run migrations
-python cli.py db seed                   # Seed test data
-python cli.py db stats                  # Show statistics
-python cli.py db reset                  # Reset database (⚠️ destructive)
+uv run python cli.py db migrate                # Run migrations
+uv run python cli.py db seed                   # Seed test data
+uv run python cli.py db stats                  # Show statistics
+uv run python cli.py db reset                  # Reset database (⚠️ destructive)
 
 # User management
-python cli.py user create               # Create new user
+uv run python cli.py user create               # Create new user
 
 # Celery monitoring
-python cli.py celery info               # Show configuration
-python cli.py celery health             # Check health
-python cli.py celery clear              # Clear queues
+uv run python cli.py celery info               # Show configuration
+uv run python cli.py celery health             # Check health
+uv run python cli.py celery clear              # Clear queues
 ```
 
 ## Production Considerations
@@ -254,13 +247,13 @@ python cli.py celery clear              # Clear queues
 
 ```bash
 # 1. Web server (use --workers for multi-process)
-ENVIRONMENT=production python cli.py server --workers 4
+ENVIRONMENT=production uv run --no-dev python cli.py server --workers 4
 
 # 2. Celery workers (multiple instances for scalability)
-python cli.py worker --concurrency 4
+uv run --no-dev python cli.py worker --concurrency 4
 
 # 3. Beat scheduler (single instance only)
-python cli.py scheduler
+uv run --no-dev python cli.py scheduler
 ```
 
 For multi-service deployments, review the split log files rather than a single shared application log. The web server, Celery worker, scheduler, CLI commands, and LLM summary stream can each be routed to separate files via the `LOG_*` settings.

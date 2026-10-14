@@ -35,9 +35,9 @@ If applicable, use RGR to complete the task.
 
 # FEEDBACK LOOPS
 
-Run only the tests your change can affect, never the whole suite; the merger runs `pytest tests/unit -q` after you.
+Run only the tests your change can affect, never the whole suite; the merger runs `uv run pytest tests/unit -q` after you.
 
-The virtualenv is active; `pytest` is on PATH. Run the test packages of the layers you touched, e.g. `pytest tests/unit/services -q` or a single test file. Before committing, make sure these tests pass.
+Run the test packages of the layers you touched, e.g. `uv run pytest tests/unit/services -q` or a single test file. Before committing, make sure these tests pass.
 
 If you changed only Markdown files, run no tests: no test reads them.
 

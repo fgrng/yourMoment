@@ -5,4 +5,4 @@
 # nur Sekunden kostet.
 set -e
 
-ruff check
+uv run ruff check

@@ -109,12 +109,12 @@ const agentSandbox = () =>
     ],
   });
 
-// Die Hooks laufen in der Sandbox, bevor der Agent startet. Der erste Befehl
-// bringt die Abhängigkeiten des Projekts auf den Stand des Worktrees: Das
-// Image (siehe .sandcastle/Dockerfile) trägt eine fertige virtualenv unter
-// /home/agent/venv mit requirements-dev.txt, außerhalb des gemounteten
-// Workspace; `uv pip install` prüft sie gegen die Datei im Worktree und
-// installiert nur, was dort inzwischen dazukam. Die Testsuite braucht keine
+// Die Hooks laufen in der Sandbox, bevor der Agent startet. `uv sync` legt die
+// .venv im Worktree aus uv.lock an; das verwaltete Python 3.13 und die
+// gesperrten Wheels liegen schon im Image (siehe .sandcastle/Dockerfile), also
+// installiert sync aus dem warmen Cache von uv, statt Interpreter und
+// Abhängigkeiten herunterzuladen. Danach laufen `uv run pytest` und
+// `uv run ruff check` ohne weitere Vorbereitung. Die Testsuite braucht keine
 // .env: tests/conftest.py setzt ihre Umgebung selbst. Der zweite und dritte
 // Befehl kopieren die Zugangsdaten von Codex und Claude Code aus den
 // schreibgeschützten Mounts in deren Konfigurationsordner, damit beide CLIs
@@ -122,10 +122,10 @@ const agentSandbox = () =>
 const hooks = {
   sandbox: {
     onSandboxReady: [
-      // Normalerweise ein No-op in Sekunden. Das erhöhte Timeout sichert den
-      // Fall ab, dass requirements-dev.txt seit dem letzten Image-Build neue
-      // Pakete bekam, die erst heruntergeladen werden.
-      { command: "uv pip install -r requirements-dev.txt", timeoutMs: 180_000 },
+      // Normalerweise in Sekunden aus dem Cache. Das erhöhte Timeout sichert
+      // einen kalten Cache ab (uv.lock hat sich seit dem letzten Image-Build
+      // geändert), bei dem noch Wheels heruntergeladen werden.
+      { command: "uv sync --python 3.13", timeoutMs: 180_000 },
       {
         command: [
           `mkdir -p "${sandboxCodexHome}"`,
@@ -156,8 +156,8 @@ const hooks = {
   },
 };
 
-// Nichts aus dem Host in den Worktree kopieren: virtualenv und Python liegen
-// im Image, nicht im Worktree.
+// Nichts aus dem Host in den Worktree kopieren: Der Hook `uv sync` oben legt
+// die .venv in der Sandbox von Grund auf an.
 const copyToWorktree: string[] = [];
 
 // Die gemeinsamen Einstellungen jedes Agent-Laufs. Mit `branch` arbeitet der

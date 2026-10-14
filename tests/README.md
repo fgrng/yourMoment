@@ -3,7 +3,7 @@
 The rebuilt test tree is organized around execution boundaries. The local milestone command is:
 
 ```bash
-.venv/bin/pytest tests/unit -q
+uv run pytest tests/unit -q
 ```
 
 Run that command from the repository root. It is the authoritative signal for the unit-suite rebuild milestone. The unit tree must stay free of live network calls, Redis, Celery workers, and real LLM provider credentials.
@@ -106,18 +106,18 @@ Current public scenario names are defined in `tests/fixtures/builders.py` and in
 Use the unit tree directly instead of broad `pytest` invocations while the larger suite is being rebuilt:
 
 ```bash
-.venv/bin/pytest tests/unit -q
-.venv/bin/pytest tests/unit/pure -q
-.venv/bin/pytest tests/unit/db -q
-.venv/bin/pytest tests/unit/services -q
-.venv/bin/pytest tests/unit/tasks -q
+uv run pytest tests/unit -q
+uv run pytest tests/unit/pure -q
+uv run pytest tests/unit/db -q
+uv run pytest tests/unit/services -q
+uv run pytest tests/unit/tasks -q
 ```
 
 Useful focused runs:
 
 ```bash
-.venv/bin/pytest tests/unit -q -k scenario
-.venv/bin/pytest tests/unit/tasks -q -m "database and celery"
+uv run pytest tests/unit -q -k scenario
+uv run pytest tests/unit/tasks -q -m "database and celery"
 ```
 
 `tests/conftest.py` sets the test env contract before app imports. If a test needs different environment inputs, override them with `monkeypatch` inside the test and rely on the autouse singleton reset fixture to clear cached settings afterwards.
