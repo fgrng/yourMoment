@@ -16,7 +16,6 @@ from .mymoment_session_service import MyMomentSessionService
 from .llm_service import LLMProviderService, LLMProviderError
 from .scraper_service import ScraperService, ScrapingError, SessionContext, StudentArticleInfo
 from .monitoring_service import MonitoringService
-from .comment_service import CommentService, CommentGenerationError
 from .prompt_service import (
     PromptService,
     PromptServiceError,
@@ -61,10 +60,6 @@ __all__ = [
 
     # Monitoring
     "MonitoringService",
-
-    # Comment generation
-    "CommentService",
-    "CommentGenerationError",
 
     # Prompt templates
     "PromptService",

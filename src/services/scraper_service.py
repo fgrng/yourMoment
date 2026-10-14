@@ -21,13 +21,11 @@ from contextlib import asynccontextmanager
 
 from bs4 import BeautifulSoup
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
 from yarl import URL
 
 from src.models.ai_comment import AIComment
 from src.models.mymoment_login import MyMomentLogin
 from src.models.mymoment_session import MyMomentSession
-from src.models.monitoring_process import MonitoringProcess
 from src.services.mymoment_session_service import MyMomentSessionService
 from src.services.mymoment_credentials_service import MyMomentCredentialsService
 from src.config.settings import get_settings
@@ -243,78 +241,6 @@ class ScraperService:
         except SessionError as e:
             logger.error(f"Failed to initialize session for login {login_id}: {e}")
             raise ScrapingError(f"Failed to authenticate with myMoment: {e}")
-
-    async def initialize_sessions_for_process(
-        self,
-        process_id: uuid.UUID,
-        user_id: uuid.UUID
-    ) -> List[SessionContext]:
-        """
-        Initialize scraping sessions for all logins associated with a monitoring process.
-
-        Args:
-            process_id: Monitoring process ID
-            user_id: User ID for validation
-
-        Returns:
-            List of initialized session contexts
-
-        Raises:
-            ScrapingError: If session initialization fails
-        """
-        try:
-            from src.models.monitoring_process_login import MonitoringProcessLogin
-
-            # Get monitoring process to verify it exists and belongs to user
-            stmt = select(MonitoringProcess).where(
-                and_(
-                    MonitoringProcess.id == process_id,
-                    MonitoringProcess.user_id == user_id
-                )
-            )
-            result = await self.db_session.execute(stmt)
-            process = result.scalar_one_or_none()
-
-            if not process:
-                raise ScrapingError(f"Monitoring process {process_id} not found for user {user_id}")
-
-            # Query junction table directly to get login IDs (avoid lazy loading)
-            login_stmt = select(MonitoringProcessLogin.mymoment_login_id).where(
-                and_(
-                    MonitoringProcessLogin.monitoring_process_id == process_id,
-                    MonitoringProcessLogin.is_active == True
-                )
-            )
-            login_result = await self.db_session.execute(login_stmt)
-            login_ids = [row[0] for row in login_result.all()]
-
-            if not login_ids:
-                raise ScrapingError(f"No active myMoment logins configured for process {process_id}")
-
-            logger.info(f"Initializing {len(login_ids)} sessions for process {process_id}")
-
-            # Initialize sessions for each login
-            session_contexts = []
-            for login_id in login_ids:
-                try:
-                    context = await self._initialize_single_session(login_id, user_id)
-                    session_contexts.append(context)
-                    logger.info(f"Initialized session for login {login_id}")
-                except Exception as e:
-                    logger.error(f"Failed to initialize session for login {login_id}: {e}")
-                    # Continue with other sessions - partial success is acceptable
-
-            if not session_contexts:
-                raise ScrapingError("Failed to initialize any sessions for the monitoring process")
-
-            logger.info(f"Successfully initialized {len(session_contexts)} sessions for process {process_id}")
-            return session_contexts
-
-        except Exception as e:
-            logger.error(f"Failed to initialize sessions for process {process_id}: {e}")
-            # Cleanup any partially created sessions
-            await self.cleanup_all_sessions()
-            raise ScrapingError(f"Session initialization failed: {e}")
 
     async def _initialize_single_session(
         self,
@@ -1451,32 +1377,6 @@ class ScraperService:
 
             self.active_sessions.clear()
             logger.info("Cleaned up all active scraping sessions")
-
-    async def get_session_status(self) -> Dict[str, Any]:
-        """
-        Get status of all active sessions.
-
-        Returns:
-            Dictionary with session status information
-        """
-        async with self.session_lock:
-            status = {
-                'total_sessions': len(self.active_sessions),
-                'authenticated_sessions': sum(1 for ctx in self.active_sessions.values() if ctx.is_authenticated),
-                'sessions': []
-            }
-
-            for login_id, context in self.active_sessions.items():
-                session_info = {
-                    'login_id': str(login_id),
-                    'session_id': str(context.session_id),
-                    'username': context.username,
-                    'is_authenticated': context.is_authenticated,
-                    'last_activity': context.last_activity.isoformat() if context.last_activity else None
-                }
-                status['sessions'].append(session_info)
-
-            return status
 
     # =========================================================================
     # Student Backup Feature - Dashboard Scraping

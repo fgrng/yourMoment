@@ -21,7 +21,6 @@ from src.config.settings import get_settings
 
 # Task modules that need to be imported so Celery registers them
 TASK_MODULES: Iterable[str] = (
-    'src.tasks.session_manager',
     'src.tasks.timeout_enforcer',
     'src.tasks.scheduler',
     'src.tasks.article_discovery',
@@ -45,7 +44,6 @@ class CeleryConfig:
 
     # Task routing and queues
     task_routes = {
-        'src.tasks.session_manager.*': {'queue': 'sessions'},
         'src.tasks.timeout_enforcer.*': {'queue': 'timeouts'},
         'src.tasks.scheduler.*': {'queue': 'scheduler'},
         'src.tasks.article_discovery.*': {'queue': 'discovery'},
@@ -57,7 +55,6 @@ class CeleryConfig:
 
     # Define queues
     task_queues = (
-        Queue('sessions', routing_key='sessions'),
         Queue('timeouts', routing_key='timeouts'),
         Queue('scheduler', routing_key='scheduler'),
         Queue('discovery', routing_key='discovery'),
@@ -102,10 +99,6 @@ class CeleryConfig:
         'check-process-timeouts': {
             'task': 'src.tasks.timeout_enforcer.check_process_timeouts',
             'schedule': settings.monitoring.PROCESS_HEALTH_CHECK_INTERVAL_SECONDS,
-        },
-        'cleanup-expired-sessions': {
-            'task': 'src.tasks.session_manager.cleanup_expired_sessions',
-            'schedule': 300.0,  # Every 5 minutes
         },
         'trigger-monitoring-pipeline': {
             'task': 'src.tasks.scheduler.trigger_monitoring_pipeline',

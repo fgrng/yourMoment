@@ -189,8 +189,6 @@ await session.commit()
 - `get_sessions_by_login(login_id)` – List sessions for credential
 - `refresh_session(session_id, new_data)` – Update session expiration/cookies
 - `terminate_session(session_id)` – Close session
-- `cleanup_expired_sessions()` – Remove expired (called by tasks)
-- `validate_session(session_id)` – Check if still active
 
 **Session Data:**
 - Encrypted session cookies
@@ -294,39 +292,13 @@ async with ScraperService() as scraper:
 
 ---
 
-#### `CommentService` (`comment_service.py`)
+#### `comment_service.py`
 
-**Purpose**: End-to-end AI comment generation and posting workflow
+**Purpose**: Validation and formatting helpers for AI comments, used by the comment generation task
 
-**Key Methods:**
-- `generate_comment(article_id, prompt_template, llm_provider, context)` – Generate using LLM
-- `post_comment(article_id, comment_text, session)` – Publish to myMoment
-- `get_comments_for_article(article_id, limit)` – List generated comments
-- `retry_failed_comment(comment_id)` – Regenerate failed comment
-
-**Module-level helpers (importable directly):**
-- `validate_comment(comment_content, min_length, max_length, enable_content_validation)` – Validate length, AI prefix, and content quality; returns `{is_valid, has_ai_prefix, errors, content_length}`; used by both `CommentService` and Celery tasks
-
-**Generation Flow:**
-1. Fetch article details
-2. Render prompt template with article context
-3. Call LLM provider via LiteLLM
-4. Validate generated comment (length, prefix, content)
-5. Store in database with metadata
-6. Post to myMoment (if enabled)
-7. Update comment status
-
-**Configuration:**
-- Max/min comment length
-- Generation timeout
-- Retry attempts
-- Content validation rules
-- Fallback provider support
-
-**Exceptions:**
-- `CommentGenerationError` – LLM generation failed
-- `CommentValidationError` – Generated comment doesn't meet requirements
-- `ProviderExhaustionError` – All configured providers failed
+**Module-level helpers:**
+- `validate_comment(comment_content, min_length, max_length, enable_content_validation)` – Validate length, AI prefix, and content quality; returns `{is_valid, has_ai_prefix, errors, content_length}`
+- `ensure_html_paragraphs(text)` – Wrap plain-text lines in `<p>` tags; no-op if the text already contains `<p>`
 
 ---
 
@@ -424,10 +396,6 @@ BaseServiceError
 ScrapingError (independent hierarchy)
 ├── SessionError
 └── AuthenticationError
-
-CommentGenerationError (independent hierarchy)
-├── CommentValidationError
-└── ProviderExhaustionError
 ```
 
 ### Exception Handling Pattern

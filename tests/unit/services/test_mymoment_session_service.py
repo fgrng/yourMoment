@@ -102,22 +102,3 @@ async def test_update_session_data(db_session: AsyncSession):
     
     await db_session.refresh(session)
     assert session.get_session_data() == {"new": "data"}
-
-@pytest.mark.asyncio
-async def test_cleanup_expired_sessions(db_session: AsyncSession):
-    """Test bulk deactivation of expired sessions."""
-    user = await create_user(db_session)
-    login = await create_mymoment_login(db_session, user=user)
-    expired = await create_expired_mymoment_session(db_session, mymoment_login=login)
-    active = await create_mymoment_session(db_session, mymoment_login=login)
-    
-    service = MyMomentSessionService(db_session)
-    
-    count = await service.cleanup_expired_sessions()
-    assert count == 1
-    
-    await db_session.refresh(expired)
-    assert expired.is_active is False
-    
-    await db_session.refresh(active)
-    assert active.is_active is True
