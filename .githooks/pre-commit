@@ -1,0 +1,8 @@
+#!/bin/sh
+# Prüft Lint mit Ruff, bevor ein Commit entsteht.
+# Aktivierung: git config core.hooksPath .githooks
+# pytest läuft bewusst nicht hier, sondern in der CI, damit ein Commit
+# nur Sekunden kostet.
+set -e
+
+ruff check

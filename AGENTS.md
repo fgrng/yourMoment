@@ -35,10 +35,10 @@ tests/
 
 ## Common Commands
 
-```bash
-# Activate virtual environment first (required for all commands below)
-source .venv/bin/activate
+The virtualenv is already active (direnv on the host, the image in the sandbox); run the commands below as they stand.
+The pre-commit hook (`.githooks/pre-commit`) runs `ruff check` on every commit.
 
+```bash
 # Install dependencies (clean env). requirements.txt has NO test runner;
 # use requirements-dev.txt (or `pip install -e '.[test]'`) to run the suite.
 pip install -r requirements-dev.txt
