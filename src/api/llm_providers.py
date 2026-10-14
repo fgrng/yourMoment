@@ -1,11 +1,9 @@
 """CRUD endpoints for managing each user's LLM provider configurations and metadata."""
 
-import os
 import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status, Path
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import (

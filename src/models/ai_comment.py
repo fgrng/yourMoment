@@ -41,7 +41,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
-from src.models.base import Base, BaseModel
+from src.models.base import BaseModel
 from src.config.settings import get_settings
 
 

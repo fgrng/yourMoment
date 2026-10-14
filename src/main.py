@@ -18,7 +18,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 
 from src.middleware.error_handler import ErrorHandlerMiddleware
 from src.middleware.validation import RequestValidationMiddleware, RequestValidationConfig

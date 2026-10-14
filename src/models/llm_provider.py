@@ -7,7 +7,7 @@ Implements FR-002 (encrypted API key storage) and multi-provider support.
 
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional, Dict, Any
+from typing import Dict, Any
 
 from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -15,10 +15,6 @@ from sqlalchemy.orm import relationship
 
 from src.models.base import Base
 from src.config.encryption import encrypt_api_key, decrypt_api_key
-
-# Avoid circular imports
-if TYPE_CHECKING:
-    from src.models.user import User
 
 
 class LLMProviderConfiguration(Base):

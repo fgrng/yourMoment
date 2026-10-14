@@ -1,5 +1,4 @@
 import pytest
-import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.prompt_service import (

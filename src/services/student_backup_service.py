@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
-from sqlalchemy import select, and_, func, desc
+from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
@@ -20,7 +20,7 @@ from sqlalchemy.orm import selectinload
 from src.models.tracked_student import TrackedStudent
 from src.models.article_version import ArticleVersion
 from src.models.mymoment_login import MyMomentLogin
-from src.services.base_service import BaseService, ServiceValidationError, ServiceNotFoundError
+from src.services.base_service import BaseService
 from src.config.settings import get_student_backup_settings
 
 
@@ -122,7 +122,7 @@ class StudentBackupService(BaseService):
             )
 
         # Validate admin login exists and is actually an admin login
-        login = await self._validate_admin_login(mymoment_login_id, user_id)
+        await self._validate_admin_login(mymoment_login_id, user_id)
 
         # Check if user has reached the tracking limit
         current_count = await self._get_user_tracked_students_count(user_id)

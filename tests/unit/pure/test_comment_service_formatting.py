@@ -5,7 +5,6 @@ Tests ensure_html_paragraphs and validate_comment functions from
 src/services/comment_service.py.
 """
 
-import pytest
 from src.services.comment_service import ensure_html_paragraphs, validate_comment
 from unittest.mock import MagicMock, patch
 

@@ -11,10 +11,9 @@ import uuid
 import re
 import logging
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 

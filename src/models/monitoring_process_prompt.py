@@ -11,7 +11,7 @@ import uuid
 from sqlalchemy import Column, Float, Boolean, UUID, ForeignKey, UniqueConstraint, CheckConstraint
 from sqlalchemy.orm import relationship
 
-from src.models.base import Base, BaseModel
+from src.models.base import BaseModel
 
 
 class MonitoringProcessPrompt(BaseModel):

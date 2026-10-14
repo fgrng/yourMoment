@@ -1,16 +1,12 @@
 import pytest
-import uuid
-from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from src.services.student_backup_service import (
     StudentBackupService,
     StudentBackupValidationError,
-    StudentBackupLimitError,
 )
 from src.models.article_version import ArticleVersion
-from src.models.tracked_student import TrackedStudent
 from tests.fixtures.factories.users import create_user
 from tests.fixtures.factories.mymoment import create_mymoment_login
 from tests.fixtures.factories.student_backup import (

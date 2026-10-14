@@ -8,18 +8,11 @@ Each tracked student is associated with a user (who tracks them) and an admin lo
 
 import uuid
 from datetime import datetime
-from typing import List, TYPE_CHECKING, Optional
 
 from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Text, func, UUID
-from sqlalchemy.orm import relationship, validates
+from sqlalchemy.orm import relationship
 
 from src.models.base import Base
-
-# Avoid circular imports
-if TYPE_CHECKING:
-    from src.models.user import User
-    from src.models.mymoment_login import MyMomentLogin
-    from src.models.article_version import ArticleVersion
 
 
 class TrackedStudent(Base):

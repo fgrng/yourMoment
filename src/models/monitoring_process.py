@@ -6,13 +6,17 @@ track myMoment articles and automatically generate AI comments.
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import List
+from typing import TYPE_CHECKING, List
 import uuid
 
 from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text, UUID, ForeignKey
 from sqlalchemy.orm import relationship
 
-from src.models.base import Base, BaseModel
+from src.models.base import BaseModel
+
+if TYPE_CHECKING:
+    from src.models.mymoment_login import MyMomentLogin
+    from src.models.prompt_template import PromptTemplate
 
 
 class MonitoringProcess(BaseModel):

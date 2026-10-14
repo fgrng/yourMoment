@@ -5,7 +5,6 @@ Tests placeholder extraction, validation, and rendering in PromptTemplate model
 and placeholder definitions in src/services/prompt_placeholders.py.
 """
 
-import pytest
 from src.models.prompt_template import PromptTemplate
 from src.services.prompt_placeholders import SUPPORTED_PLACEHOLDERS
 

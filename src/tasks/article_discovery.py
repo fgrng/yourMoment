@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-from celery import chain, current_task
+from celery import chain
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
@@ -22,7 +22,6 @@ from sqlalchemy.exc import IntegrityError
 from src.tasks.worker import celery_app, BaseTask
 from src.models.monitoring_process import MonitoringProcess
 from src.models.mymoment_login import MyMomentLogin
-from src.models.prompt_template import PromptTemplate
 from src.models.llm_provider import LLMProviderConfiguration
 from src.models.ai_comment import AIComment
 from src.models.monitoring_process_login import MonitoringProcessLogin
@@ -177,9 +176,8 @@ class ArticleDiscoveryTask(BaseTask):
                 logger.warning(f"Login {login_id} not found or inactive")
                 return []
 
-            # Get decrypted credentials
-            username = login.get_username()
-            password = login.get_password()
+            # Decrypt once so unreadable credentials fail before scraping
+            login.get_credentials()
         # Session closed
 
         # Initialize scraper with config (outside DB session)

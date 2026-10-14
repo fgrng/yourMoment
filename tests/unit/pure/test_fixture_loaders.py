@@ -5,7 +5,6 @@ Verify that the three public loader functions work correctly and that
 they fail with a clear, narrow exception on bad input.
 """
 
-import json
 
 import pytest
 

@@ -6,9 +6,8 @@ that can be shared across all services for consistent user handling.
 """
 
 import uuid
-import logging
 from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession

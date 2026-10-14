@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.mymoment_login import MyMomentLogin
 from src.models.mymoment_session import MyMomentSession
 
-from tests.fixtures.factories._shared import ensure_same_user, next_sequence, require_owner
+from tests.fixtures.factories._shared import next_sequence, require_owner
 
 
 async def create_mymoment_login(

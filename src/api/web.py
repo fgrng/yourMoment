@@ -1,16 +1,14 @@
 """Server-rendered routes that power the yourMoment dashboard and settings UI."""
 
-from fastapi import APIRouter, Request, Depends, HTTPException, Form, Cookie
+from fastapi import APIRouter, Request, Depends, HTTPException, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import os
 import uuid
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, desc
+from sqlalchemy import select, and_
 
 from src.api.auth import get_optional_user, get_current_web_user
 from src.models.user import User
@@ -19,7 +17,6 @@ from src.config.settings import get_settings
 from src.services.auth_service import AuthService, AuthServiceValidationError, AuthServiceError
 from src.services.mymoment_credentials_service import MyMomentCredentialsService
 from src.services.prompt_service import PromptService
-from src.models.ai_comment import AIComment
 from src.services.prompt_placeholders import SUPPORTED_PLACEHOLDERS
 
 # Configure templates

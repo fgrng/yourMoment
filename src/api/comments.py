@@ -1,7 +1,7 @@
 """Read-only endpoints exposing the current user's AI-generated comments and snapshots."""
 
 import uuid
-from typing import List, Optional
+from typing import Optional
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status, Path, Query
@@ -10,8 +10,7 @@ from sqlalchemy import select, and_, desc
 
 from src.api.schemas import (
     AICommentResponse,
-    AICommentListResponse,
-    ErrorResponse
+    AICommentListResponse
 )
 from src.api.auth import get_current_user
 from src.config.database import get_session

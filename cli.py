@@ -434,7 +434,7 @@ def cmd_celery_health(args: argparse.Namespace) -> None:
 
     health = health_check()
 
-    print(f"\n=== Celery Health Check ===")
+    print("\n=== Celery Health Check ===")
     print(f"Status: {health['status']}")
     print(f"Broker connection: {health.get('broker_connection', 'unknown')}")
 
@@ -460,7 +460,7 @@ def cmd_celery_clear(args: argparse.Namespace) -> None:
 
     result = clear_queue(args.queue)
 
-    print(f"\n=== Queue Clear Result ===")
+    print("\n=== Queue Clear Result ===")
     print(f"Status: {result['status']}")
 
     if result['status'] == 'success':

@@ -4,15 +4,13 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Path, Query
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import (
     MonitoringProcessCreate,
     MonitoringProcessUpdate,
     MonitoringProcessResponse,
-    PipelineStatusResponse,
-    ErrorResponse
+    PipelineStatusResponse
 )
 from src.services.monitoring_service import (
     MonitoringService,
@@ -425,7 +423,7 @@ async def start_monitoring_process(
             )
 
         # Start the process
-        start_result = await service.start_process(process_id, current_user.id)
+        await service.start_process(process_id, current_user.id)
 
         logger.info(f"Started monitoring process {process_id} for user {current_user.id}")
 
@@ -522,7 +520,7 @@ async def stop_monitoring_process(
             )
 
         # Stop the process (idempotent operation)
-        stop_result = await service.stop_process(process_id, current_user.id)
+        await service.stop_process(process_id, current_user.id)
 
         logger.info(f"Stopped monitoring process {process_id} for user {current_user.id}")
 

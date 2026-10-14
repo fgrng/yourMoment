@@ -7,12 +7,11 @@ multiple logins simultaneously for commenting.
 """
 
 import uuid
-from datetime import datetime
 
-from sqlalchemy import Column, Boolean, DateTime, UUID, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Boolean, UUID, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 
-from src.models.base import Base, BaseModel
+from src.models.base import BaseModel
 
 
 class MonitoringProcessLogin(BaseModel):

@@ -7,7 +7,6 @@ from src.services.monitoring_service import (
     MonitoringService,
     ProcessStatus,
     ProcessValidationError,
-    ProcessOperationError,
 )
 from tests.fixtures.factories.users import create_user
 from tests.fixtures.factories.mymoment import create_mymoment_login
@@ -99,7 +98,7 @@ async def test_update_process(db_session: AsyncSession):
     updated = result.scalar_one()
     
     assert updated.name == "New Name"
-    active_logins = [l for l in updated.monitoring_process_logins if l.is_active]
+    active_logins = [link for link in updated.monitoring_process_logins if link.is_active]
     assert len(active_logins) == 1
     assert active_logins[0].mymoment_login_id == login2.id
 
@@ -149,7 +148,7 @@ async def test_stop_process(db_session: AsyncSession):
     
     service = MonitoringService(db_session)
     
-    with patch("src.tasks.worker.celery_app.control.revoke") as mock_revoke:
+    with patch("src.tasks.worker.celery_app.control.revoke"):
         result = await service.stop_process(process.id, user_id=user.id)
         
         assert result["status"] == "stopped"

@@ -15,7 +15,6 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-from celery import current_task
 from celery.exceptions import MaxRetriesExceededError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, select, update
@@ -23,7 +22,6 @@ from sqlalchemy import and_, select, update
 from src.tasks.worker import celery_app, BaseTask
 from src.tasks.process_guards import get_process_skip_reason
 from src.models.ai_comment import AIComment
-from src.models.mymoment_login import MyMomentLogin
 from src.services.scraper_service import ScraperService, ScrapingConfig
 from src.config.database import get_database_manager
 

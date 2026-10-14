@@ -6,15 +6,12 @@ according to FR-001 (email/password authentication) and security requirements.
 """
 
 import hashlib
-import os
 import uuid
-import re
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Tuple
 
 import bcrypt
 import jwt
-from pydantic import EmailStr, ValidationError
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
@@ -148,9 +145,6 @@ class AuthService(BaseService):
 
         # Extract user data while session is active
         user_id = user.id
-        user_email = user.email
-        user_is_active = user.is_active
-        user_is_verified = user.is_verified
 
         # Generate JWT token and create session using extracted data
         access_token = await self._create_user_session(user_id=user_id)

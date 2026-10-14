@@ -9,9 +9,8 @@ import uuid
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any, Union, Tuple
 
-from sqlalchemy import select, and_, or_, func, delete
+from sqlalchemy import select, and_, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
 
 from src.models.mymoment_session import MyMomentSession
 from src.models.mymoment_login import MyMomentLogin

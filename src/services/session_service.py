@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 
-from sqlalchemy import select, delete, and_, or_, func
+from sqlalchemy import select, delete, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.user_session import UserSession

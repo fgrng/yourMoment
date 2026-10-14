@@ -6,16 +6,14 @@ integrating with the existing multi-session scraping infrastructure, process
 scheduling, and duration enforcement capabilities.
 """
 
-import asyncio
 import uuid
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any, Optional, Set, Tuple
+from datetime import datetime, timezone
+from typing import List, Dict, Any, Optional
 from enum import Enum
 
-from sqlalchemy import select, and_, or_, func, update, delete
+from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from src.models.monitoring_process import MonitoringProcess
@@ -733,7 +731,7 @@ class MonitoringService:
         """
         try:
             # Validate process exists and belongs to user
-            process = await self._get_process_with_associations(process_id, user_id)
+            await self._get_process_with_associations(process_id, user_id)
 
             # Import AIComment model
             from src.models.ai_comment import AIComment

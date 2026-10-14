@@ -18,7 +18,6 @@ from celery.result import AsyncResult
 from src.tasks.worker import celery_app, BaseTask
 from src.models.ai_comment import AIComment
 from src.models.monitoring_process import MonitoringProcess
-from src.models.mymoment_session import MyMomentSession
 from src.config.database import get_database_manager
 from src.config.settings import get_settings
 

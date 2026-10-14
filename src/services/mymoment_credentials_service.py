@@ -112,7 +112,7 @@ class MyMomentCredentialsService(BaseService):
             self.db_session.add(credentials)
             await self.db_session.commit()
             await self.db_session.refresh(credentials)
-        except IntegrityError as e:
+        except IntegrityError:
             await self.db_session.rollback()
             raise MyMomentCredentialsValidationError("Failed to create credentials")
 

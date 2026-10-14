@@ -7,19 +7,14 @@ Implements session lifecycle, TTL cleanup, and encrypted session data storage.
 
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, Union, TYPE_CHECKING
-import json
+from typing import Dict, Any, Union
 
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, func, Text
+from sqlalchemy import Column, Boolean, DateTime, ForeignKey, func, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from src.models.base import Base
 from src.config.encryption import encrypt_session_data, decrypt_session_data
-
-# Avoid circular imports
-if TYPE_CHECKING:
-    from src.models.mymoment_login import MyMomentLogin
 
 
 class MyMomentSession(Base):
