@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from src.platforms import ArticleContent, ArticleRef, PlatformUnavailable
 from src.tasks import article_preparation
 from src.tasks.article_preparation import ArticlePreparationTask
 from tests.fixtures.assertions import assert_task_result_shape
@@ -28,56 +27,68 @@ def _bind_task_sessions(task, db_engine):
 async def test_prepare_single_article_transitions_discovered_to_prepared(
     db_session,
     db_engine,
-    monkeypatch,
+    fake_platform,
 ):
     scenario = await build_scenario("article_discovered_not_prepared", db_session)
     await db_session.commit()
-
-    cleanup_calls: list[object] = []
-
-    class FakeScraperService:
-        def __init__(self, session, config):
-            self.session = session
-            self.config = config
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return None
-
-        async def initialize_session_for_login(self, login_id, user_id):
-            return SimpleNamespace(login_id=login_id, user_id=user_id, is_authenticated=True)
-
-        async def get_article_content(self, context, article_id):
-            assert article_id == scenario["ai_comment"].mymoment_article_id
-            return {
-                "content": "Prepared article body captured from the scraper fixture.",
-                "full_html": "<article><p>Prepared article body captured from the scraper fixture.</p></article>",
-                "title": "Prepared Title",
-                "category_id": 14,
-                "task_id": 10,
-            }
-
-        async def cleanup_session(self, login_id):
-            cleanup_calls.append(login_id)
-
-    monkeypatch.setattr(article_preparation, "ScraperService", FakeScraperService)
+    fake_platform.add_article(
+        scenario["ai_comment"].mymoment_article_id,
+        title="Prepared Title",
+        body_text="Prepared article body captured from the platform.",
+        body_html="<article><p>Prepared article body captured from the platform.</p></article>",
+        category="14",
+        extra={"arrangement": "10"},
+    )
 
     task = _bind_task_sessions(ArticlePreparationTask(), db_engine)
     result = await task._prepare_single_article_async(scenario["ai_comment"].id)
 
     assert_task_result_shape(result, required_keys=("status", "ai_comment_id"), expected_status="prepared")
-    assert cleanup_calls == [scenario["login"].id]
 
     await db_session.refresh(scenario["ai_comment"])
     assert scenario["ai_comment"].status == "prepared"
-    assert scenario["ai_comment"].article_content == "Prepared article body captured from the scraper fixture."
+    assert scenario["ai_comment"].article_content == "Prepared article body captured from the platform."
+    assert scenario["ai_comment"].article_raw_html == (
+        "<article><p>Prepared article body captured from the platform.</p></article>"
+    )
     assert scenario["ai_comment"].article_title == "Prepared Title"
     assert scenario["ai_comment"].article_category == 14
     assert scenario["ai_comment"].article_task_id == 10
     assert scenario["ai_comment"].failed_at is None
     assert scenario["ai_comment"].error_message is None
+
+
+async def test_prepare_single_article_connects_with_the_comments_platform_account(
+    db_session,
+    db_engine,
+    fake_platform,
+):
+    scenario = await build_scenario("article_discovered_not_prepared", db_session)
+    await db_session.commit()
+    fake_platform.add_article(scenario["ai_comment"].mymoment_article_id)
+
+    task = _bind_task_sessions(ArticlePreparationTask(), db_engine)
+    await task._prepare_single_article_async(scenario["ai_comment"].id)
+
+    username, _ = scenario["login"].get_credentials()
+    assert [(a.id, a.username) for a in fake_platform.connected_accounts] == [(scenario["login"].id, username)]
+
+
+async def test_prepare_single_article_propagates_platform_errors_for_retry(
+    db_session,
+    db_engine,
+    fake_platform,
+):
+    scenario = await build_scenario("article_discovered_not_prepared", db_session)
+    await db_session.commit()
+    fake_platform.fail("fetch_article", PlatformUnavailable("timeout"))
+
+    task = _bind_task_sessions(ArticlePreparationTask(), db_engine)
+    with pytest.raises(PlatformUnavailable):
+        await task._prepare_single_article_async(scenario["ai_comment"].id)
+
+    await db_session.refresh(scenario["ai_comment"])
+    assert scenario["ai_comment"].status == "discovered"
 
 
 async def test_prepare_single_article_skips_rows_that_already_advanced(db_session, db_engine):
@@ -99,7 +110,13 @@ async def test_update_article_content_is_idempotent_for_stale_rows(db_session, d
     task = _bind_task_sessions(ArticlePreparationTask(), db_engine)
     updated = await task._update_article_content(
         scenario["ai_comment"].id,
-        {"content": "race-lost overwrite", "full_html": "<p>race-lost overwrite</p>"},
+        ArticleContent(
+            ref=ArticleRef(id="1", url="https://www.mymoment.ch/article/1/"),
+            title="race-lost title",
+            author="Author",
+            body_html="<p>race-lost overwrite</p>",
+            body_text="race-lost overwrite",
+        ),
         expected_status="discovered",
     )
 

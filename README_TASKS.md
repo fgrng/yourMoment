@@ -194,7 +194,7 @@ Tasks are automatically routed by module name:
 
 4. **Article Preparation Stage** (`prepare_article_content` task)
    - Runs per AIComment with status='discovered'
-   - Fetches full article content
+   - Fetches full article content through the platform interface (`src/platforms`: `connect`, `fetch_article`)
    - Updates AIComment with content, sets status='prepared'
    - Per-article error isolation (failures don't cascade)
 

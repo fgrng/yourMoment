@@ -15,7 +15,7 @@ import re
 from datetime import datetime, timezone
 from email.utils import format_datetime, parsedate_to_datetime
 from http.cookies import SimpleCookie
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 from bs4 import BeautifulSoup
@@ -27,30 +27,9 @@ from src.services.mymoment_session_service import MyMomentSessionService
 from src.services.mymoment_credentials_service import MyMomentCredentialsService
 from src.config.settings import get_settings
 from src.utils.url_sanitizer import sanitize_url, is_url_malformed
+from src.platforms.mymoment import parsers
 
 logger = logging.getLogger(__name__)
-
-
-# Category mapping: category_id -> category_name
-# Based on myMoment platform category options (7 core communication functions)
-CATEGORY_MAPPING = {
-    4: "Anleiten",
-    14: "Berichten",
-    5: "Erklären",
-    6: "Fragen",
-    7: "Informieren",
-    8: "Überzeugen",
-    9: "Unterhalten",
-}
-
-# Task mapping: task_id -> task_name
-# Separate from categories in the new myMoment platform structure
-# Tasks are writing assignments (Schreibaufgaben) that can be filtered independently
-TASK_MAPPING = {
-    4: "Fiktionaler Dialog zwischen zwei Gegenständen",
-    10: "Wo ist Hugo? (Anleitung schreiben)",
-    # Additional tasks will be added as they are discovered
-}
 
 
 @dataclass
@@ -99,8 +78,8 @@ class ArticleMetadata:
     author: str
     date: str
     status: str
-    category_id: Optional[int]  # Category ID only, name can be looked up from CATEGORY_MAPPING
-    task_id: Optional[int]  # Task ID only, name can be looked up from TASK_MAPPING
+    category_id: Optional[int]  # Category ID only, name can be looked up from parsers.CATEGORY_MAPPING
+    task_id: Optional[int]  # Task ID only, name can be looked up from parsers.TASK_MAPPING
     visibility: str
     url: str
     content_preview: Optional[str] = None
@@ -1093,7 +1072,7 @@ class ScraperService:
                 html = await response.text()
 
             soup = BeautifulSoup(html, 'html.parser')
-            article_content = self._parse_article_detail(soup, article_id)
+            article_content = parsers.parse_article_detail(soup, article_id)
             article_content['url'] = article_url
 
             context.last_activity = datetime.utcnow()
@@ -1104,82 +1083,6 @@ class ScraperService:
         except Exception as e:
             logger.error(f"Failed to get article content for {article_id}: {e}")
             raise ScrapingError(f"Article content retrieval failed: {e}")
-
-    def _parse_article_detail(self, soup: BeautifulSoup, article_id: str) -> Dict[str, Any]:
-        """
-        Parse article detail page HTML.
-
-        Args:
-            soup: BeautifulSoup object of the article detail page
-            article_id: Article ID
-
-        Returns:
-            Dictionary with extracted article content
-        """
-        # Extract title
-        title = 'Unknown Title'
-        title_element = soup.find('h1')
-        if title_element:
-            title_text = title_element.text.strip()
-            if ' von ' in title_text:
-                title = title_text.split(' von ')[0].strip()
-            else:
-                title = title_text
-
-        # Extract author
-        author = 'Unknown Author'
-        if title_element and ' von ' in title_element.text:
-            author = title_element.text.split(' von ')[1].strip()
-
-        # Extract content
-        content = ''
-        content_elements = soup.select('.article .highlight-target p')
-        if content_elements:
-            content = '\n'.join([el.text.strip() for el in content_elements])
-        else:
-            # Alternative: try text-to-speech area
-            tts_element = soup.find('textarea', {'id': 'text-to-speech'})
-            if tts_element:
-                content = tts_element.text.strip()
-
-        # Extract full HTML content
-        full_article_html_element = soup.find('div', class_='article')
-        if full_article_html_element:
-            # Create a copy to avoid modifying the original soup
-            import copy
-            full_article_html_copy = copy.copy(full_article_html_element)
-            # Remove textarea elements
-            for textarea in full_article_html_copy.find_all('textarea'):
-                textarea.decompose()
-            full_article_html = str(full_article_html_copy)
-        else:
-            full_article_html = ''
-
-        # Extract category and task IDs from detail page
-        category_id, task_id = self._extract_category_and_task_from_detail(soup)
-
-        # Extract CSRF token for commenting
-        csrf_token = None
-        comment_form = soup.find('form', {'action': re.compile(f'/article/{article_id}/comment/')})
-        if not comment_form:
-            # Try a more generic match if exact article_id doesn't match
-            comment_form = soup.find('form', {'action': re.compile(r'/article/\d+/comment/')})
-            
-        if comment_form:
-            csrf_input = comment_form.find('input', {'name': 'csrfmiddlewaretoken'})
-            if csrf_input:
-                csrf_token = csrf_input.get('value')
-
-        return {
-            'id': article_id,
-            'title': title,
-            'author': author,
-            'content': content,
-            'full_html': full_article_html,
-            'category_id': category_id,
-            'task_id': task_id,
-            'csrf_token': csrf_token
-        }
 
     async def post_comment(
         self,
@@ -1256,81 +1159,6 @@ class ScraperService:
         except Exception as e:
             logger.error(f"Failed to post comment to article {article_id}: {e}")
             raise ScrapingError(f"Comment posting failed: {e}")
-
-    def _lookup_category_id(self, category_name: str) -> Optional[int]:
-        """
-        Look up category ID by name from CATEGORY_MAPPING.
-
-        Args:
-            category_name: Category name extracted from HTML (e.g., "Anleiten")
-
-        Returns:
-            Category ID or None if not found
-        """
-        for cat_id, cat_name in CATEGORY_MAPPING.items():
-            if cat_name == category_name:
-                return cat_id
-        logger.debug(f"Category '{category_name}' not found in CATEGORY_MAPPING")
-        return None
-
-    def _lookup_task_id(self, task_name: str) -> Optional[int]:
-        """
-        Look up task ID by name from TASK_MAPPING.
-
-        Args:
-            task_name: Task name extracted from HTML (e.g., "Wo ist Hugo? (Anleitung schreiben)")
-
-        Returns:
-            Task ID or None if not found
-        """
-        for task_id, t_name in TASK_MAPPING.items():
-            if t_name == task_name:
-                return task_id
-        logger.debug(f"Task '{task_name}' not found in TASK_MAPPING")
-        return None
-
-    def _extract_category_and_task_from_detail(self, soup: BeautifulSoup) -> Tuple[Optional[int], Optional[int]]:
-        """
-        Extract category and task IDs from article detail page HTML.
-
-        Looks for the social list items containing "Kategorie:" and "Aufgabe:".
-
-        Example HTML:
-        <ul class="social list-group list-group-horizontal">
-            <li class="list-group-item">Kategorie: Anleiten</li>
-            <li class="list-group-item">Aufgabe: Wo ist Hugo? (Anleitung schreiben)</li>
-        </ul>
-
-        Args:
-            soup: BeautifulSoup object of the article detail page
-
-        Returns:
-            Tuple of (category_id, task_id) or (None, None) if not found
-        """
-        category_id = None
-        task_id = None
-
-        # Find all list items in social list groups
-        list_items = soup.find_all('li', class_='list-group-item')
-
-        for item in list_items:
-            text = item.get_text(strip=True)
-
-            # Extract category
-            if text.startswith('Kategorie:'):
-                category_name = text.replace('Kategorie:', '').strip()
-                category_id = self._lookup_category_id(category_name)
-                if category_id:
-                    logger.debug(f"Extracted category from detail: {category_name} -> {category_id}")
-
-            # Extract task
-            elif text.startswith('Aufgabe:'):
-                task_name = text.replace('Aufgabe:', '').strip()
-                task_id = self._lookup_task_id(task_name)
-                if task_id:
-                    logger.debug(f"Extracted task from detail: {task_name} -> {task_id}")
-
-        return category_id, task_id
 
     async def _rate_limit(self):
         """Apply rate limiting to requests."""

@@ -34,7 +34,7 @@ os.environ.setdefault("LOG_FILE_ENABLED", "false")
 # Pull in DB fixtures so all test modules can declare db_engine / db_session
 # without importing from tests.support directly.
 # ---------------------------------------------------------------------------
-pytest_plugins = ["tests.support.database"]
+pytest_plugins = ["tests.support.database", "tests.support.platform"]
 
 # ---------------------------------------------------------------------------
 # Imports after env-var setup so app code reads the right values.

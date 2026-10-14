@@ -1,0 +1,100 @@
+"""Stateful fake platform adapter and the fixture that installs it via the registry."""
+
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+import uuid
+from typing import Any, AsyncIterator, Mapping, Optional
+
+import pytest
+
+from src.platforms import (
+    ArticleContent,
+    ArticleRef,
+    PlatformAccount,
+    PlatformRejected,
+    use_adapter,
+)
+
+
+class InMemoryCookieStore:
+    """Cookie store for the myMoment adapter that keeps saved data in a dict."""
+
+    def __init__(self) -> None:
+        self.saved: dict[uuid.UUID, dict[str, Any]] = {}
+
+    async def load(self, account_id: uuid.UUID) -> Optional[dict[str, Any]]:
+        return self.saved.get(account_id)
+
+    async def save(self, account_id: uuid.UUID, data: dict[str, Any]) -> None:
+        self.saved[account_id] = data
+
+
+class FakeConnection:
+    def __init__(self, platform: "FakePlatform", account: PlatformAccount) -> None:
+        self._platform = platform
+        self.account = account
+
+    async def fetch_article(self, ref: ArticleRef) -> ArticleContent:
+        self._platform._raise_injected("fetch_article")
+        try:
+            return self._platform.articles[ref.id]
+        except KeyError:
+            raise PlatformRejected(f"article {ref.id} not found") from None
+
+
+class FakePlatform:
+    """In-memory platform: articles can be added, errors injected per operation."""
+
+    def __init__(self, base_url: str = "https://fake.example") -> None:
+        self.base_url = base_url
+        self.articles: dict[str, ArticleContent] = {}
+        self.connected_accounts: list[PlatformAccount] = []
+        self._errors: dict[str, Exception] = {}
+
+    def fail(self, operation: str, error: Exception) -> None:
+        """Raise `error` on every call of `operation` ("connect", "fetch_article")."""
+        self._errors[operation] = error
+
+    def add_article(
+        self,
+        article_id: str,
+        *,
+        title: str = "Fake Title",
+        author: str = "Fake Author",
+        body_text: str = "Fake body.",
+        body_html: Optional[str] = None,
+        category: Optional[str] = None,
+        extra: Optional[Mapping[str, str]] = None,
+    ) -> ArticleRef:
+        ref = ArticleRef(id=article_id, url=f"{self.base_url}/articles/{article_id}")
+        self.articles[article_id] = ArticleContent(
+            ref=ref,
+            title=title,
+            author=author,
+            body_html=body_html if body_html is not None else f"<p>{body_text}</p>",
+            body_text=body_text,
+            category=category,
+            extra=dict(extra or {}),
+        )
+        return ref
+
+    @asynccontextmanager
+    async def connect(self, account: PlatformAccount) -> AsyncIterator[FakeConnection]:
+        self._raise_injected("connect")
+        self.connected_accounts.append(account)
+        yield FakeConnection(self, account)
+
+    def _raise_injected(self, operation: str) -> None:
+        error = self._errors.get(operation)
+        if error is not None:
+            raise error
+
+
+@pytest.fixture
+def fake_platform():
+    """Install a FakePlatform behind `connect` for the duration of a test."""
+    platform = FakePlatform()
+    use_adapter(platform)
+    yield platform
+    use_adapter(None)

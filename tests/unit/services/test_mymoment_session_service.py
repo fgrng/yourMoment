@@ -100,3 +100,37 @@ async def test_update_session_data(db_session: AsyncSession):
     
     await db_session.refresh(session)
     assert session.get_session_data() == {"new": "data"}
+
+
+def _cookie_store(db_engine):
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from src.services.mymoment_session_service import MyMomentSessionCookieStore
+
+    session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
+
+    async def new_session():
+        return session_factory()
+
+    return MyMomentSessionCookieStore(new_session)
+
+
+async def test_cookie_store_loads_what_it_saved(db_session: AsyncSession, db_engine):
+    user = await create_user(db_session)
+    login = await create_mymoment_login(db_session, user=user)
+    await db_session.commit()
+    store = _cookie_store(db_engine)
+
+    await store.save(login.id, {"cookies": [{"name": "sessionid", "value": "abc"}]})
+    await store.save(login.id, {"cookies": [{"name": "sessionid", "value": "def"}]})
+
+    assert await store.load(login.id) == {"cookies": [{"name": "sessionid", "value": "def"}]}
+
+
+async def test_cookie_store_ignores_expired_sessions(db_session: AsyncSession, db_engine):
+    user = await create_user(db_session)
+    login = await create_mymoment_login(db_session, user=user)
+    await create_expired_mymoment_session(db_session, mymoment_login=login)
+    await db_session.commit()
+
+    assert await _cookie_store(db_engine).load(login.id) is None

@@ -7,7 +7,7 @@ multi-login support, session isolation, and encrypted session data storage.
 
 import uuid
 from datetime import datetime
-from typing import Optional, Dict, Any, Union
+from typing import Awaitable, Callable, Optional, Dict, Any, Union
 
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.mymoment_session import MyMomentSession
 from src.models.mymoment_login import MyMomentLogin
 from src.services.base_service import BaseService
+from src.config.database import get_database_manager
 
 
 class MyMomentSessionServiceError(Exception):
@@ -338,3 +339,42 @@ class MyMomentSessionService(BaseService):
             await self.db_session.commit()
 
         return count
+
+
+async def _new_db_session() -> AsyncSession:
+    sessionmaker = await get_database_manager().create_sessionmaker()
+    return sessionmaker()
+
+
+class MyMomentSessionCookieStore:
+    """
+    Cookie store of the myMoment adapter, backed by encrypted MyMomentSession rows.
+
+    Each call opens its own short-lived DB session, so no DB connection is
+    held while the adapter talks HTTP.
+    """
+
+    def __init__(self, new_db_session: Callable[[], Awaitable[AsyncSession]] = _new_db_session):
+        self._new_db_session = new_db_session
+
+    async def load(self, account_id: uuid.UUID) -> Optional[Dict[str, Any]]:
+        """Return the stored cookie data of the account's usable session, or None."""
+        db_session = await self._new_db_session()
+        async with db_session:
+            record = await MyMomentSessionService(db_session).get_active_session_for_login(account_id)
+            if record is None or not record.is_usable():
+                return None
+            return record.get_session_data(as_dict=True)
+
+    async def save(self, account_id: uuid.UUID, data: Dict[str, Any]) -> None:
+        """Store cookie data and renew the account's session (create one if needed)."""
+        db_session = await self._new_db_session()
+        async with db_session:
+            service = MyMomentSessionService(db_session)
+            record = await service.get_active_session_for_login(account_id)
+            if record is None or not record.is_usable():
+                await service.create_session(mymoment_login_id=account_id, session_data=data)
+                return
+            record.update_session_data(data)
+            record.renew_session()
+            await db_session.commit()

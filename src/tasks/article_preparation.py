@@ -3,7 +3,7 @@ Article content preparation task for myMoment monitoring processes.
 
 This module implements Task 2 of the refactored monitoring pipeline:
 - Reads one discovered article (status='discovered')
-- Fetches its full content using ScraperService
+- Fetches its full content through the platform interface
 - Updates the AIComment record with content and status='prepared'
 """
 
@@ -21,7 +21,8 @@ from sqlalchemy import and_, update
 from src.tasks.worker import celery_app, BaseTask
 from src.tasks.process_guards import get_process_skip_reason
 from src.models.ai_comment import AIComment
-from src.services.scraper_service import ScraperService, ScrapingConfig
+from src.platforms import ArticleContent, ArticleRef, PlatformAccount, connect
+from src.platforms.accounts import load_platform_account
 from src.config.database import get_database_manager
 
 logger = logging.getLogger(__name__)
@@ -70,10 +71,23 @@ class ArticlePreparationTask(BaseTask):
                 status=ai_comment.status,
             )
 
+    async def _load_platform_account(self, snapshot: ArticleSnapshot) -> PlatformAccount:
+        """Load the decrypted platform account of the AIComment."""
+        session = await self.get_async_session()
+        async with session:
+            account = await load_platform_account(
+                session, snapshot.mymoment_login_id, snapshot.user_id
+            )
+        if account is None:
+            raise RuntimeError(
+                f"Platform account {snapshot.mymoment_login_id} not found or inactive"
+            )
+        return account
+
     async def _update_article_content(
         self,
         ai_comment_id: uuid.UUID,
-        content_data: Dict[str, Any],
+        content: ArticleContent,
         expected_status: str = "discovered",
     ) -> bool:
         """
@@ -83,7 +97,7 @@ class ArticlePreparationTask(BaseTask):
 
         Args:
             ai_comment_id: AIComment UUID to update
-            content_data: Dictionary with article content fields
+            content: Article content read from the platform
 
         Returns:
             True if update successful, False otherwise
@@ -92,19 +106,21 @@ class ArticlePreparationTask(BaseTask):
             session = await self.get_async_session()
             async with session:
                 values = {
-                    "article_content": content_data.get("content", ""),
-                    "article_raw_html": content_data.get("full_html", ""),
+                    "article_content": content.body_text,
+                    "article_raw_html": content.body_html,
+                    "article_title": content.title,
                     "article_scraped_at": datetime.utcnow(),
                     "status": "prepared",
                     "error_message": None,
                     "failed_at": None,
                 }
-                if "title" in content_data:
-                    values["article_title"] = content_data["title"]
-                if content_data.get("category_id") is not None:
-                    values["article_category"] = content_data["category_id"]
-                if content_data.get("task_id") is not None:
-                    values["article_task_id"] = content_data["task_id"]
+                # The schema still stores myMoment's integer IDs
+                category_id = _as_int(content.category)
+                if category_id is not None:
+                    values["article_category"] = category_id
+                arrangement_id = _as_int(content.extra.get("arrangement"))
+                if arrangement_id is not None:
+                    values["article_task_id"] = arrangement_id
 
                 result = await session.execute(
                     update(AIComment)
@@ -225,28 +241,16 @@ class ArticlePreparationTask(BaseTask):
                 "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
             }
 
-        scraping_config = ScrapingConfig.from_settings()
-
         try:
-            session = await self.get_async_session()
-            async with session:
-                async with ScraperService(session, scraping_config) as scraper:
-                    context = await scraper.initialize_session_for_login(
-                        login_id=snapshot.mymoment_login_id,
-                        user_id=snapshot.user_id,
-                    )
-                    content_data = await scraper.get_article_content(
-                        context=context,
-                        article_id=snapshot.mymoment_article_id,
-                    )
-                    await scraper.cleanup_session(snapshot.mymoment_login_id)
-
-            if not content_data:
-                raise RuntimeError("No content returned by scraper")
+            account = await self._load_platform_account(snapshot)
+            async with connect(account) as platform:
+                content = await platform.fetch_article(
+                    ArticleRef(id=snapshot.mymoment_article_id, url=snapshot.article_url)
+                )
 
             updated = await self._update_article_content(
                 snapshot.ai_comment_id,
-                content_data,
+                content,
                 expected_status="discovered",
             )
             return {
@@ -262,6 +266,13 @@ class ArticlePreparationTask(BaseTask):
                 exc,
             )
             raise
+
+
+def _as_int(value: Optional[str]) -> Optional[int]:
+    """Convert a platform ID string to the integer column, None if not numeric."""
+    if value is None or not value.isdigit():
+        return None
+    return int(value)
 
 
 def _normalize_identifier(identifier: Any, compat_args: tuple[Any, ...]) -> str:

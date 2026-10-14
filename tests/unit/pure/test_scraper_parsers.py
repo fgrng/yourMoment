@@ -89,36 +89,6 @@ def test_extract_article_metadata(scraper):
     assert metadata.status in ["Entwurf", "Lehrpersonenkontrolle", "Publiziert", "Unknown"]
 
 
-def test_extract_category_and_task_from_detail(scraper):
-    """Should extract category and task IDs from articles_get.html fixture."""
-    html = load_html_fixture("articles_get.html")
-    soup = BeautifulSoup(html, "html.parser")
-    
-    category_id, task_id = scraper._extract_category_and_task_from_detail(soup)
-    
-    # Based on CATEGORY_MAPPING/TASK_MAPPING in scraper_service.py
-    # and the content of articles_get.html
-    # We expect these to be either None (if not found/mapped) or the correct ID.
-    # articles_get.html typically has some category like "Erklären" (5) or "Anleiten" (4)
-    assert category_id is not None or task_id is not None
-
-
-def test_parse_article_detail(scraper):
-    """Should extract article content and metadata from articles_get.html fixture."""
-    html = load_html_fixture("articles_get.html")
-    soup = BeautifulSoup(html, "html.parser")
-    
-    article_id = "3170"
-    content = scraper._parse_article_detail(soup, article_id)
-    
-    assert content["id"] == article_id
-    assert content["title"] != "Unknown Title"
-    assert content["author"] != "Unknown Author"
-    assert len(content["content"]) > 0
-    assert "article" in content["full_html"]
-    assert content["csrf_token"] is not None
-
-
 def test_parse_student_dashboard_articles(scraper):
     """Should parse articles from a student dashboard."""
     # The tracked HTML corpus does not currently include a dedicated student
