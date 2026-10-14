@@ -27,7 +27,7 @@ discover_articles task (queue: discovery)
     ├─→ generate_comment_for_article task (queue: generation)
     └─→ post_comment_for_article task (queue: posting, skipped if generate_only)
 
-Each task polls for work via AIComment.status:
+Each stage advances AIComment.status:
     Discovery Stage          Preparation Stage        Generation Stage       Posting Stage
     ┌─────────────────────┐  ┌────────────────────┐   ┌──────────────────┐  ┌──────────────────┐
     │  discover_articles  │  │  prepare_content   │   │  generate_comment│  │  post_comments   │

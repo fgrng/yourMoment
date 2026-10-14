@@ -350,8 +350,6 @@ MyMomentCredentialsService  PromptService
 MyMomentSessionService      LLMProviderService
     ↓                           ↓
 ScraperService ←────────────────┘
-    ↓
-CommentService
 ```
 
 ### Service Interactions
@@ -368,7 +366,8 @@ Celery Task
   → MyMomentSessionService.create_session()
   → ScraperService.authenticate()
   → ScraperService.fetch_articles()
-  → CommentService.generate_comment()
+  → llm_service.generate_completion_standalone()
+  → comment_service.validate_comment()
   → ScraperService.post_comment()
 ```
 

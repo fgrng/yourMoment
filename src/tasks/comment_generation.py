@@ -26,7 +26,7 @@ from src.tasks.process_guards import get_process_skip_reason
 from src.models.ai_comment import AIComment
 from src.models.llm_provider import LLMProviderConfiguration
 from src.models.prompt_template import PromptTemplate
-from src.services.llm_service import LLMProviderError, generate_completion_standalone
+from src.services.llm_service import generate_completion_standalone
 from src.services.comment_service import validate_comment, ensure_html_paragraphs
 from src.services.llm_types import LLMGenerationConfig, GenerationResult
 from src.config.database import get_database_manager
