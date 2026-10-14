@@ -10,6 +10,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from http.cookies import CookieError
 from typing import Any, AsyncIterator, Callable, Optional
 from urllib.parse import urljoin
 
@@ -95,6 +96,7 @@ class MyMomentConnection:
         self._jar = jar
         self._rate_limit_delay = rate_limit_delay
         self._last_request_time: Optional[float] = None
+        self._rate_limit_lock = asyncio.Lock()
         self._csrf_token: Optional[str] = None
 
     async def fetch_article(self, ref: ArticleRef) -> ArticleContent:
@@ -135,18 +137,23 @@ class MyMomentConnection:
             logger.warning(f"Failed to persist myMoment cookies for account {self._account.id}: {e}")
 
     async def _restore_session(self, cookie_store: CookieStore) -> bool:
+        # Like saving, loading is best-effort: without stored cookies we log in.
         try:
             data = await cookie_store.load(self._account.id)
+        except Exception as e:
+            logger.warning(f"Failed to load myMoment cookies for account {self._account.id}: {e}")
+            return False
+
+        try:
             if not restore_cookie_jar(self._jar, data, self._base_url):
                 return False
-        except Exception as e:
-            logger.warning(f"Cookie restore failed for account {self._account.id}: {e}")
+        except (AttributeError, KeyError, TypeError, ValueError, CookieError) as e:
+            logger.warning(f"Stored myMoment cookies of account {self._account.id} are corrupt: {e}")
             self._jar.clear()
             return False
 
         self._csrf_token = data.get('csrf_token') or None
-        page = await self._request('GET', f"{self._base_url}/")
-        if page.status == 200 and parsers.is_logged_in(page.soup()):
+        if await self._is_logged_in():
             return True
 
         logger.warning(f"Stored myMoment cookies expired for account {self._account.id}")
@@ -161,7 +168,7 @@ class MyMomentConnection:
             raise PlatformUnavailable("Could not find CSRF token on myMoment login page")
         self._csrf_token = csrf_token
 
-        landing = await self._request(
+        await self._request(
             'POST',
             login_url,
             data={
@@ -175,8 +182,13 @@ class MyMomentConnection:
                 'Content-Type': 'application/x-www-form-urlencoded'
             },
         )
-        if not parsers.is_logged_in(landing.soup()):
+        if not await self._is_logged_in():
             raise PlatformAuthError(f"myMoment rejected the credentials of account {self._account.id}")
+
+    async def _is_logged_in(self) -> bool:
+        """Check the home page, wherever the login redirect landed."""
+        page = await self._request('GET', f"{self._base_url}/")
+        return page.status == 200 and parsers.is_logged_in(page.soup())
 
     async def _request(self, method: str, url: str, **kwargs: Any) -> _Page:
         """
@@ -220,9 +232,11 @@ class MyMomentConnection:
         raise PlatformUnavailable(f"Maximum redirects ({_MAX_REDIRECTS}) exceeded while accessing {url}")
 
     async def _rate_limit(self) -> None:
-        loop = asyncio.get_running_loop()
-        if self._last_request_time is not None:
-            elapsed = loop.time() - self._last_request_time
-            if elapsed < self._rate_limit_delay:
-                await asyncio.sleep(self._rate_limit_delay - elapsed)
-        self._last_request_time = loop.time()
+        # The lock makes concurrent requests on one connection wait in turn
+        async with self._rate_limit_lock:
+            loop = asyncio.get_running_loop()
+            if self._last_request_time is not None:
+                elapsed = loop.time() - self._last_request_time
+                if elapsed < self._rate_limit_delay:
+                    await asyncio.sleep(self._rate_limit_delay - elapsed)
+            self._last_request_time = loop.time()

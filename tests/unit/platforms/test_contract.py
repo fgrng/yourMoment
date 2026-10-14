@@ -27,7 +27,7 @@ pytestmark = [pytest.mark.unit]
 def _account() -> PlatformAccount:
     return PlatformAccount(
         id=uuid.uuid4(),
-        base_url="https://www.mymoment.ch",
+        base_url=MYMOMENT_BASE_URL,
         username="teacher",
         password="secret",
         role="user",

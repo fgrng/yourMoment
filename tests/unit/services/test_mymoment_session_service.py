@@ -134,3 +134,15 @@ async def test_cookie_store_ignores_expired_sessions(db_session: AsyncSession, d
     await db_session.commit()
 
     assert await _cookie_store(db_engine).load(login.id) is None
+
+
+async def test_cookie_store_save_replaces_an_expired_session(db_session: AsyncSession, db_engine):
+    user = await create_user(db_session)
+    login = await create_mymoment_login(db_session, user=user)
+    await create_expired_mymoment_session(db_session, mymoment_login=login)
+    await db_session.commit()
+    store = _cookie_store(db_engine)
+
+    await store.save(login.id, {"cookies": [{"name": "sessionid", "value": "fresh"}]})
+
+    assert await store.load(login.id) == {"cookies": [{"name": "sessionid", "value": "fresh"}]}

@@ -20,7 +20,7 @@ def logged_out_page() -> AiohttpStubResponse:
 
 
 def queue_login(http: AiohttpStubSession, *, succeed: bool = True, session_cookie: str = "fresh-session") -> None:
-    """Queue the Django login: form with CSRF, POST, landing page."""
+    """Queue the Django login: form with CSRF, POST, landing page, home page check."""
     http.queue_response("GET", LOGIN_URL, logged_out_page())
     if succeed:
         http.queue_response(
@@ -32,8 +32,10 @@ def queue_login(http: AiohttpStubSession, *, succeed: bool = True, session_cooki
             ),
         )
         http.queue_response("GET", HOME_URL, logged_in_page())
+        http.queue_response("GET", HOME_URL, logged_in_page())
     else:
         http.queue_response("POST", LOGIN_URL, logged_out_page())
+        http.queue_response("GET", HOME_URL, logged_out_page())
 
 
 def queue_article(http: AiohttpStubSession, article_id: str = "3170", fixture: str = "articles_get") -> None:

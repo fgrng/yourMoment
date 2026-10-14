@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 import pytest
 
-from src.platforms import ArticleRef, PlatformAccount, PlatformUnavailable
+from src.platforms import ArticleRef, PlatformAccount, PlatformRejected, PlatformUnavailable
 from src.platforms.mymoment.adapter import MyMomentAdapter
 from tests.fixtures.stubs import AiohttpStubResponse, AiohttpStubSession
 from tests.support.mymoment_http import (
@@ -150,6 +151,106 @@ async def test_fetch_article_follows_malformed_redirect(adapter, http, account):
 async def test_fetch_article_on_server_error_raises_unavailable(adapter, http, account):
     queue_login(http)
     http.queue_response("GET", ARTICLE_URL, AiohttpStubResponse(status=503))
+
+    async with adapter.connect(account) as connection:
+        with pytest.raises(PlatformUnavailable):
+            await connection.fetch_article(ArticleRef(id="3170", url=ARTICLE_URL))
+
+
+async def test_login_is_confirmed_on_home_page_wherever_it_lands(adapter, http, account):
+    http.queue_response("GET", LOGIN_URL, logged_out_page())
+    http.queue_response(
+        "POST",
+        LOGIN_URL,
+        AiohttpStubResponse(status=302, headers={"Location": "/accounts/profile/"}),
+    )
+    http.queue_response(
+        "GET",
+        f"{MYMOMENT_BASE_URL}/accounts/profile/",
+        AiohttpStubResponse(status=200, body="<html><body><h1>Profil</h1></body></html>"),
+    )
+    http.queue_response("GET", HOME_URL, logged_in_page())
+
+    async with adapter.connect(account) as connection:
+        assert connection is not None
+
+
+class _TimedStubSession(AiohttpStubSession):
+    """Records when each request reached the network."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.sent_at: list[float] = []
+
+    def request(self, method, url, **kwargs):
+        self.sent_at.append(asyncio.get_running_loop().time())
+        return super().request(method, url, **kwargs)
+
+
+async def test_concurrent_requests_on_one_connection_keep_the_rate_limit(cookie_store, account):
+    http = _TimedStubSession()
+    adapter = MyMomentAdapter(cookie_store=cookie_store, rate_limit_delay=0.05, http_session_factory=http.as_factory())
+    cookie_store.saved[account.id] = _stored_session("stored-session")
+    http.queue_response("GET", HOME_URL, logged_in_page())
+    queue_article(http, "3170")
+    queue_article(http, "3171")
+
+    async with adapter.connect(account) as connection:
+        await asyncio.gather(
+            connection.fetch_article(ArticleRef(id="3170", url=ARTICLE_URL)),
+            connection.fetch_article(ArticleRef(id="3171", url=f"{MYMOMENT_BASE_URL}/article/3171/")),
+        )
+
+    gaps = [later - earlier for earlier, later in zip(http.sent_at, http.sent_at[1:])]
+    assert min(gaps) >= 0.045
+
+
+async def test_corrupt_stored_cookies_lead_to_new_login(adapter, http, cookie_store, account):
+    cookie_store.saved[account.id] = {"cookies": [{"value": "no-name"}], "csrf_token": None}
+    queue_login(http, session_cookie="fresh-session")
+
+    async with adapter.connect(account):
+        pass
+
+    assert _stored_cookie_value(cookie_store, account) == "fresh-session"
+
+
+class _FailingSaveCookieStore(InMemoryCookieStore):
+    async def save(self, account_id, data):
+        raise RuntimeError("database is locked")
+
+
+async def test_failed_cookie_save_keeps_the_connection_usable(http, account):
+    adapter = MyMomentAdapter(cookie_store=_FailingSaveCookieStore(), http_session_factory=http.as_factory())
+    queue_login(http)
+    queue_article(http, "3170")
+
+    async with adapter.connect(account) as connection:
+        content = await connection.fetch_article(ArticleRef(id="3170", url=ARTICLE_URL))
+
+    assert content.title == "Beispieldialog"
+
+
+async def test_login_page_without_csrf_token_raises_unavailable(adapter, http, account):
+    http.queue_response("GET", LOGIN_URL, AiohttpStubResponse(status=200, body="<html><body>Wartung</body></html>"))
+
+    with pytest.raises(PlatformUnavailable):
+        async with adapter.connect(account):
+            pass
+
+
+async def test_fetch_missing_article_raises_rejected(adapter, http, account):
+    queue_login(http)
+    http.queue_response("GET", ARTICLE_URL, AiohttpStubResponse(status=404))
+
+    async with adapter.connect(account) as connection:
+        with pytest.raises(PlatformRejected):
+            await connection.fetch_article(ArticleRef(id="3170", url=ARTICLE_URL))
+
+
+async def test_redirect_without_location_raises_unavailable(adapter, http, account):
+    queue_login(http)
+    http.queue_response("GET", ARTICLE_URL, AiohttpStubResponse(status=302))
 
     async with adapter.connect(account) as connection:
         with pytest.raises(PlatformUnavailable):

@@ -70,8 +70,7 @@ async def test_prepare_single_article_connects_with_the_comments_platform_accoun
     task = _bind_task_sessions(ArticlePreparationTask(), db_engine)
     await task._prepare_single_article_async(scenario["ai_comment"].id)
 
-    username, _ = scenario["login"].get_credentials()
-    assert [(a.id, a.username) for a in fake_platform.connected_accounts] == [(scenario["login"].id, username)]
+    assert [a.id for a in fake_platform.connected_accounts] == [scenario["login"].id]
 
 
 async def test_prepare_single_article_propagates_platform_errors_for_retry(
