@@ -17,6 +17,7 @@ from tests.support.mymoment_http import (
     logged_in_page,
     logged_out_page,
     queue_article,
+    queue_article_list,
     queue_login,
 )
 from tests.support.platform import InMemoryCookieStore
@@ -255,3 +256,106 @@ async def test_redirect_without_location_raises_unavailable(adapter, http, accou
     async with adapter.connect(account) as connection:
         with pytest.raises(PlatformUnavailable):
             await connection.fetch_article(ArticleRef(id="3170", url=ARTICLE_URL))
+
+
+async def test_list_articles_reads_category_from_each_card(adapter, http, account):
+    # articles_index.html, classroom 82: two Informieren (7), one Überzeugen (8)
+    target = {"classroom": "82"}
+    queue_login(http)
+    queue_article_list(http, target)
+
+    async with adapter.connect(account) as connection:
+        articles = await connection.list_articles(target)
+
+    assert [(a.ref.id, a.category) for a in articles] == [("4601", "7"), ("4602", "7"), ("4603", "8")]
+
+
+async def test_list_articles_category_target_drops_other_categories(adapter, http, account):
+    """Regression: the category filter used to pass every article through."""
+    target = {"classroom": "82", "category": "8"}
+    queue_login(http)
+    queue_article_list(http, target)
+
+    async with adapter.connect(account) as connection:
+        articles = await connection.list_articles(target)
+
+    assert [a.ref.id for a in articles] == ["4603"]
+
+
+async def test_list_articles_returns_card_metadata(adapter, http, account):
+    queue_login(http)
+    queue_article_list(http, {"classroom": "home"})
+
+    async with adapter.connect(account) as connection:
+        [article] = await connection.list_articles({"classroom": "home"})
+
+    assert (article.ref.url, article.title, article.author, article.extra["visibility"]) == (
+        f"{MYMOMENT_BASE_URL}/article/4501/",
+        "Beispieltext Zuhause 01",
+        "SampleAuthor10",
+        "Beispielklasse A (Testschule)",
+    )
+
+
+_TEACHER_TABLE = """
+<div id="pills-82"><div class="table-responsive"><table><tbody>
+  <tr>
+    <td><a href="/article/3170/">Title 1</a></td><td>Author 1</td><td>Class A</td>
+    <td><ul><li>Informieren</li></ul></td><td><ul><li>Wo ist Hugo? (Anleitung schreiben)</li></ul></td>
+    <td>Publiziert</td><td>04.02.2026 um 18:04 Uhr</td>
+  </tr>
+  <tr>
+    <td><a href="/article/3171/">Title 2</a></td><td>Author 2</td><td>Class A</td>
+    <td><ul><li>Unterhalten</li></ul></td><td><ul><li></li></ul></td>
+    <td>Entwurf</td><td>05.02.2026 um 08:00 Uhr</td>
+  </tr>
+</tbody></table></div></div>
+"""
+
+
+async def test_list_articles_reads_the_teacher_table(adapter, http, account):
+    target = {"classroom": "82"}
+    queue_login(http)
+    queue_article_list(http, target, body=_TEACHER_TABLE)
+
+    async with adapter.connect(account) as connection:
+        articles = await connection.list_articles(target)
+
+    assert [(a.ref.id, a.category, a.extra.get("arrangement"), a.extra["status"]) for a in articles] == [
+        ("3170", "7", "10", "Publiziert"),
+        ("3171", "9", None, "Entwurf"),
+    ]
+
+
+async def test_list_articles_arrangement_target_is_sent_and_kept_on_the_summaries(adapter, http, account):
+    # Cards do not show the arrangement; myMoment filters by the query parameter
+    target = {"classroom": "alle", "arrangement": "4"}
+    queue_login(http)
+    queue_article_list(http, target)
+
+    async with adapter.connect(account) as connection:
+        articles = await connection.list_articles(target)
+
+    assert {a.extra["arrangement"] for a in articles} == {"4"}
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        {"tab": "alle"},
+        {"classroom": "../admin"},
+        {"classroom": "alle", "category": "99"},
+        {"classroom": "alle", "category": "Informieren"},
+        {"classroom": "alle", "arrangement": "Hugo"},
+        {"classroom": 82},
+    ],
+)
+async def test_list_articles_rejects_invalid_target_without_request(adapter, http, account, target):
+    queue_login(http)
+
+    async with adapter.connect(account) as connection:
+        requests_before = len(http.requests)
+        with pytest.raises(PlatformRejected):
+            await connection.list_articles(target)
+
+    assert len(http.requests) == requests_before

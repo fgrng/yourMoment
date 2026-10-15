@@ -55,40 +55,6 @@ def test_parse_article_tabs(scraper):
     assert home_tab.tab_type == "home"
 
 
-def test_parse_article_list_elements(scraper):
-    """Should extract articles from an article list element."""
-    html = load_html_fixture("articles_index.html")
-    soup = BeautifulSoup(html, "html.parser")
-    
-    # Find the article list container
-    article_list_element = soup.select_one('div[class*="article-list"]')
-    assert article_list_element is not None
-    
-    articles = scraper._parse_article_list_elements(article_list_element, limit=5)
-    
-    assert len(articles) > 0
-    assert len(articles) <= 5
-    assert articles[0].id is not None
-    assert articles[0].title is not None
-
-
-def test_extract_article_metadata(scraper):
-    """Should extract metadata from an article card."""
-    html = load_html_fixture("articles_index.html")
-    soup = BeautifulSoup(html, "html.parser")
-    
-    # Find the first article card
-    card = soup.select_one('div[class*="article-list"] > div')
-    assert card is not None
-    
-    metadata = scraper._extract_article_metadata(card)
-    assert metadata is not None
-    assert metadata.id is not None
-    assert metadata.title is not None
-    assert metadata.author is not None
-    assert metadata.status in ["Entwurf", "Lehrpersonenkontrolle", "Publiziert", "Unknown"]
-
-
 def test_parse_student_dashboard_articles(scraper):
     """Should parse articles from a student dashboard."""
     # The tracked HTML corpus does not currently include a dedicated student
@@ -116,33 +82,3 @@ def test_parse_student_dashboard_articles(scraper):
     assert articles[0].title == "Test Article"
     assert articles[0].status == "Publiziert"
     assert articles[0].category == "Unterhalten"
-
-
-def test_parse_article_table_elements(scraper):
-    """Should extract articles from a teacher article table."""
-    teacher_html = """
-    <table>
-        <tbody>
-            <tr>
-                <td><a href="/article/3170/">Title 1</a></td>
-                <td>Author 1</td>
-                <td>Class A</td>
-                <td><ul><li>Category 1</li></ul></td>
-                <td><ul><li>Task 1</li></ul></td>
-                <td>Publiziert</td>
-                <td>04.02.2026 um 18:04 Uhr</td>
-            </tr>
-        </tbody>
-    </table>
-    """
-    soup = BeautifulSoup(teacher_html, "html.parser")
-    table = soup.find('table')
-    articles = scraper._parse_article_table_elements(table, limit=5)
-
-    assert len(articles) == 1
-    assert articles[0].id == "3170"
-    assert articles[0].title == "Title 1"
-    assert articles[0].author == "Author 1"
-    assert articles[0].visibility == "Class A"
-    assert articles[0].status == "Publiziert"
-    assert articles[0].date == "04.02.2026 um 18:04 Uhr"

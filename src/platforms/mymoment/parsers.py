@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 import re
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from bs4 import BeautifulSoup
 
@@ -43,6 +43,107 @@ def extract_login_csrf_token(soup: BeautifulSoup) -> Optional[str]:
     """Return the CSRF token of the login form, or None."""
     csrf_input = soup.find('input', {'name': 'csrfmiddlewaretoken'})
     return csrf_input.get('value') if csrf_input else None
+
+
+def parse_article_list(soup: BeautifulSoup, classroom: str) -> List[Dict[str, Any]]:
+    """
+    Parse the article index for one classroom tab.
+
+    Students see article cards, teachers a table. Each entry has `id`, `href`
+    (as on the page, usually relative), `title`, `author`, `date`, `status`,
+    `visibility`, `category_id` and `task_id` (None where the view lacks them).
+    """
+    tab_content = soup.find('div', {'id': f'pills-{classroom}'})
+    if not tab_content:
+        logger.warning(f"Tab '{classroom}' not found, falling back to whole page")
+        tab_content = soup
+
+    article_list = tab_content.select_one(':scope > div[class*="article-list"]')
+    if article_list:
+        entries = [_parse_article_card(card) for card in article_list.find_all('div', recursive=False)]
+    else:
+        table = tab_content.find('table')
+        rows = table.select('tbody tr') if table else []
+        entries = [_parse_article_row(row) for row in rows]
+    return [entry for entry in entries if entry is not None]
+
+
+def _parse_article_card(card: Any) -> Optional[Dict[str, Any]]:
+    """Parse one article card of the student view."""
+    link = card.find('a')
+    href = link.get('href', '') if link else ''
+    article_id = _article_id_from_href(href)
+    if not article_id:
+        return None
+
+    status = 'Unknown'
+    header = card.find('div', class_=re.compile(r'card-header\s+\w+'))
+    if header:
+        for class_name in header.get('class', []):
+            if class_name in ['entwurf', 'lehrpersonenkontrolle', 'publiziert']:
+                status = class_name.capitalize()
+                break
+
+    # The card shows the category only as an image named after it (e.g. ueberzeugen.png)
+    category_id = None
+    image = card.select_one('.card-body img')
+    if image and image.get('src'):
+        slug = image['src'].rsplit('/', 1)[-1].split('.', 1)[0]
+        category_id = _lookup_id(CATEGORY_MAPPING, slug, normalize=_slug)
+
+    return {
+        'id': article_id,
+        'href': href,
+        'title': _text(card.find('div', class_='article-title'), 'Unknown Title'),
+        'author': _text(card.find('div', class_='article-author'), 'Unknown Author'),
+        'date': _text(card.find('div', class_='article-date'), 'Unknown Date'),
+        'status': status,
+        'visibility': _text(card.find('div', class_='article-classroom'), 'Unknown'),
+        'category_id': category_id,
+        'task_id': None,
+    }
+
+
+def _parse_article_row(row: Any) -> Optional[Dict[str, Any]]:
+    """Parse one table row of the teacher view: title, author, visibility, category, task, status, date."""
+    cells = row.find_all('td')
+    if len(cells) < 7:
+        return None
+    link = cells[0].find('a')
+    href = link.get('href', '') if link else ''
+    article_id = _article_id_from_href(href)
+    if not article_id:
+        return None
+
+    return {
+        'id': article_id,
+        'href': href,
+        'title': link.get_text(strip=True),
+        'author': cells[1].get_text(strip=True),
+        'date': cells[6].get_text(strip=True),
+        'status': cells[5].get_text(strip=True),
+        'visibility': cells[2].get_text(strip=True),
+        'category_id': _lookup_id(CATEGORY_MAPPING, cells[3].get_text(strip=True)),
+        'task_id': _lookup_id(TASK_MAPPING, cells[4].get_text(strip=True)),
+    }
+
+
+def _article_id_from_href(href: str) -> Optional[str]:
+    if '/article/' not in href:
+        return None
+    return href.strip('/').split('/')[-1] or None
+
+
+def _text(element: Any, default: str) -> str:
+    return element.text.strip() if element else default
+
+
+def _slug(name: str) -> str:
+    """Category name as used in image file names: lower case, umlauts transcribed."""
+    name = name.lower()
+    for umlaut, transcription in (('ä', 'ae'), ('ö', 'oe'), ('ü', 'ue')):
+        name = name.replace(umlaut, transcription)
+    return name
 
 
 def parse_article_detail(soup: BeautifulSoup, article_id: str) -> Dict[str, Any]:
@@ -152,9 +253,13 @@ def extract_category_and_task(soup: BeautifulSoup) -> Tuple[Optional[int], Optio
     return category_id, task_id
 
 
-def _lookup_id(mapping: Dict[int, str], name: str) -> Optional[int]:
+def _lookup_id(
+    mapping: Dict[int, str],
+    name: str,
+    normalize: Callable[[str], str] = lambda value: value,
+) -> Optional[int]:
     for mapped_id, mapped_name in mapping.items():
-        if mapped_name == name:
+        if normalize(mapped_name) == name:
             return mapped_id
     logger.debug(f"'{name}' not found in mapping")
     return None

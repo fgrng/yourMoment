@@ -46,8 +46,23 @@ class ArticleContent:
     extra: Mapping[str, str] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class ArticleSummary:
+    """One entry of an article list: reference plus the metadata the list shows."""
+
+    ref: ArticleRef
+    title: str
+    author: str
+    category: Optional[str] = None
+    extra: Mapping[str, str] = field(default_factory=dict)
+
+
 class PlatformConnection(Protocol):
     """An authenticated connection to one platform account."""
+
+    async def list_articles(self, target: Optional[Mapping[str, str]] = None) -> list[ArticleSummary]:
+        """List the articles of a target; the adapter validates the target's keys and values."""
+        ...
 
     async def fetch_article(self, ref: ArticleRef) -> ArticleContent: ...
 

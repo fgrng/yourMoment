@@ -2,7 +2,7 @@
 Article discovery task for myMoment monitoring processes.
 
 This module implements Task 1 of the refactored monitoring pipeline:
-- Scrapes myMoment article index for each login
+- Lists the target's articles for each platform account through the platform interface
 - Creates minimal AIComment records with metadata only (no full content)
 - Uses short-lived database sessions with no external I/O inside transactions
 """
@@ -21,15 +21,17 @@ from sqlalchemy.exc import IntegrityError
 
 from src.tasks.worker import celery_app, BaseTask
 from src.models.monitoring_process import MonitoringProcess
-from src.models.mymoment_login import MyMomentLogin
 from src.models.llm_provider import LLMProviderConfiguration
 from src.models.ai_comment import AIComment
 from src.models.monitoring_process_login import MonitoringProcessLogin
 from src.models.monitoring_process_prompt import MonitoringProcessPrompt
-from src.services.scraper_service import ScraperService, ScrapingConfig, ArticleMetadata
+from src.platforms import ArticleSummary, connect
+from src.platforms.accounts import load_platform_account
 from src.config.database import get_database_manager
 
 logger = logging.getLogger(__name__)
+
+ARTICLES_PER_LOGIN = 20
 
 
 @dataclass
@@ -64,7 +66,7 @@ class ArticleDiscoveryTask(BaseTask):
         Read monitoring process configuration.
 
         Uses Pattern 1: Read-Only Data Fetching with short-lived session.
-        Session is closed before any scraping begins.
+        Session is closed before the platform is contacted.
 
         Args:
             process_id: Monitoring process UUID
@@ -144,101 +146,61 @@ class ArticleDiscoveryTask(BaseTask):
                    f"{len(login_ids)} logins, {len(prompt_ids)} prompts")
         return config_snapshot
 
-    async def _scrape_articles_for_login(
+    async def _list_articles_for_login(
         self,
         login_id: uuid.UUID,
-        user_id: uuid.UUID,
         config_snapshot: ProcessConfig
-    ) -> List[ArticleMetadata]:
+    ) -> List[ArticleSummary]:
         """
-        Scrape articles index for a single login.
+        List the articles of the process target for a single platform account.
 
-        This method runs OUTSIDE any database session.
-        Only fetches article metadata from the index page, not full content.
+        The platform is contacted outside any database session. Only the
+        article list is read, not the full content.
 
         Args:
-            login_id: MyMomentLogin UUID
-            user_id: User UUID (for session lookup)
+            login_id: Platform account (MyMomentLogin) UUID
             config_snapshot: Process configuration
 
         Returns:
-            List of ArticleMetadata objects
+            Article summaries matching target and search term, at most ARTICLES_PER_LOGIN
         """
-        # Get login credentials - short session
+        # The classroom must be set explicitly, there is no default
+        if not config_snapshot.tab_filter:
+            logger.warning(f"No tab filter specified for process {config_snapshot.process_id}, skipping article discovery")
+            return []
+
         session = await self.get_async_session()
         async with session:
-            result = await session.execute(
-                select(MyMomentLogin).where(MyMomentLogin.id == login_id)
-            )
-            login = result.scalar_one_or_none()
+            account = await load_platform_account(session, login_id, config_snapshot.user_id)
+        if account is None:
+            logger.warning(f"Login {login_id} not found or inactive")
+            return []
 
-            if not login or not login.is_active:
-                logger.warning(f"Login {login_id} not found or inactive")
-                return []
+        async with connect(account) as platform:
+            articles = await platform.list_articles(_target_of(config_snapshot))
 
-            # Decrypt once so unreadable credentials fail before scraping
-            login.get_credentials()
-        # Session closed
+        # The search term is a title filter of the process, not part of the target
+        search = (config_snapshot.search_filter or "").lower()
+        if search:
+            articles = [article for article in articles if search in article.title.lower()]
 
-        # Initialize scraper with config (outside DB session)
-        scraping_config = ScrapingConfig.from_settings()
-
-        # Create temporary session for scraping
-        session = await self.get_async_session()
-        async with session:
-            async with ScraperService(session, scraping_config) as scraper:
-                try:
-                    # Initialize session for this login
-                    context = await scraper.initialize_session_for_login(
-                        login_id=login_id,
-                        user_id=user_id
-                    )
-
-                    # Scrape article index (metadata only, no full content)
-                    # Tab filter must be explicitly set, no default to "alle"
-                    if not config_snapshot.tab_filter:
-                        logger.warning(f"No tab filter specified for process {config_snapshot.process_id}, skipping article discovery")
-                        return []
-
-                    tab = config_snapshot.tab_filter
-                    category = str(config_snapshot.category_filter) if config_snapshot.category_filter else None
-                    task = str(config_snapshot.task_filter) if config_snapshot.task_filter else None
-                    search = config_snapshot.search_filter
-                    limit = 20  # Default articles per login
-
-                    articles = await scraper.discover_new_articles(
-                        context=context,
-                        tab=tab,
-                        category=category,
-                        task=task,
-                        search=search,
-                        limit=limit
-                    )
-
-                    # Cleanup session
-                    await scraper.cleanup_session(login_id)
-
-                    logger.info(f"Scraped {len(articles)} articles for login {login_id}")
-                    return articles
-
-                except Exception as e:
-                    logger.error(f"Failed to scrape articles for login {login_id}: {e}")
-                    return []
+        logger.info(f"Listed {len(articles)} articles for login {login_id}")
+        return articles[:ARTICLES_PER_LOGIN]
 
     async def _create_ai_comment_records(
         self,
-        articles_metadata: List[tuple[ArticleMetadata, uuid.UUID, Optional[uuid.UUID]]],
+        articles_metadata: List[tuple[ArticleSummary, uuid.UUID, Optional[uuid.UUID]]],
         config: ProcessConfig
     ) -> List[uuid.UUID]:
         """
-        Create AIComment records from article metadata.
+        Create AIComment records from article summaries.
 
         The existence check is only an optimization. Correctness comes from the
         DB uniqueness constraint, so concurrent duplicate inserts are handled by
         catching IntegrityError and skipping the duplicate row.
 
         Args:
-            articles_metadata: List of (ArticleMetadata, login_id, prompt_id) tuples
+            articles_metadata: List of (ArticleSummary, login_id, prompt_id) tuples
             config: Process configuration snapshot
 
         Returns:
@@ -248,13 +210,13 @@ class ArticleDiscoveryTask(BaseTask):
         async with session:
             created_ids: List[uuid.UUID] = []
 
-            for article_meta, login_id, prompt_id in articles_metadata:
+            for article, login_id, prompt_id in articles_metadata:
                 try:
                     # Check if this article+login+process combination already exists
                     existing = await session.execute(
                         select(AIComment).where(
                             and_(
-                                AIComment.mymoment_article_id == article_meta.id,
+                                AIComment.mymoment_article_id == article.ref.id,
                                 AIComment.monitoring_process_id == config.process_id,
                                 AIComment.mymoment_login_id == login_id,
                                 AIComment.prompt_template_id == prompt_id
@@ -263,7 +225,7 @@ class ArticleDiscoveryTask(BaseTask):
                     )
 
                     if existing.scalar_one_or_none():
-                        logger.debug(f"Article {article_meta.id} already exists for "
+                        logger.debug(f"Article {article.ref.id} already exists for "
                                    f"login {login_id}, prompt {prompt_id}")
                         continue
 
@@ -271,12 +233,12 @@ class ArticleDiscoveryTask(BaseTask):
                     ai_comment = AIComment(
                         id=uuid.uuid4(),
                         # Article snapshot fields (metadata only)
-                        mymoment_article_id=article_meta.id,
-                        article_title=article_meta.title,
-                        article_author=article_meta.author,
-                        article_category=article_meta.category_id,
-                        article_task_id=article_meta.task_id,
-                        article_url=article_meta.url,
+                        mymoment_article_id=article.ref.id,
+                        article_title=article.title,
+                        article_author=article.author,
+                        article_category=_as_int(article.category),
+                        article_task_id=_as_int(article.extra.get("arrangement")),
+                        article_url=article.ref.url,
                         article_edited_at=None,  # Not available from index
                         article_scraped_at=datetime.utcnow(),
 
@@ -312,7 +274,7 @@ class ArticleDiscoveryTask(BaseTask):
                     except IntegrityError:
                         logger.info(
                             "Skipping duplicate AIComment insert for article %s, login %s, prompt %s, process %s",
-                            article_meta.id,
+                            article.ref.id,
                             login_id,
                             prompt_id,
                             config.process_id,
@@ -320,7 +282,7 @@ class ArticleDiscoveryTask(BaseTask):
                         continue
 
                 except Exception as e:
-                    logger.error(f"Failed to create AIComment for article {article_meta.id}: {e}")
+                    logger.error(f"Failed to create AIComment for article {article.ref.id}: {e}")
                     continue
 
             if created_ids:
@@ -335,7 +297,7 @@ class ArticleDiscoveryTask(BaseTask):
 
         Implements the discovery workflow:
         1. Read process configuration (Pattern 1)
-        2. For each login: scrape article metadata (outside DB session)
+        2. For each login: list the target's articles (outside DB session)
         3. For each article × prompt: prepare AIComment data
         4. Batch create AIComment records (Pattern 2)
 
@@ -363,14 +325,13 @@ class ArticleDiscoveryTask(BaseTask):
             logger.info(f"Starting article discovery for process {process_id}: "
                        f"{len(config.login_ids)} logins × {len(config.prompt_ids)} prompts")
 
-            # Step 2: Scrape articles for each login (outside DB sessions)
+            # Step 2: List articles for each login (outside DB sessions)
             all_articles_metadata = []
 
             for login_id in config.login_ids:
                 try:
-                    articles = await self._scrape_articles_for_login(
+                    articles = await self._list_articles_for_login(
                         login_id=login_id,
-                        user_id=config.user_id,
                         config_snapshot=config
                     )
 
@@ -383,7 +344,7 @@ class ArticleDiscoveryTask(BaseTask):
                     logger.info(f"Found {len(articles)} articles for login {login_id}")
 
                 except Exception as e:
-                    error_msg = f"Scraping failed for login {login_id}: {str(e)}"
+                    error_msg = f"Listing articles failed for login {login_id}: {str(e)}"
                     errors.append(error_msg)
                     logger.error(error_msg)
                     # Continue with other logins
@@ -427,6 +388,23 @@ class ArticleDiscoveryTask(BaseTask):
                 'execution_time_seconds': execution_time,
                 'status': 'failed'
             }
+
+
+def _target_of(config: ProcessConfig) -> Dict[str, str]:
+    """Translate the process filter columns into the platform target."""
+    target = {"classroom": config.tab_filter}
+    if config.category_filter is not None:
+        target["category"] = str(config.category_filter)
+    if config.task_filter is not None:
+        target["arrangement"] = str(config.task_filter)
+    return target
+
+
+def _as_int(value: Optional[str]) -> Optional[int]:
+    """Convert a platform ID string to the integer column, None if not numeric."""
+    if value is None or not value.isdigit():
+        return None
+    return int(value)
 
 
 def _dispatch_processing_chains(

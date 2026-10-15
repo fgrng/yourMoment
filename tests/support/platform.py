@@ -11,6 +11,7 @@ import pytest
 from src.platforms import (
     ArticleContent,
     ArticleRef,
+    ArticleSummary,
     PlatformAccount,
     PlatformRejected,
     use_adapter,
@@ -30,10 +31,36 @@ class InMemoryCookieStore:
         self.saved[account_id] = data
 
 
+_TARGET_KEYS = {"category", "arrangement", "classroom"}
+
+
+def _target_value(article: ArticleContent, key: str) -> Optional[str]:
+    """Category is a field; arrangement and classroom live in `extra`."""
+    return article.category if key == "category" else article.extra.get(key)
+
+
 class FakeConnection:
     def __init__(self, platform: "FakePlatform", account: PlatformAccount) -> None:
         self._platform = platform
         self.account = account
+
+    async def list_articles(self, target: Optional[Mapping[str, str]] = None) -> list[ArticleSummary]:
+        self._platform._raise_injected("list_articles")
+        target = dict(target or {})
+        unknown = set(target) - _TARGET_KEYS
+        if unknown:
+            raise PlatformRejected(f"unknown target keys: {sorted(unknown)}")
+        return [
+            ArticleSummary(
+                ref=article.ref,
+                title=article.title,
+                author=article.author,
+                category=article.category,
+                extra=article.extra,
+            )
+            for article in self._platform.articles.values()
+            if all(_target_value(article, key) == value for key, value in target.items())
+        ]
 
     async def fetch_article(self, ref: ArticleRef) -> ArticleContent:
         self._platform._raise_injected("fetch_article")
@@ -53,7 +80,7 @@ class FakePlatform:
         self._errors: dict[str, Exception] = {}
 
     def fail(self, operation: str, error: Exception) -> None:
-        """Raise `error` on every call of `operation` ("connect", "fetch_article")."""
+        """Raise `error` on every call of `operation` ("connect", "list_articles", "fetch_article")."""
         self._errors[operation] = error
 
     def add_article(

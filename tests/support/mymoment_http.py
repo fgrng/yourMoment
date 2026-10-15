@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from typing import Mapping, Optional
+from urllib.parse import urlencode
+
 from tests.fixtures.loaders import load_html_fixture
 from tests.fixtures.stubs import AiohttpStubResponse, AiohttpStubSession
 
@@ -43,4 +46,23 @@ def queue_article(http: AiohttpStubSession, article_id: str = "3170", fixture: s
         "GET",
         f"{MYMOMENT_BASE_URL}/article/{article_id}/",
         AiohttpStubResponse(status=200, body=load_html_fixture(fixture)),
+    )
+
+
+def queue_article_list(
+    http: AiohttpStubSession,
+    target: Optional[Mapping[str, str]] = None,
+    body: Optional[str] = None,
+) -> None:
+    """Queue the article index for a target; myMoment filters by query parameters."""
+    target = target or {}
+    params = {"tab": target.get("classroom", "alle")}
+    if "category" in target:
+        params["kategorie"] = target["category"]
+    if "arrangement" in target:
+        params["aufgabe"] = target["arrangement"]
+    http.queue_response(
+        "GET",
+        f"{MYMOMENT_BASE_URL}/articles/?{urlencode(params)}",
+        AiohttpStubResponse(status=200, body=body if body is not None else load_html_fixture("articles_index")),
     )

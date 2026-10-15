@@ -689,27 +689,24 @@ class ScraperService:
                 html = await response.text()
 
             soup = BeautifulSoup(html, 'html.parser')
-
-            # Find the specified tab
-            tab_id = f"pills-{tab}"
-            tab_content = soup.find('div', {'id': tab_id})
-
-            if not tab_content:
-                logger.warning(f"Tab '{tab}' not found, falling back to default")
-                tab_content = soup
-
             articles = []
-
-            # Extract article cards
-            article_list = tab_content.select_one(':scope > div[class*="article-list"]')
-            if article_list:
-                articles = self._parse_article_list_elements(article_list, limit, search)
-            else:
-                # Try extracting from table (Teacher view)
-                # Note: table might be nested inside .table-responsive
-                table = tab_content.find('table')
-                if table:
-                    articles = self._parse_article_table_elements(table, limit, search)
+            for entry in parsers.parse_article_list(soup, tab):
+                if len(articles) >= limit:
+                    break
+                if search and search.lower() not in entry['title'].lower():
+                    continue
+                href = entry['href']
+                articles.append(ArticleMetadata(
+                    id=entry['id'],
+                    title=entry['title'],
+                    author=entry['author'],
+                    date=entry['date'],
+                    status=entry['status'],
+                    category_id=entry['category_id'],
+                    task_id=entry['task_id'],
+                    visibility=entry['visibility'],
+                    url=f"{self.config.base_url}{href}" if href.startswith('/') else href,
+                ))
 
             context.last_activity = datetime.utcnow()
             logger.debug(f"HTTP request completed for article discovery (login {context.login_id})")
@@ -720,154 +717,6 @@ class ScraperService:
         except Exception as e:
             logger.error(f"Failed to discover articles for login {context.login_id}: {e}")
             raise ScrapingError(f"Article discovery failed: {e}")
-
-    def _parse_article_list_elements(
-        self,
-        article_list_element: Any,
-        limit: int = 20,
-        search: Optional[str] = None
-    ) -> List[ArticleMetadata]:
-        """
-        Parse article cards from an article list element.
-
-        Args:
-            article_list_element: BeautifulSoup element containing article cards
-            limit: Maximum number of articles to retrieve
-            search: Optional search string to filter articles by title
-
-        Returns:
-            List of parsed ArticleMetadata objects
-        """
-        articles = []
-        post_cards = article_list_element.find_all('div', recursive=False)
-
-        for card in post_cards:
-            # Stop when we reach the limit
-            if len(articles) >= limit:
-                break
-
-            try:
-                article = self._extract_article_metadata(card)
-                if article:
-                    # Apply search filter if specified
-                    if search:
-                        search_lower = search.lower()
-                        title_lower = article.title.lower() if article.title else ""
-                        if search_lower not in title_lower:
-                            continue
-
-                    articles.append(article)
-                    logger.debug(f"Article {article.id} ('{article.title}') included in results")
-
-            except Exception as e:
-                logger.warning(f"Failed to extract article metadata: {e}")
-                continue
-
-        return articles
-
-    def _parse_article_table_elements(
-        self,
-        table_element: Any,
-        limit: int = 20,
-        search: Optional[str] = None
-    ) -> List[ArticleMetadata]:
-        """
-        Parse article rows from a table element (Teacher view).
-
-        Args:
-            table_element: BeautifulSoup element containing the articles table
-            limit: Maximum number of articles to retrieve
-            search: Optional search string to filter articles by title
-
-        Returns:
-            List of parsed ArticleMetadata objects
-        """
-        articles = []
-        rows = table_element.select('tbody tr')
-
-        for row in rows:
-            # Stop when we reach the limit
-            if len(articles) >= limit:
-                break
-
-            try:
-                article = self._extract_article_metadata_from_row(row)
-                if article:
-                    # Apply search filter if specified
-                    if search:
-                        search_lower = search.lower()
-                        title_lower = article.title.lower() if article.title else ""
-                        if search_lower not in title_lower:
-                            continue
-
-                    articles.append(article)
-                    logger.debug(f"Article {article.id} ('{article.title}') included in results (Table)")
-
-            except Exception as e:
-                logger.warning(f"Failed to extract article metadata from row: {e}")
-                continue
-
-        return articles
-
-    def _extract_article_metadata_from_row(self, row_element) -> Optional[ArticleMetadata]:
-        """
-        Extract article metadata from a table row (Teacher view).
-
-        Args:
-            row_element: BeautifulSoup element containing a table row
-
-        Returns:
-            ArticleMetadata object or None if extraction fails
-        """
-        try:
-            cells = row_element.find_all('td')
-            if len(cells) < 7:
-                return None
-
-            # Column 0: Title link
-            title_link = cells[0].find('a')
-            if not title_link:
-                return None
-
-            title = title_link.get_text(strip=True)
-            href = title_link.get('href', '')
-            post_id = None
-            if '/article/' in href:
-                post_id = href.strip('/').split('/')[-1]
-
-            if not post_id:
-                return None
-
-            # Column 1: Author
-            author = cells[1].get_text(strip=True)
-
-            # Column 2: Visibility
-            visibility = cells[2].get_text(strip=True)
-
-            # Column 5: Status
-            status = cells[5].get_text(strip=True)
-
-            # Column 6: Date
-            date = cells[6].get_text(strip=True)
-
-            # URL
-            base_url = self.config.base_url.rstrip('/')
-            url = f"{base_url}/article/{post_id}/"
-
-            return ArticleMetadata(
-                id=post_id,
-                title=title,
-                author=author,
-                date=date,
-                status=status,
-                category_id=None,
-                task_id=None,
-                visibility=visibility,
-                url=url
-            )
-        except Exception as e:
-            logger.debug(f"Row parsing failed: {e}")
-            return None
 
     async def discover_available_tabs(self, context: SessionContext) -> List[TabMetadata]:
         """
@@ -961,81 +810,6 @@ class ScraperService:
                 continue
 
         return tabs
-
-    def _extract_article_metadata(self, card_element) -> Optional[ArticleMetadata]:
-        """
-        Extract article metadata from HTML card element.
-
-        Args:
-            card_element: BeautifulSoup element containing article card
-
-        Returns:
-            ArticleMetadata object or None if extraction fails
-        """
-        try:
-            # Extract link and ID
-            link_element = card_element.find('a')
-            if not link_element:
-                return None
-
-            href = link_element.get('href', '')
-            post_id = None
-
-            if '/article/' in href:
-                post_id = href.strip('/').split('/')[-1]
-            elif '/article/edit/' in href:
-                post_id = href.strip('/').split('/')[-1]
-
-            if not post_id:
-                return None
-
-            # Extract title
-            title_element = card_element.find('div', class_='article-title')
-            title = title_element.text.strip() if title_element else 'Unknown Title'
-
-            # Extract author
-            author_element = card_element.find('div', class_='article-author')
-            author = author_element.text.strip() if author_element else 'Unknown Author'
-
-            # Extract date
-            date_element = card_element.find('div', class_='article-date')
-            date = date_element.text.strip() if date_element else 'Unknown Date'
-
-            # Extract status
-            status_element = card_element.find('div', class_=re.compile(r'card-header\s+\w+'))
-            status = 'Unknown'
-            if status_element:
-                for class_name in status_element.get('class', []):
-                    if class_name in ['entwurf', 'lehrpersonenkontrolle', 'publiziert']:
-                        status = class_name.capitalize()
-                        break
-
-            # Extract visibility
-            visibility_element = card_element.find('div', class_='article-classroom')
-            visibility = visibility_element.text.strip() if visibility_element else 'Unknown'
-
-            # Category and Task IDs cannot be reliably extracted from article cards in the index view
-            # We rely on server-side filtering via URL parameters (?kategorie=X&aufgabe=Y)
-            # Image-based category extraction is deprecated and inconsistent with task behavior
-            # Both remain None here and are determined via server-side filtering
-            category_id = None
-            task_id = None
-
-            return ArticleMetadata(
-                id=post_id,
-                title=title,
-                author=author,
-                date=date,
-                status=status,
-                category_id=category_id,
-                task_id=task_id,
-                visibility=visibility,
-                url=f"{self.config.base_url}{href}" if href.startswith('/') else href
-            )
-
-        except Exception as e:
-            logger.warning(f"Failed to extract article metadata: {e}")
-            return None
 
     async def get_article_content(
         self,

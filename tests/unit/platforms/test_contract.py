@@ -13,11 +13,18 @@ from src.platforms import (
     ArticleRef,
     PlatformAccount,
     PlatformAuthError,
+    PlatformRejected,
     PlatformUnavailable,
 )
 from src.platforms.mymoment.adapter import MyMomentAdapter
 from tests.fixtures.stubs import AiohttpStubSession
-from tests.support.mymoment_http import LOGIN_URL, MYMOMENT_BASE_URL, queue_article, queue_login
+from tests.support.mymoment_http import (
+    LOGIN_URL,
+    MYMOMENT_BASE_URL,
+    queue_article,
+    queue_article_list,
+    queue_login,
+)
 from tests.support.platform import FakePlatform, InMemoryCookieStore
 
 
@@ -52,6 +59,12 @@ class FakeHarness:
         ref = self.adapter.add_article("3170", title="Beispieldialog", body_text="Hallo.")
         return ref, "Beispieldialog"
 
+    def given_listed_articles(self, target=None) -> None:
+        # Mirrors the "alle" classroom of articles_index.html: two Unterhalten (9), one Informieren (7)
+        self.adapter.add_article("4801", category="9", extra={"classroom": "alle"})
+        self.adapter.add_article("4802", category="9", extra={"classroom": "alle"})
+        self.adapter.add_article("4803", category="7", extra={"classroom": "alle"})
+
 
 class MyMomentHarness:
     def __init__(self) -> None:
@@ -74,6 +87,9 @@ class MyMomentHarness:
     def given_article(self) -> tuple[ArticleRef, str]:
         queue_article(self.http, "3170")
         return ArticleRef(id="3170", url=f"{MYMOMENT_BASE_URL}/article/3170/"), "Beispieldialog"
+
+    def given_listed_articles(self, target=None) -> None:
+        queue_article_list(self.http, target)
 
 
 @pytest.fixture(params=["fake", "mymoment"])
@@ -123,3 +139,43 @@ async def test_fetched_article_url_is_absolute(harness):
 
     parsed = urlparse(content.ref.url)
     assert parsed.scheme in {"http", "https"} and parsed.netloc
+
+
+async def test_list_articles_without_target_lists_all_articles(harness):
+    harness.given_valid_login()
+    harness.given_listed_articles()
+
+    async with harness.adapter.connect(harness.account) as connection:
+        articles = await connection.list_articles()
+
+    assert [a.ref.id for a in articles] == ["4801", "4802", "4803"]
+
+
+async def test_list_articles_with_category_target_lists_only_that_category(harness):
+    target = {"classroom": "alle", "category": "7"}
+    harness.given_valid_login()
+    harness.given_listed_articles(target)
+
+    async with harness.adapter.connect(harness.account) as connection:
+        articles = await connection.list_articles(target)
+
+    assert [(a.ref.id, a.category) for a in articles] == [("4803", "7")]
+
+
+async def test_listed_article_urls_are_absolute(harness):
+    harness.given_valid_login()
+    harness.given_listed_articles()
+
+    async with harness.adapter.connect(harness.account) as connection:
+        articles = await connection.list_articles()
+
+    parsed = [urlparse(a.ref.url) for a in articles]
+    assert parsed and all(p.scheme in {"http", "https"} and p.netloc for p in parsed)
+
+
+async def test_list_articles_with_unknown_target_key_is_rejected(harness):
+    harness.given_valid_login()
+
+    async with harness.adapter.connect(harness.account) as connection:
+        with pytest.raises(PlatformRejected):
+            await connection.list_articles({"classroom": "alle", "colour": "blue"})

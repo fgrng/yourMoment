@@ -6,7 +6,7 @@ Celery-based background task processing system for the yourMoment application.
 
 The background task system provides asynchronous execution using a **parallel pipeline architecture** with four independent stages:
 
-- **Article Discovery** – Scrape myMoment article metadata and create work items
+- **Article Discovery** – List the target's articles on the platform and create work items
 - **Article Preparation** – Fetch full article content for discovered items
 - **Comment Generation** – AI-powered comment creation using configured LLM providers
 - **Comment Posting** – Publishing generated comments to myMoment
@@ -98,7 +98,7 @@ docker-compose -f docker-compose.celery.yml up -d celery_monitor
 ### Registered Tasks
 
 **Pipeline Stage Tasks** (run in parallel, coordinate via AIComment.status)
-- `discover_articles` (discovery queue) – Scrape article metadata, create AIComment records with status='discovered'
+- `discover_articles` (discovery queue) – List article summaries, create AIComment records with status='discovered'
 - `prepare_article_content` (preparation queue) – Fetch full content of one article, update status='prepared'
 - `generate_comment_for_article` (generation queue) – Generate one AI comment via LLM, update status='generated'
 - `post_comment_for_article` (posting queue) – Post one comment to myMoment, update status='posted' or 'failed'
@@ -114,7 +114,7 @@ docker-compose -f docker-compose.celery.yml up -d celery_monitor
 
 | Queue | Purpose | Task Modules | Concurrency |
 |-------|---------|--------------|-------------|
-| `discovery` | Article metadata scraping | `article_discovery.*` | 1-2 (network-bound) |
+| `discovery` | Article listing | `article_discovery.*` | 1-2 (network-bound) |
 | `preparation` | Article content fetching | `article_preparation.*` | 1-2 (network-bound) |
 | `generation` | LLM comment generation | `comment_generation.*` | 2-4 (I/O-bound) |
 | `posting` | Comment posting to myMoment | `comment_posting.*` | 1-2 (network-bound) |
@@ -187,7 +187,7 @@ Tasks are automatically routed by module name:
    - Prevents double-spawning via task state checking
 
 3. **Article Discovery Stage** (`discover_articles` task)
-   - Scrapes article metadata from each associated login
+   - Lists the articles of the process target (classroom, category, arrangement) for each associated login through the platform interface (`connect`, `list_articles`); the search term filters titles
    - Creates AIComment records with status='discovered'
    - Creates cross-product: articles × logins × prompts
    - No external I/O within database transactions

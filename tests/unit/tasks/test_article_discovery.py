@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.models.ai_comment import AIComment
-from src.services.scraper_service import ArticleMetadata
+from src.platforms import PlatformUnavailable
 from src.tasks import article_discovery
 from src.tasks.article_discovery import ArticleDiscoveryTask
 from tests.fixtures.assertions import assert_task_result_shape
@@ -27,31 +27,24 @@ def _bind_task_sessions(task, db_engine):
     return task
 
 
-async def test_discovery_creates_rows_and_skips_duplicates(db_session, db_engine, monkeypatch):
+def _add_target_article(fake_platform, article_id, **kwargs):
+    """An article matching the default process target: classroom home, category 7, title with "sample"."""
+    kwargs.setdefault("title", f"Sample Story {article_id}")
+    kwargs.setdefault("category", "7")
+    return fake_platform.add_article(article_id, extra={"classroom": "home"}, **kwargs)
+
+
+async def _comments_of(db_session, process_id):
+    result = await db_session.execute(select(AIComment).where(AIComment.monitoring_process_id == process_id))
+    return result.scalars().all()
+
+
+async def test_discovery_creates_rows_and_skips_duplicates(db_session, db_engine, fake_platform):
     scenario = await build_scenario("minimal_happy_path", db_session)
     await db_session.commit()
+    ref = _add_target_article(fake_platform, "1234", title="Sample Discovery", author="Fixture Student")
 
     task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
-    article = ArticleMetadata(
-        id="article-1234",
-        title="Discovery Fixture",
-        author="Fixture Teacher",
-        date="2026-04-02",
-        status="published",
-        category_id=7,
-        task_id=4,
-        visibility="Class 5A",
-        url="https://www.mymoment.ch/article/1234/",
-    )
-
-    async def fake_scrape_articles_for_login(login_id, user_id, config_snapshot):
-        assert login_id == scenario["login"].id
-        assert user_id == scenario["user"].id
-        assert config_snapshot.process_id == scenario["process"].id
-        return [article]
-
-    monkeypatch.setattr(task, "_scrape_articles_for_login", fake_scrape_articles_for_login)
-
     first_result = await task._discover_articles_async(scenario["process"].id)
     second_result = await task._discover_articles_async(scenario["process"].id)
 
@@ -65,19 +58,93 @@ async def test_discovery_creates_rows_and_skips_duplicates(db_session, db_engine
     assert second_result["discovered"] == 0
     assert second_result["created_ai_comment_ids"] == []
 
-    result = await db_session.execute(
-        select(AIComment).where(AIComment.monitoring_process_id == scenario["process"].id)
-    )
-    comments = result.scalars().all()
-    assert len(comments) == 1
-
-    comment = comments[0]
+    [comment] = await _comments_of(db_session, scenario["process"].id)
     assert comment.status == "discovered"
-    assert comment.mymoment_article_id == article.id
+    assert comment.mymoment_article_id == "1234"
+    assert (comment.article_title, comment.article_author, comment.article_url) == (
+        "Sample Discovery",
+        "Fixture Student",
+        ref.url,
+    )
+    assert (comment.article_category, comment.article_task_id) == (7, None)
     assert comment.prompt_template_id == scenario["prompt"].id
     assert comment.llm_provider_id == scenario["provider"].id
     assert comment.mymoment_login_id == scenario["login"].id
     assert comment.is_hidden is scenario["process"].hide_comments
+
+
+async def test_discovery_creates_rows_only_for_the_process_target(db_session, db_engine, fake_platform):
+    # Process target: classroom "home", category 7, arrangement 10
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"task_filter": 10}})
+    await db_session.commit()
+    fake_platform.add_article("1", title="Sample", category="7", extra={"classroom": "home", "arrangement": "10"})
+    fake_platform.add_article("2", title="Sample", category="9", extra={"classroom": "home", "arrangement": "10"})
+    fake_platform.add_article("3", title="Sample", category="7", extra={"classroom": "82", "arrangement": "10"})
+    fake_platform.add_article("4", title="Sample", category="7", extra={"classroom": "home", "arrangement": "4"})
+
+    task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
+    await task._discover_articles_async(scenario["process"].id)
+
+    assert [c.mymoment_article_id for c in await _comments_of(db_session, scenario["process"].id)] == ["1"]
+
+
+async def test_discovery_keeps_only_titles_with_the_search_term(db_session, db_engine, fake_platform):
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"search_filter": "rotpanda"}})
+    await db_session.commit()
+    _add_target_article(fake_platform, "1", title="Der Rotpanda")
+    _add_target_article(fake_platform, "2", title="Der Eisbär")
+
+    task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
+    await task._discover_articles_async(scenario["process"].id)
+
+    assert [c.mymoment_article_id for c in await _comments_of(db_session, scenario["process"].id)] == ["1"]
+
+
+async def test_discovery_creates_at_most_20_rows_per_login(db_session, db_engine, fake_platform):
+    scenario = await build_scenario("minimal_happy_path", db_session)
+    await db_session.commit()
+    for article_id in range(25):
+        _add_target_article(fake_platform, str(article_id))
+
+    task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
+    result = await task._discover_articles_async(scenario["process"].id)
+
+    assert result["discovered"] == 20
+
+
+async def test_discovery_without_classroom_does_not_contact_the_platform(db_session, db_engine, fake_platform):
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"tab_filter": None}})
+    await db_session.commit()
+    _add_target_article(fake_platform, "1")
+
+    task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
+    result = await task._discover_articles_async(scenario["process"].id)
+
+    assert (result["discovered"], fake_platform.connected_accounts) == (0, [])
+
+
+async def test_discovery_connects_with_the_decrypted_platform_account(db_session, db_engine, fake_platform):
+    scenario = await build_scenario(
+        "minimal_happy_path", db_session, {"login": {"username": "teacher", "password": "Secret-1!"}}
+    )
+    await db_session.commit()
+
+    task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
+    await task._discover_articles_async(scenario["process"].id)
+
+    [account] = fake_platform.connected_accounts
+    assert (account.id, account.username, account.password) == (scenario["login"].id, "teacher", "Secret-1!")
+
+
+async def test_discovery_reports_unavailable_platform_as_error(db_session, db_engine, fake_platform):
+    scenario = await build_scenario("minimal_happy_path", db_session)
+    await db_session.commit()
+    fake_platform.fail("list_articles", PlatformUnavailable("myMoment down"))
+
+    task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
+    result = await task._discover_articles_async(scenario["process"].id)
+
+    assert (result["discovered"], len(result["errors"])) == (0, 1)
 
 
 @pytest.mark.parametrize("generate_only", [False, True])

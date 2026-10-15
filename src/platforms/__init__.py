@@ -10,6 +10,7 @@ from src.platforms.registry import adapter_for, connect, use_adapter
 from src.platforms.types import (
     ArticleContent,
     ArticleRef,
+    ArticleSummary,
     PlatformAccount,
     PlatformAdapter,
     PlatformConnection,
@@ -18,6 +19,7 @@ from src.platforms.types import (
 __all__ = [
     "ArticleContent",
     "ArticleRef",
+    "ArticleSummary",
     "PlatformAccount",
     "PlatformAdapter",
     "PlatformAuthError",

@@ -11,8 +11,8 @@ import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from http.cookies import CookieError
-from typing import Any, AsyncIterator, Callable, Optional
-from urllib.parse import urljoin
+from typing import Any, AsyncIterator, Callable, Mapping, Optional
+from urllib.parse import urlencode, urljoin
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -20,7 +20,7 @@ from bs4 import BeautifulSoup
 from src.platforms.errors import PlatformAuthError, PlatformRejected, PlatformUnavailable
 from src.platforms.mymoment import parsers
 from src.platforms.mymoment.cookies import CookieStore, restore_cookie_jar, serialize_cookie_jar
-from src.platforms.types import ArticleContent, ArticleRef, PlatformAccount
+from src.platforms.types import ArticleContent, ArticleRef, ArticleSummary, PlatformAccount
 from src.utils.url_sanitizer import is_url_malformed, sanitize_url
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,8 @@ _HEADERS = {
 }
 _REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 _MAX_REDIRECTS = 5
+_TARGET_KEYS = {'category', 'arrangement', 'classroom'}
+_DEFAULT_CLASSROOM = 'alle'
 
 
 @dataclass(frozen=True)
@@ -98,6 +100,46 @@ class MyMomentConnection:
         self._last_request_time: Optional[float] = None
         self._rate_limit_lock = asyncio.Lock()
         self._csrf_token: Optional[str] = None
+
+    async def list_articles(self, target: Optional[Mapping[str, str]] = None) -> list[ArticleSummary]:
+        """
+        List the articles of a classroom, optionally narrowed by category and arrangement.
+
+        myMoment filters by query parameters; the parsed category and
+        arrangement are checked again, so a filter myMoment ignores still holds.
+        Where a view does not show them, the filter value is what myMoment matched.
+        """
+        target = _validate_target(target or {})
+        classroom = target.get('classroom', _DEFAULT_CLASSROOM)
+        params = {'tab': classroom}
+        if 'category' in target:
+            params['kategorie'] = target['category']
+        if 'arrangement' in target:
+            params['aufgabe'] = target['arrangement']
+
+        page = await self._request('GET', f"{self._base_url}/articles/?{urlencode(params)}")
+        if page.status != 200:
+            raise PlatformRejected(f"myMoment answered {page.status} for the article list")
+
+        summaries = []
+        for entry in parsers.parse_article_list(page.soup(), classroom):
+            if _contradicts(entry['category_id'], target.get('category')) or _contradicts(
+                entry['task_id'], target.get('arrangement')
+            ):
+                continue
+            category = _shown_or_filtered(entry['category_id'], target.get('category'))
+            arrangement = _shown_or_filtered(entry['task_id'], target.get('arrangement'))
+            extra = {key: entry[key] for key in ('status', 'visibility', 'date')}
+            if arrangement is not None:
+                extra['arrangement'] = arrangement
+            summaries.append(ArticleSummary(
+                ref=ArticleRef(id=entry['id'], url=urljoin(f"{self._base_url}/", entry['href'])),
+                title=entry['title'],
+                author=entry['author'],
+                category=category,
+                extra=extra,
+            ))
+        return summaries
 
     async def fetch_article(self, ref: ArticleRef) -> ArticleContent:
         url = self._article_url(ref.id)
@@ -240,3 +282,33 @@ class MyMomentConnection:
                 if elapsed < self._rate_limit_delay:
                     await asyncio.sleep(self._rate_limit_delay - elapsed)
             self._last_request_time = loop.time()
+
+
+def _validate_target(target: Mapping[str, str]) -> dict[str, str]:
+    """Reject targets myMoment cannot apply: unknown keys or malformed values."""
+    unknown = set(target) - _TARGET_KEYS
+    if unknown:
+        raise PlatformRejected(f"Unknown myMoment target keys: {sorted(unknown)}")
+    if not all(isinstance(value, str) for value in target.values()):
+        raise PlatformRejected(f"myMoment target values must be strings: {dict(target)}")
+
+    classroom = target.get('classroom')
+    if classroom is not None and classroom not in ('home', 'alle') and not classroom.isdigit():
+        raise PlatformRejected(f"Unknown myMoment classroom: {classroom!r}")
+    category = target.get('category')
+    if category is not None and not (category.isdigit() and int(category) in parsers.CATEGORY_MAPPING):
+        raise PlatformRejected(f"Unknown myMoment category: {category!r}")
+    arrangement = target.get('arrangement')
+    if arrangement is not None and not arrangement.isdigit():
+        raise PlatformRejected(f"Unknown myMoment arrangement: {arrangement!r}")
+    return dict(target)
+
+
+def _contradicts(shown_id: Optional[int], wanted: Optional[str]) -> bool:
+    """True if the list shows an ID that differs from the filter value."""
+    return shown_id is not None and wanted is not None and str(shown_id) != wanted
+
+
+def _shown_or_filtered(shown_id: Optional[int], wanted: Optional[str]) -> Optional[str]:
+    """The ID the list shows, else the filter value myMoment matched."""
+    return str(shown_id) if shown_id is not None else wanted
