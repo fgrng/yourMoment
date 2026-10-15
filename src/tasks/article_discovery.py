@@ -402,7 +402,7 @@ def _target_of(config: ProcessConfig) -> Dict[str, str]:
 
 def _as_int(value: Optional[str]) -> Optional[int]:
     """Convert a platform ID string to the integer column, None if not numeric."""
-    if value is None or not value.isdigit():
+    if value is None or not (value.isascii() and value.isdigit()):
         return None
     return int(value)
 

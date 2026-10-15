@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 import re
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from bs4 import BeautifulSoup
 
@@ -89,7 +89,7 @@ def _parse_article_card(card: Any) -> Optional[Dict[str, Any]]:
     image = card.select_one('.card-body img')
     if image and image.get('src'):
         slug = image['src'].rsplit('/', 1)[-1].split('.', 1)[0]
-        category_id = _lookup_id(CATEGORY_MAPPING, slug, normalize=_slug)
+        category_id = _category_id_from_slug(slug)
 
     return {
         'id': article_id,
@@ -138,12 +138,16 @@ def _text(element: Any, default: str) -> str:
     return element.text.strip() if element else default
 
 
-def _slug(name: str) -> str:
-    """Category name as used in image file names: lower case, umlauts transcribed."""
-    name = name.lower()
-    for umlaut, transcription in (('ä', 'ae'), ('ö', 'oe'), ('ü', 'ue')):
-        name = name.replace(umlaut, transcription)
-    return name
+def _category_id_from_slug(slug: str) -> Optional[int]:
+    """Category ID for an image file name: lower case, umlauts transcribed."""
+    for category_id, name in CATEGORY_MAPPING.items():
+        name = name.lower()
+        for umlaut, transcription in (('ä', 'ae'), ('ö', 'oe'), ('ü', 'ue')):
+            name = name.replace(umlaut, transcription)
+        if name == slug:
+            return category_id
+    logger.debug(f"Category image '{slug}' not found in mapping")
+    return None
 
 
 def parse_article_detail(soup: BeautifulSoup, article_id: str) -> Dict[str, Any]:
@@ -253,13 +257,9 @@ def extract_category_and_task(soup: BeautifulSoup) -> Tuple[Optional[int], Optio
     return category_id, task_id
 
 
-def _lookup_id(
-    mapping: Dict[int, str],
-    name: str,
-    normalize: Callable[[str], str] = lambda value: value,
-) -> Optional[int]:
+def _lookup_id(mapping: Dict[int, str], name: str) -> Optional[int]:
     for mapped_id, mapped_name in mapping.items():
-        if normalize(mapped_name) == name:
+        if mapped_name == name:
             return mapped_id
     logger.debug(f"'{name}' not found in mapping")
     return None

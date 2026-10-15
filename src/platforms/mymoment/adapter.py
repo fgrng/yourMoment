@@ -293,15 +293,20 @@ def _validate_target(target: Mapping[str, str]) -> dict[str, str]:
         raise PlatformRejected(f"myMoment target values must be strings: {dict(target)}")
 
     classroom = target.get('classroom')
-    if classroom is not None and classroom not in ('home', 'alle') and not classroom.isdigit():
+    if classroom is not None and classroom not in ('home', 'alle') and not _is_number(classroom):
         raise PlatformRejected(f"Unknown myMoment classroom: {classroom!r}")
     category = target.get('category')
-    if category is not None and not (category.isdigit() and int(category) in parsers.CATEGORY_MAPPING):
+    if category is not None and not (_is_number(category) and int(category) in parsers.CATEGORY_MAPPING):
         raise PlatformRejected(f"Unknown myMoment category: {category!r}")
     arrangement = target.get('arrangement')
-    if arrangement is not None and not arrangement.isdigit():
+    if arrangement is not None and not _is_number(arrangement):
         raise PlatformRejected(f"Unknown myMoment arrangement: {arrangement!r}")
     return dict(target)
+
+
+def _is_number(value: str) -> bool:
+    """ASCII digits only: str.isdigit() also accepts e.g. '²', which int() rejects."""
+    return value.isascii() and value.isdigit()
 
 
 def _contradicts(shown_id: Optional[int], wanted: Optional[str]) -> bool:

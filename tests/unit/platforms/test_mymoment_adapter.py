@@ -348,6 +348,9 @@ async def test_list_articles_arrangement_target_is_sent_and_kept_on_the_summarie
         {"classroom": "alle", "category": "Informieren"},
         {"classroom": "alle", "arrangement": "Hugo"},
         {"classroom": 82},
+        {"classroom": "²"},
+        {"classroom": "alle", "category": "²"},
+        {"classroom": "alle", "arrangement": "²"},
     ],
 )
 async def test_list_articles_rejects_invalid_target_without_request(adapter, http, account, target):
@@ -359,3 +362,12 @@ async def test_list_articles_rejects_invalid_target_without_request(adapter, htt
             await connection.list_articles(target)
 
     assert len(http.requests) == requests_before
+
+
+async def test_list_articles_raises_rejected_when_the_list_is_missing(adapter, http, account):
+    queue_login(http)
+    http.queue_response("GET", f"{MYMOMENT_BASE_URL}/articles/?tab=82", AiohttpStubResponse(status=404))
+
+    async with adapter.connect(account) as connection:
+        with pytest.raises(PlatformRejected):
+            await connection.list_articles({"classroom": "82"})

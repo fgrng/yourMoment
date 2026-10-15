@@ -88,6 +88,20 @@ async def test_discovery_creates_rows_only_for_the_process_target(db_session, db
     assert [c.mymoment_article_id for c in await _comments_of(db_session, scenario["process"].id)] == ["1"]
 
 
+async def test_discovery_stores_no_category_when_the_platform_reports_a_non_numeric_one(
+    db_session, db_engine, fake_platform
+):
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"category_filter": None}})
+    await db_session.commit()
+    _add_target_article(fake_platform, "1", category="²")
+
+    task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
+    await task._discover_articles_async(scenario["process"].id)
+
+    [comment] = await _comments_of(db_session, scenario["process"].id)
+    assert comment.article_category is None
+
+
 async def test_discovery_keeps_only_titles_with_the_search_term(db_session, db_engine, fake_platform):
     scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"search_filter": "rotpanda"}})
     await db_session.commit()
