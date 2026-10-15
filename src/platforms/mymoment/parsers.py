@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 import re
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from bs4 import BeautifulSoup
@@ -126,6 +127,53 @@ def _parse_article_row(row: Any) -> Optional[Dict[str, Any]]:
         'category_id': _lookup_id(CATEGORY_MAPPING, cells[3].get_text(strip=True)),
         'task_id': _lookup_id(TASK_MAPPING, cells[4].get_text(strip=True)),
     }
+
+
+def parse_student_articles(soup: BeautifulSoup) -> List[Dict[str, Any]]:
+    """
+    Parse the article table of a student's dashboard.
+
+    Each entry has `id`, `title`, `visibility`, `categories` (names as shown,
+    an article may have several), `category_id` (only for exactly one known
+    category), `status` and `last_modified` (None if the date cannot be read).
+    The rows link to the edit page of the article.
+    """
+    articles_tab = soup.select_one('#pills-articles') or soup
+    entries = []
+    for row in articles_tab.select('table tbody tr'):
+        cells = row.find_all('td')
+        if len(cells) < 5:
+            continue
+        link = cells[0].find('a')
+        article_id = _article_id_from_href(link.get('href', '')) if link else None
+        if not article_id or not (article_id.isascii() and article_id.isdigit()):
+            continue
+
+        category_items = cells[2].find_all('li')
+        if category_items:
+            categories = [item.get_text(strip=True) for item in category_items]
+        else:
+            categories = [cells[2].get_text(strip=True)] if cells[2].get_text(strip=True) else []
+
+        entries.append({
+            'id': article_id,
+            'title': link.get_text(strip=True),
+            'visibility': cells[1].get_text(strip=True),
+            'categories': categories,
+            'category_id': _lookup_id(CATEGORY_MAPPING, categories[0]) if len(categories) == 1 else None,
+            'status': cells[3].get_text(strip=True),
+            'last_modified': _parse_german_datetime(cells[4].get_text(strip=True)),
+        })
+    return entries
+
+
+def _parse_german_datetime(value: str) -> Optional[datetime]:
+    """Parse "28.01.2026 um 09:24 Uhr"; None if the text has another form."""
+    try:
+        return datetime.strptime(value.replace(' um ', ' ').replace(' Uhr', ''), '%d.%m.%Y %H:%M')
+    except ValueError:
+        logger.debug(f"Could not parse myMoment date '{value}'")
+        return None
 
 
 def _article_id_from_href(href: str) -> Optional[str]:

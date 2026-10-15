@@ -32,6 +32,13 @@ class ArticleRef:
 
 
 @dataclass(frozen=True)
+class StudentRef:
+    """Identity of a student on its platform: the external ID."""
+
+    id: str
+
+
+@dataclass(frozen=True)
 class ArticleContent:
     """Full content of one article as read from its platform."""
 
@@ -54,6 +61,7 @@ class ArticleSummary:
     title: str
     author: str
     category: Optional[str] = None
+    edited_at: Optional[datetime] = None
     extra: Mapping[str, str] = field(default_factory=dict)
 
 
@@ -75,6 +83,10 @@ class PlatformConnection(Protocol):
 
     async def post_comment(self, ref: ArticleRef, text: str, *, hidden: bool = False) -> PostedComment:
         """Publish `text` under the article; `hidden` hides it from other readers."""
+        ...
+
+    async def list_student_articles(self, student: StudentRef) -> list[ArticleSummary]:
+        """List every article of a student, drafts included; the contents come from `fetch_article`."""
         ...
 
 

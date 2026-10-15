@@ -76,3 +76,12 @@ def queue_article_list(
         f"{MYMOMENT_BASE_URL}/articles/?{urlencode(params)}",
         AiohttpStubResponse(status=200, body=body if body is not None else load_html_fixture("articles_index")),
     )
+
+
+def queue_student_dashboard(http: AiohttpStubSession, student_id: str = "1042", status: int = 200) -> None:
+    """Queue the dashboard myMoment shows admin accounts for one student."""
+    http.queue_response(
+        "GET",
+        f"{MYMOMENT_BASE_URL}/dashboard/user/{student_id}/",
+        AiohttpStubResponse(status=status, body=load_html_fixture("student_dashboard") if status == 200 else ""),
+    )

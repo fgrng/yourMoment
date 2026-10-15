@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import datetime
 import uuid
-from typing import Any, AsyncIterator, Mapping, Optional
+from typing import Any, AsyncIterator, Callable, Mapping, Optional
 
 import pytest
 
@@ -16,6 +17,7 @@ from src.platforms import (
     PlatformAccount,
     PlatformRejected,
     PostedComment,
+    StudentRef,
     use_adapter,
 )
 
@@ -88,6 +90,21 @@ class FakeConnection:
         self._platform.posted_comments.append(FakePostedComment(self.account, ref, text, hidden))
         return PostedComment()
 
+    async def list_student_articles(self, student: StudentRef) -> list[ArticleSummary]:
+        self._platform._raise_injected("list_student_articles")
+        return [
+            ArticleSummary(
+                ref=article.ref,
+                title=article.title,
+                author=article.author,
+                category=article.category,
+                edited_at=article.edited_at,
+                extra=article.extra,
+            )
+            for article_id, article in self._platform.articles.items()
+            if self._platform.article_students.get(article_id) == student.id
+        ]
+
 
 class FakePlatform:
     """In-memory platform: articles can be added, posted comments read back, errors injected per operation."""
@@ -98,10 +115,12 @@ class FakePlatform:
         self.connected_accounts: list[PlatformAccount] = []
         self.posted_comments: list[FakePostedComment] = []
         self.closed_articles: set[str] = set()
+        self.article_students: dict[str, str] = {}
+        self.on_call: Optional[Callable[[str], None]] = None  # observes every operation before it runs
         self._errors: dict[str, Exception] = {}
 
     def fail(self, operation: str, error: Exception) -> None:
-        """Raise `error` on every call of `operation` ("connect", "list_articles", "fetch_article", "post_comment")."""
+        """Raise `error` on every call of `operation`: "connect" or a connection method's name."""
         self._errors[operation] = error
 
     def reject_comments(self, article_id: str) -> None:
@@ -118,14 +137,20 @@ class FakePlatform:
         body_html: Optional[str] = None,
         category: Optional[str] = None,
         extra: Optional[Mapping[str, str]] = None,
+        edited_at: Optional[datetime] = None,
+        student: Optional[str] = None,
     ) -> ArticleRef:
+        """Add or replace an article; `student` is the external ID of its author for `list_student_articles`."""
         ref = ArticleRef(id=article_id, url=f"{self.base_url}/articles/{article_id}")
+        if student is not None:
+            self.article_students[article_id] = student
         self.articles[article_id] = ArticleContent(
             ref=ref,
             title=title,
             author=author,
             body_html=body_html if body_html is not None else f"<p>{body_text}</p>",
             body_text=body_text,
+            edited_at=edited_at,
             category=category,
             extra=dict(extra or {}),
         )
@@ -138,6 +163,8 @@ class FakePlatform:
         yield FakeConnection(self, account)
 
     def _raise_injected(self, operation: str) -> None:
+        if self.on_call is not None:
+            self.on_call(operation)
         error = self._errors.get(operation)
         if error is not None:
             raise error

@@ -12,6 +12,7 @@ The feature must be enabled via STUDENT_BACKUP_ENABLED=true environment variable
 import asyncio
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
@@ -20,17 +21,43 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.tasks.worker import celery_app, BaseTask
 from src.config.database import get_database_manager
 from src.config.settings import get_student_backup_settings
+from src.platforms import (
+    ArticleContent,
+    ArticleRef,
+    ArticleSummary,
+    PlatformAccount,
+    PlatformConnection,
+    PlatformError,
+    StudentRef,
+    connect,
+)
+from src.platforms.accounts import load_platform_account
 from src.services.student_backup_service import (
     StudentBackupService,
-    StudentBackupDisabledError
+    StudentBackupDisabledError,
+    StudentBackupValidationError,
 )
-from src.services.scraper_service import ScraperService, SessionContext
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class StudentSnapshot:
+    """Snapshot of a tracked student, read in a short session."""
+    id: uuid.UUID
+    user_id: uuid.UUID
+    login_id: Optional[uuid.UUID]
+    mymoment_student_id: int
+
+
 class StudentBackupTask(BaseTask):
-    """Base class for student backup tasks."""
+    """
+    Base class for student backup tasks.
+
+    Works like the monitoring tasks: short DB sessions for reads and writes,
+    the platform connection via `async with connect(...)`. No DB session is
+    open while the platform is called.
+    """
 
     def __init__(self):
         self.db_manager = get_database_manager()
@@ -45,17 +72,68 @@ class StudentBackupTask(BaseTask):
         """Check if the Student Backup feature is enabled."""
         return self.settings.STUDENT_BACKUP_ENABLED
 
+    async def _read_active_students(self) -> List[StudentSnapshot]:
+        session = await self.get_async_session()
+        async with session:
+            students = await StudentBackupService(session).get_all_active_tracked_students()
+            return [_snapshot(student) for student in students]
+
+    async def _read_student(self, tracked_student_id: uuid.UUID) -> Optional[StudentSnapshot]:
+        session = await self.get_async_session()
+        async with session:
+            student = await StudentBackupService(session).get_tracked_student_by_id(
+                tracked_student_id, user_id=None  # Allow any user for task
+            )
+            return _snapshot(student) if student else None
+
+    async def _load_admin_account(self, student: StudentSnapshot) -> PlatformAccount:
+        """Load the decrypted platform account; only admin accounts back up students."""
+        session = await self.get_async_session()
+        async with session:
+            account = await load_platform_account(session, student.login_id, student.user_id)
+        if account is None:
+            raise ValueError(f"Platform account {student.login_id} not found or inactive")
+        if account.role != "admin":
+            raise ValueError(f"Platform account {student.login_id} is not an admin account")
+        return account
+
+    async def _store_version(
+        self,
+        student: StudentSnapshot,
+        summary: ArticleSummary,
+        content: ArticleContent,
+    ) -> bool:
+        """Store a new Article Version unless content and metadata are unchanged."""
+        session = await self.get_async_session()
+        async with session:
+            version = await StudentBackupService(session).create_article_version(
+                user_id=student.user_id,
+                tracked_student_id=student.id,
+                mymoment_article_id=_article_version_id(summary.ref),
+                article_title=summary.title,
+                article_url=summary.ref.url,
+                article_content=content.body_text,
+                article_raw_html=content.body_html,
+                article_status=summary.extra.get("status"),
+                article_visibility=summary.extra.get("visibility"),
+                article_category=summary.extra.get("categories"),
+                article_task=None,  # Not available from the student's article list
+                article_last_modified=summary.edited_at,
+            )
+        if version:
+            logger.debug(f"Created version {version.version_number} for article {summary.ref.id}")
+        return version is not None
+
     async def _backup_all_students_async(self) -> Dict[str, Any]:
         """
         Async implementation of backing up all tracked students.
 
         Workflow:
         1. Load all active TrackedStudents
-        2. For each student:
-           a. Get admin login and authenticate
-           b. Fetch student dashboard
-           c. For each article, fetch content
-           d. Create ArticleVersion if content changed
+        2. Per admin account: connect once, then for each student
+           a. List the student's articles
+           b. Fetch each article's content
+           c. Create ArticleVersion if content changed
         """
         start_time = datetime.utcnow()
         stats = {
@@ -72,44 +150,35 @@ class StudentBackupTask(BaseTask):
             stats["status"] = "disabled"
             return stats
 
-        async with await self.get_async_session() as session:
-            try:
-                # Get all active tracked students
-                backup_service = StudentBackupService(session)
-                tracked_students = await backup_service.get_all_active_tracked_students()
+        try:
+            tracked_students = await self._read_active_students()
+            logger.info(f"Starting backup for {len(tracked_students)} tracked students")
 
-                logger.info(f"Starting backup for {len(tracked_students)} tracked students")
+            # Group students by admin login to connect once per account
+            students_by_login: Dict[uuid.UUID, List[StudentSnapshot]] = {}
+            for student in tracked_students:
+                if student.login_id:
+                    students_by_login.setdefault(student.login_id, []).append(student)
 
-                # Group students by admin login to minimize authentication overhead
-                students_by_login: Dict[uuid.UUID, list] = {}
-                for student in tracked_students:
-                    if student.mymoment_login_id:
-                        if student.mymoment_login_id not in students_by_login:
-                            students_by_login[student.mymoment_login_id] = []
-                        students_by_login[student.mymoment_login_id].append(student)
+            for login_id, students in students_by_login.items():
+                try:
+                    await self._backup_students_with_login(students, stats)
+                except Exception as e:
+                    error_msg = f"Failed to process students with login {login_id}: {e}"
+                    logger.error(error_msg)
+                    stats["errors"].append(error_msg)
 
-                # Process students grouped by login
-                for login_id, students in students_by_login.items():
-                    try:
-                        await self._backup_students_with_login(
-                            session, login_id, students, stats
-                        )
-                    except Exception as e:
-                        error_msg = f"Failed to process students with login {login_id}: {e}"
-                        logger.error(error_msg)
-                        stats["errors"].append(error_msg)
+            stats["status"] = "completed"
 
-                stats["status"] = "completed"
+        except StudentBackupDisabledError:
+            stats["status"] = "disabled"
+            logger.info("Student Backup feature is disabled")
 
-            except StudentBackupDisabledError:
-                stats["status"] = "disabled"
-                logger.info("Student Backup feature is disabled")
-
-            except Exception as e:
-                error_msg = f"Student backup failed: {e}"
-                logger.error(error_msg)
-                stats["errors"].append(error_msg)
-                stats["status"] = "failed"
+        except Exception as e:
+            error_msg = f"Student backup failed: {e}"
+            logger.error(error_msg)
+            stats["errors"].append(error_msg)
+            stats["status"] = "failed"
 
         stats["execution_time_seconds"] = (datetime.utcnow() - start_time).total_seconds()
         logger.info(
@@ -122,122 +191,41 @@ class StudentBackupTask(BaseTask):
 
     async def _backup_students_with_login(
         self,
-        session: AsyncSession,
-        login_id: uuid.UUID,
-        students: list,
+        students: List[StudentSnapshot],
         stats: Dict[str, Any]
     ) -> None:
-        """
-        Backup all students using a specific admin login.
-
-        Args:
-            session: Database session
-            login_id: Admin login ID to use
-            students: List of TrackedStudent objects to backup
-            stats: Statistics dictionary to update
-        """
-        # Initialize scraper service and authenticate
-        scraper = ScraperService(session)
-
-        try:
-            # Use initialize_session_for_login with the user_id from the first student
-            context = await scraper.initialize_session_for_login(
-                login_id, students[0].user_id
-            )
-            if not context.is_authenticated:
-                raise Exception(f"Failed to authenticate with login {login_id}")
-
-            # Process each student
+        """Backup all students of one admin account over a single connection."""
+        account = await self._load_admin_account(students[0])
+        async with connect(account) as platform:
             for student in students:
                 try:
-                    await self._backup_single_student(
-                        session, scraper, context, student, stats
-                    )
+                    await self._backup_single_student(platform, student, stats)
                     stats["students_processed"] += 1
                 except Exception as e:
-                    error_msg = (
-                        f"Failed to backup student {student.mymoment_student_id}: {e}"
-                    )
+                    error_msg = f"Failed to backup student {student.mymoment_student_id}: {e}"
                     logger.error(error_msg)
                     stats["errors"].append(error_msg)
 
-        finally:
-            # Clean up the scraper session
-            await scraper.cleanup_session(login_id)
-
     async def _backup_single_student(
         self,
-        session: AsyncSession,
-        scraper: ScraperService,
-        context: SessionContext,
-        student,
+        platform: PlatformConnection,
+        student: StudentSnapshot,
         stats: Dict[str, Any]
     ) -> None:
-        """
-        Backup all articles for a single tracked student.
-
-        Args:
-            session: Database session
-            scraper: Scraper service instance
-            context: Authenticated session context
-            student: TrackedStudent object
-            stats: Statistics dictionary to update
-        """
-        backup_service = StudentBackupService(session)
-
-        # Get list of articles from student dashboard
-        articles = await scraper.get_student_articles_from_dashboard(
-            context, student.mymoment_student_id
-        )
+        """Backup all articles of a single tracked student."""
+        articles = await platform.list_student_articles(StudentRef(id=str(student.mymoment_student_id)))
         stats["articles_found"] += len(articles)
+        logger.debug(f"Found {len(articles)} articles for student {student.mymoment_student_id}")
 
-        logger.debug(
-            f"Found {len(articles)} articles for student {student.mymoment_student_id}"
-        )
-
-        # Process each article
-        for article_info in articles:
+        for summary in articles:
             try:
-                # Get full article content
-                article_content = await scraper.get_article_content(
-                    context, str(article_info.article_id)
-                )
-
-                if not article_content:
-                    logger.warning(
-                        f"Could not fetch content for article {article_info.article_id}"
-                    )
-                    continue
-
-                # Create article version (will skip if content unchanged)
-                version = await backup_service.create_article_version(
-                    user_id=student.user_id,
-                    tracked_student_id=student.id,
-                    mymoment_article_id=article_info.article_id,
-                    article_title=article_info.title,
-                    article_url=article_info.view_url,
-                    article_content=article_content.get("content", ""),
-                    article_raw_html=article_content.get("full_html", ""),
-                    article_status=article_info.status,
-                    article_visibility=article_info.visibility,
-                    article_category=article_info.category,
-                    article_task=None,  # Not available from dashboard
-                    article_last_modified=article_info.last_modified
-                )
-
-                if version:
+                content = await platform.fetch_article(summary.ref)
+                if await self._store_version(student, summary, content):
                     stats["versions_created"] += 1
-                    logger.debug(
-                        f"Created version {version.version_number} for article "
-                        f"{article_info.article_id}"
-                    )
                 else:
                     stats["versions_skipped"] += 1
-
-            except Exception as e:
-                error_msg = (
-                    f"Failed to backup article {article_info.article_id}: {e}"
-                )
+            except (PlatformError, ValueError, StudentBackupValidationError) as e:
+                error_msg = f"Failed to backup article {summary.ref.id}: {e}"
                 logger.error(error_msg)
                 stats["errors"].append(error_msg)
 
@@ -268,58 +256,52 @@ class StudentBackupTask(BaseTask):
             stats["status"] = "disabled"
             return stats
 
-        async with await self.get_async_session() as session:
-            try:
-                backup_service = StudentBackupService(session)
+        try:
+            student = await self._read_student(uuid.UUID(tracked_student_id))
 
-                # Get the tracked student
-                student_uuid = uuid.UUID(tracked_student_id)
-                student = await backup_service.get_tracked_student_by_id(
-                    student_uuid, user_id=None  # Allow any user for task
-                )
+            if not student:
+                stats["status"] = "not_found"
+                stats["errors"].append(f"Tracked student {tracked_student_id} not found")
+                return stats
 
-                if not student:
-                    stats["status"] = "not_found"
-                    stats["errors"].append(f"Tracked student {tracked_student_id} not found")
-                    return stats
+            if not student.login_id:
+                stats["status"] = "no_login"
+                stats["errors"].append("No admin login assigned to tracked student")
+                return stats
 
-                if not student.mymoment_login_id:
-                    stats["status"] = "no_login"
-                    stats["errors"].append("No admin login assigned to tracked student")
-                    return stats
+            account = await self._load_admin_account(student)
+            async with connect(account) as platform:
+                await self._backup_single_student(platform, student, stats)
+            stats["students_processed"] = 1
+            stats["status"] = "completed"
 
-                # Initialize scraper and authenticate
-                scraper = ScraperService(session)
+        except StudentBackupDisabledError:
+            stats["status"] = "disabled"
 
-                try:
-                    context = await scraper.initialize_session_for_login(
-                        student.mymoment_login_id,
-                        student.user_id
-                    )
-                    if not context.is_authenticated:
-                        raise Exception("Authentication failed")
-
-                    # Backup the student
-                    await self._backup_single_student(
-                        session, scraper, context, student, stats
-                    )
-                    stats["students_processed"] = 1
-                    stats["status"] = "completed"
-
-                finally:
-                    await scraper.cleanup_session(student.mymoment_login_id)
-
-            except StudentBackupDisabledError:
-                stats["status"] = "disabled"
-
-            except Exception as e:
-                error_msg = f"Backup failed: {e}"
-                logger.error(error_msg)
-                stats["errors"].append(error_msg)
-                stats["status"] = "failed"
+        except Exception as e:
+            error_msg = f"Backup failed: {e}"
+            logger.error(error_msg)
+            stats["errors"].append(error_msg)
+            stats["status"] = "failed"
 
         stats["execution_time_seconds"] = (datetime.utcnow() - start_time).total_seconds()
         return stats
+
+
+def _snapshot(student) -> StudentSnapshot:
+    return StudentSnapshot(
+        id=student.id,
+        user_id=student.user_id,
+        login_id=student.mymoment_login_id,
+        mymoment_student_id=student.mymoment_student_id,
+    )
+
+
+def _article_version_id(ref: ArticleRef) -> int:
+    """The one place where the platform's string ID becomes the integer column of ArticleVersion."""
+    if not (ref.id.isascii() and ref.id.isdigit()):
+        raise ValueError(f"Article ID {ref.id!r} does not fit the integer column of ArticleVersion")
+    return int(ref.id)
 
 
 # =========================================================================

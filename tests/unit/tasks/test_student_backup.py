@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.models.article_version import ArticleVersion
-from src.services.scraper_service import StudentArticleInfo
+from src.platforms import PlatformAuthError, PlatformUnavailable
+from src.services.student_backup_service import StudentBackupService
 from src.tasks import student_backup
 from src.tasks.student_backup import StudentBackupTask
 from tests.fixtures.builders import build_scenario
@@ -17,8 +17,22 @@ from tests.support.runtime import reset_all_singletons
 pytestmark = [pytest.mark.unit, pytest.mark.database, pytest.mark.celery, pytest.mark.web_scraping]
 
 
+class _CountingSession(AsyncSession):
+    """Counts the sessions the task holds open."""
+
+    open_sessions = 0
+
+    async def __aenter__(self):
+        type(self).open_sessions += 1
+        return await super().__aenter__()
+
+    async def __aexit__(self, *exc_info):
+        type(self).open_sessions -= 1
+        return await super().__aexit__(*exc_info)
+
+
 def _bind_task_sessions(task, db_engine):
-    session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
+    session_factory = async_sessionmaker(db_engine, expire_on_commit=False, class_=_CountingSession)
 
     async def _get_async_session():
         return session_factory()
@@ -27,69 +41,171 @@ def _bind_task_sessions(task, db_engine):
     return task
 
 
-async def test_backup_single_student_skips_unchanged_versions(
-    db_session,
-    db_engine,
-    monkeypatch,
-):
+@pytest.fixture
+def backup_enabled(monkeypatch):
     monkeypatch.setenv("STUDENT_BACKUP_ENABLED", "true")
     reset_all_singletons()
+    yield
+    reset_all_singletons()
 
+
+@pytest.fixture
+async def scenario(db_session, backup_enabled):
     scenario = await build_scenario("student_backup_with_versions", db_session)
-    latest_version = scenario["latest_article_version"]
     await db_session.commit()
+    return scenario
 
-    class FakeScraperService:
-        def __init__(self, session):
-            self.session = session
 
-        async def initialize_session_for_login(self, login_id, user_id):
-            return SimpleNamespace(login_id=login_id, user_id=user_id, is_authenticated=True)
+def _add_student_article(fake_platform, student, article_id="4711", **overrides):
+    defaults = dict(
+        title="Mein Ausflug in den Zoo",
+        body_text="Wir waren im Zoo.",
+        body_html="<p>Wir waren im Zoo.</p>",
+        edited_at=datetime(2026, 1, 28, 9, 24),
+        extra={"status": "Publiziert", "visibility": "Beispielklasse A", "categories": "Unterhalten"},
+        student=str(student.mymoment_student_id),
+    )
+    return fake_platform.add_article(article_id, **{**defaults, **overrides})
 
-        async def cleanup_session(self, login_id):
-            return None
 
-        async def get_student_articles_from_dashboard(self, context, mymoment_student_id):
-            assert mymoment_student_id == scenario["tracked_student"].mymoment_student_id
-            return [
-                StudentArticleInfo(
-                    article_id=latest_version.mymoment_article_id,
-                    title=latest_version.article_title,
-                    visibility=latest_version.article_visibility,
-                    category=latest_version.article_category,
-                    status=latest_version.article_status,
-                    last_modified=latest_version.article_last_modified,
-                    edit_url=f"/article/edit/{latest_version.mymoment_article_id}/",
-                    view_url=latest_version.article_url,
-                )
-            ]
+async def _versions(db_session, scenario, article_id):
+    service = StudentBackupService(db_session)
+    return await service.get_article_versions(
+        scenario["tracked_student"].id, scenario["user"].id, mymoment_article_id=article_id
+    )
 
-        async def get_article_content(self, context, article_id):
-            assert int(article_id) == latest_version.mymoment_article_id
-            return {
-                "content": latest_version.article_content,
-                "full_html": latest_version.article_raw_html,
-            }
 
-    monkeypatch.setattr(student_backup, "ScraperService", FakeScraperService)
+async def test_backup_single_student_skips_unchanged_versions(db_session, db_engine, fake_platform, scenario):
+    latest = scenario["latest_article_version"]
+    _add_student_article(
+        fake_platform,
+        scenario["tracked_student"],
+        article_id=str(latest.mymoment_article_id),
+        title=latest.article_title,
+        body_text=latest.article_content,
+        body_html=latest.article_raw_html,
+        extra={
+            "status": latest.article_status,
+            "visibility": latest.article_visibility,
+            "categories": latest.article_category,
+        },
+    )
 
     task = _bind_task_sessions(StudentBackupTask(), db_engine)
     result = await task._backup_single_student_by_id_async(str(scenario["tracked_student"].id))
 
-    assert result["status"] == "completed"
-    assert result["students_processed"] == 1
-    assert result["articles_found"] == 1
-    assert result["versions_created"] == 0
-    assert result["versions_skipped"] == 1
-    assert result["errors"] == []
+    assert (result["status"], result["articles_found"], result["versions_created"], result["versions_skipped"],
+            result["errors"]) == ("completed", 1, 0, 1, [])
 
-    count_result = await db_session.execute(
-        select(func.count(ArticleVersion.id)).where(
-            ArticleVersion.tracked_student_id == scenario["tracked_student"].id,
-            ArticleVersion.is_active == True,
-        )
+
+async def test_backup_single_student_stores_a_new_article_with_its_absolute_url(
+    db_session, db_engine, fake_platform, scenario
+):
+    _add_student_article(fake_platform, scenario["tracked_student"], article_id="4711")
+
+    task = _bind_task_sessions(StudentBackupTask(), db_engine)
+    await task._backup_single_student_by_id_async(str(scenario["tracked_student"].id))
+
+    [version] = await _versions(db_session, scenario, 4711)
+    assert (
+        version.article_url,
+        version.article_title,
+        version.article_content,
+        version.article_raw_html,
+        version.article_status,
+        version.article_visibility,
+        version.article_category,
+        version.article_last_modified,
+    ) == (
+        "https://fake.example/articles/4711",
+        "Mein Ausflug in den Zoo",
+        "Wir waren im Zoo.",
+        "<p>Wir waren im Zoo.</p>",
+        "Publiziert",
+        "Beispielklasse A",
+        "Unterhalten",
+        datetime(2026, 1, 28, 9, 24),
     )
-    assert count_result.scalar_one() == 2
+
+
+async def test_backup_single_student_adds_a_version_when_the_content_changed(
+    db_session, db_engine, fake_platform, scenario
+):
+    latest = scenario["latest_article_version"]
+    _add_student_article(
+        fake_platform,
+        scenario["tracked_student"],
+        article_id=str(latest.mymoment_article_id),
+        body_text="Ganz neuer Inhalt.",
+    )
+
+    task = _bind_task_sessions(StudentBackupTask(), db_engine)
+    await task._backup_single_student_by_id_async(str(scenario["tracked_student"].id))
+
+    versions = await _versions(db_session, scenario, latest.mymoment_article_id)
+    assert [(v.version_number, v.article_content) for v in versions][0] == (3, "Ganz neuer Inhalt.")
+
+
+async def test_backup_holds_no_database_session_during_platform_calls(db_engine, fake_platform, scenario):
+    _add_student_article(fake_platform, scenario["tracked_student"], article_id="4711")
+    _add_student_article(fake_platform, scenario["tracked_student"], article_id="4712")
+    sessions_during_calls = []
+    fake_platform.on_call = lambda operation: sessions_during_calls.append(_CountingSession.open_sessions)
+
+    task = _bind_task_sessions(StudentBackupTask(), db_engine)
+    result = await task._backup_all_students_async()
+
+    assert (result["versions_created"], set(sessions_during_calls)) == (2, {0})
+
+
+async def test_backup_connects_with_the_students_admin_account(db_engine, fake_platform, scenario):
+    task = _bind_task_sessions(StudentBackupTask(), db_engine)
+    await task._backup_all_students_async()
+
+    assert [(a.id, a.role) for a in fake_platform.connected_accounts] == [(scenario["admin_login"].id, "admin")]
+
+
+async def test_backup_skips_students_whose_account_is_no_longer_an_admin_account(
+    db_session, db_engine, fake_platform, scenario
+):
+    scenario["admin_login"].is_admin = False
+    await db_session.commit()
+    _add_student_article(fake_platform, scenario["tracked_student"], article_id="4711")
+
+    task = _bind_task_sessions(StudentBackupTask(), db_engine)
+    result = await task._backup_all_students_async()
+
+    assert (fake_platform.connected_accounts, result["versions_created"], len(result["errors"])) == ([], 0, 1)
+
+
+@pytest.mark.parametrize(
+    "operation,error",
+    [
+        ("connect", PlatformAuthError("wrong password")),
+        ("list_student_articles", PlatformUnavailable("timeout")),
+    ],
+)
+async def test_backup_reports_platform_errors(db_engine, fake_platform, scenario, operation, error):
+    fake_platform.fail(operation, error)
+
+    task = _bind_task_sessions(StudentBackupTask(), db_engine)
+    result = await task._backup_all_students_async()
+
+    assert (result["status"], result["students_processed"], len(result["errors"])) == ("completed", 0, 1)
+
+
+async def test_backup_keeps_other_articles_when_one_cannot_be_read(db_session, db_engine, fake_platform, scenario):
+    _add_student_article(fake_platform, scenario["tracked_student"], article_id="4711")
+    _add_student_article(fake_platform, scenario["tracked_student"], article_id="draft-1")
+
+    task = _bind_task_sessions(StudentBackupTask(), db_engine)
+    result = await task._backup_single_student_by_id_async(str(scenario["tracked_student"].id))
+
+    assert (result["versions_created"], len(result["errors"]), len(await _versions(db_session, scenario, 4711))) == (
+        1,
+        1,
+        1,
+    )
 
 
 @pytest.mark.parametrize("tracked_student_ids", [["student-a", "student-b"], None])

@@ -110,6 +110,12 @@ docker-compose -f docker-compose.celery.yml up -d celery_monitor
 **Continuous Monitoring** (`scheduler` queue)
 - `trigger_monitoring_pipeline` – Periodic task spawner (configurable interval) for continuous monitoring
 
+**Student Backup** (`backup` queue, only with `STUDENT_BACKUP_ENABLED=true`)
+- `backup_all_tracked_students`, `backup_single_student`, `trigger_backup` – Back up the articles of tracked students as Article Versions
+- Works through the platform interface (`connect`, `list_student_articles`, `fetch_article`), one connection per admin account; only admin accounts are used
+- Short DB sessions for reads and writes; no session is open during platform calls
+- A new version is stored only if content or metadata changed; its URL is the absolute URL from the platform
+
 ### Task Queues
 
 | Queue | Purpose | Task Modules | Concurrency |

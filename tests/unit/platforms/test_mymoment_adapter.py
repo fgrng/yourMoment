@@ -7,7 +7,9 @@ import uuid
 
 import pytest
 
-from src.platforms import ArticleRef, PlatformAccount, PlatformRejected, PlatformUnavailable
+from datetime import datetime
+
+from src.platforms import ArticleRef, PlatformAccount, PlatformRejected, PlatformUnavailable, StudentRef
 from src.platforms.mymoment.adapter import MyMomentAdapter
 from tests.fixtures.stubs import AiohttpStubResponse, AiohttpStubSession
 from tests.support.mymoment_http import (
@@ -20,6 +22,7 @@ from tests.support.mymoment_http import (
     queue_article_list,
     queue_comment_post,
     queue_login,
+    queue_student_dashboard,
 )
 from tests.support.platform import InMemoryCookieStore
 
@@ -458,3 +461,53 @@ async def test_post_comment_on_server_error_raises_unavailable(adapter, http, ac
     async with adapter.connect(account) as connection:
         with pytest.raises(PlatformUnavailable):
             await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>")
+
+
+async def test_list_student_articles_returns_dashboard_metadata(adapter, http, account):
+    # student_dashboard.html, first row
+    queue_login(http)
+    queue_student_dashboard(http, "1042")
+
+    async with adapter.connect(account) as connection:
+        articles = await connection.list_student_articles(StudentRef(id="1042"))
+
+    first = articles[0]
+    assert (first.ref.url, first.title, first.category, first.edited_at, dict(first.extra)) == (
+        f"{MYMOMENT_BASE_URL}/article/2695/",
+        "Mein Ausflug in den Zoo",
+        "9",
+        datetime(2026, 1, 28, 9, 24),
+        {"categories": "Unterhalten", "status": "Publiziert", "visibility": "Beispielklasse A (Testschule)"},
+    )
+
+
+async def test_list_student_articles_keeps_drafts_without_category(adapter, http, account):
+    queue_login(http)
+    queue_student_dashboard(http, "1042")
+
+    async with adapter.connect(account) as connection:
+        articles = await connection.list_student_articles(StudentRef(id="1042"))
+
+    draft = articles[2]
+    assert (draft.category, draft.extra["categories"], draft.extra["status"]) == (None, "", "Entwurf")
+
+
+@pytest.mark.parametrize("status", [403, 404])
+async def test_list_student_articles_without_access_to_the_dashboard_raises_rejected(adapter, http, account, status):
+    queue_login(http)
+    queue_student_dashboard(http, "1042", status=status)
+
+    async with adapter.connect(account) as connection:
+        with pytest.raises(PlatformRejected):
+            await connection.list_student_articles(StudentRef(id="1042"))
+
+
+async def test_list_student_articles_rejects_a_malformed_student_id_without_request(adapter, http, account):
+    queue_login(http)
+
+    async with adapter.connect(account) as connection:
+        requests_after_login = len(http.requests)
+        with pytest.raises(PlatformRejected):
+            await connection.list_student_articles(StudentRef(id="../1042"))
+
+    assert len(http.requests) == requests_after_login

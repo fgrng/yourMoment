@@ -16,6 +16,7 @@ from src.platforms import (
     PlatformRejected,
     PlatformUnavailable,
     PostedComment,
+    StudentRef,
 )
 from src.platforms.mymoment.adapter import MyMomentAdapter
 from tests.fixtures.stubs import AiohttpStubResponse, AiohttpStubSession
@@ -26,6 +27,7 @@ from tests.support.mymoment_http import (
     queue_article_list,
     queue_comment_post,
     queue_login,
+    queue_student_dashboard,
 )
 from tests.support.platform import FakePlatform, InMemoryCookieStore
 
@@ -75,6 +77,13 @@ class FakeHarness:
         self.adapter.reject_comments(ref.id)
         return ref
 
+    def given_student_articles(self) -> StudentRef:
+        # Mirrors student_dashboard.html: three articles of student 1042
+        for article_id in ("2695", "2711", "2730"):
+            self.adapter.add_article(article_id, student="1042")
+        self.adapter.add_article("3170", student="1043")
+        return StudentRef(id="1042")
+
     def posted_texts(self) -> list[str]:
         return [comment.text for comment in self.adapter.posted_comments]
 
@@ -113,6 +122,10 @@ class MyMomentHarness:
         # A deleted article: myMoment answers 404 for its page
         self.http.queue_response("GET", f"{MYMOMENT_BASE_URL}/article/3170/", AiohttpStubResponse(status=404))
         return ArticleRef(id="3170", url=f"{MYMOMENT_BASE_URL}/article/3170/")
+
+    def given_student_articles(self) -> StudentRef:
+        queue_student_dashboard(self.http, "1042")
+        return StudentRef(id="1042")
 
     def posted_texts(self) -> list[str]:
         return [r["kwargs"]["data"]["text"] for r in self.http.requests if r["method"] == "POST" and "/comment/" in r["url"]]
@@ -226,3 +239,24 @@ async def test_post_comment_to_article_refusing_comments_is_rejected(harness):
             await connection.post_comment(ref, "<p>Schöner Text!</p>")
 
     assert harness.posted_texts() == []
+
+
+async def test_list_student_articles_lists_the_students_articles(harness):
+    harness.given_valid_login()
+    student = harness.given_student_articles()
+
+    async with harness.adapter.connect(harness.account) as connection:
+        articles = await connection.list_student_articles(student)
+
+    assert [a.ref.id for a in articles] == ["2695", "2711", "2730"]
+
+
+async def test_listed_student_article_urls_are_absolute(harness):
+    harness.given_valid_login()
+    student = harness.given_student_articles()
+
+    async with harness.adapter.connect(harness.account) as connection:
+        articles = await connection.list_student_articles(student)
+
+    parsed = [urlparse(a.ref.url) for a in articles]
+    assert parsed and all(p.scheme in {"http", "https"} and p.netloc for p in parsed)
