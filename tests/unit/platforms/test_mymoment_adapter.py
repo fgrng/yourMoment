@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import datetime
 
 import pytest
-
-from datetime import datetime
 
 from src.platforms import ArticleRef, PlatformAccount, PlatformRejected, PlatformUnavailable, StudentRef
 from src.platforms.mymoment.adapter import MyMomentAdapter
@@ -492,6 +491,38 @@ async def test_list_student_articles_keeps_drafts_without_category(adapter, http
     assert (draft.category, draft.extra["categories"], draft.extra["status"]) == (None, "", "Entwurf")
 
 
+async def test_list_student_articles_joins_several_categories_without_a_category_id(adapter, http, account):
+    # student_dashboard.html, second row: "Anleiten" and "Informieren"
+    queue_login(http)
+    queue_student_dashboard(http, "1042")
+
+    async with adapter.connect(account) as connection:
+        articles = await connection.list_student_articles(StudentRef(id="1042"))
+
+    second = articles[1]
+    assert (second.category, second.extra["categories"]) == (None, "Anleiten, Informieren")
+
+
+async def test_list_student_articles_reads_a_category_shown_as_plain_text(adapter, http, account):
+    queue_login(http)
+    queue_student_dashboard(http, "1042", body=_dashboard_row(category_cell="Berichten"))
+
+    async with adapter.connect(account) as connection:
+        [article] = await connection.list_student_articles(StudentRef(id="1042"))
+
+    assert (article.category, article.extra["categories"]) == ("14", "Berichten")
+
+
+async def test_list_student_articles_keeps_an_article_whose_date_cannot_be_read(adapter, http, account):
+    queue_login(http)
+    queue_student_dashboard(http, "1042", body=_dashboard_row(edited="gestern"))
+
+    async with adapter.connect(account) as connection:
+        [article] = await connection.list_student_articles(StudentRef(id="1042"))
+
+    assert (article.ref.id, article.edited_at) == ("2695", None)
+
+
 @pytest.mark.parametrize("status", [403, 404])
 async def test_list_student_articles_without_access_to_the_dashboard_raises_rejected(adapter, http, account, status):
     queue_login(http)
@@ -511,3 +542,15 @@ async def test_list_student_articles_rejects_a_malformed_student_id_without_requ
             await connection.list_student_articles(StudentRef(id="../1042"))
 
     assert len(http.requests) == requests_after_login
+
+
+def _dashboard_row(category_cell: str = "<li>Unterhalten</li>", edited: str = "28.01.2026 um 09:24 Uhr") -> str:
+    return f"""
+    <div id="pills-articles"><table><tbody><tr>
+      <td><a href="/article/edit/2695/">Mein Ausflug in den Zoo</a></td>
+      <td>Beispielklasse A (Testschule)</td>
+      <td>{category_cell}</td>
+      <td>Publiziert</td>
+      <td>{edited}</td>
+    </tr></tbody></table></div>
+    """

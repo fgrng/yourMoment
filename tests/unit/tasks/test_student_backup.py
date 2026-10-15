@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.platforms import PlatformAuthError, PlatformUnavailable
+from src.platforms import PlatformAuthError, PlatformRejected, PlatformUnavailable
 from src.services.student_backup_service import StudentBackupService
 from src.tasks import student_backup
 from src.tasks.student_backup import StudentBackupTask
@@ -32,6 +32,7 @@ class _CountingSession(AsyncSession):
 
 
 def _bind_task_sessions(task, db_engine):
+    _CountingSession.open_sessions = 0
     session_factory = async_sessionmaker(db_engine, expire_on_commit=False, class_=_CountingSession)
 
     async def _get_async_session():
@@ -192,6 +193,16 @@ async def test_backup_reports_platform_errors(db_engine, fake_platform, scenario
     result = await task._backup_all_students_async()
 
     assert (result["status"], result["students_processed"], len(result["errors"])) == ("completed", 0, 1)
+
+
+async def test_backup_reports_an_article_the_platform_refuses_to_deliver(db_engine, fake_platform, scenario):
+    _add_student_article(fake_platform, scenario["tracked_student"], article_id="4711")
+    fake_platform.fail("fetch_article", PlatformRejected("article deleted"))
+
+    task = _bind_task_sessions(StudentBackupTask(), db_engine)
+    result = await task._backup_single_student_by_id_async(str(scenario["tracked_student"].id))
+
+    assert (result["status"], result["versions_created"], len(result["errors"])) == ("completed", 0, 1)
 
 
 async def test_backup_keeps_other_articles_when_one_cannot_be_read(db_session, db_engine, fake_platform, scenario):

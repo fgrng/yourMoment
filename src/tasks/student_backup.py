@@ -224,7 +224,7 @@ class StudentBackupTask(BaseTask):
                     stats["versions_created"] += 1
                 else:
                     stats["versions_skipped"] += 1
-            except (PlatformError, ValueError, StudentBackupValidationError) as e:
+            except (PlatformError, StudentBackupValidationError) as e:
                 error_msg = f"Failed to backup article {summary.ref.id}: {e}"
                 logger.error(error_msg)
                 stats["errors"].append(error_msg)
@@ -300,7 +300,7 @@ def _snapshot(student) -> StudentSnapshot:
 def _article_version_id(ref: ArticleRef) -> int:
     """The one place where the platform's string ID becomes the integer column of ArticleVersion."""
     if not (ref.id.isascii() and ref.id.isdigit()):
-        raise ValueError(f"Article ID {ref.id!r} does not fit the integer column of ArticleVersion")
+        raise StudentBackupValidationError(f"Article ID {ref.id!r} does not fit the integer column of ArticleVersion")
     return int(ref.id)
 
 

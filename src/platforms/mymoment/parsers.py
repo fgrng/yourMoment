@@ -146,7 +146,7 @@ def parse_student_articles(soup: BeautifulSoup) -> List[Dict[str, Any]]:
             continue
         link = cells[0].find('a')
         article_id = _article_id_from_href(link.get('href', '')) if link else None
-        if not article_id or not (article_id.isascii() and article_id.isdigit()):
+        if not article_id or not is_number(article_id):
             continue
 
         category_items = cells[2].find_all('li')
@@ -174,6 +174,11 @@ def _parse_german_datetime(value: str) -> Optional[datetime]:
     except ValueError:
         logger.debug(f"Could not parse myMoment date '{value}'")
         return None
+
+
+def is_number(value: str) -> bool:
+    """ASCII digits only: str.isdigit() also accepts e.g. '²', which int() rejects."""
+    return value.isascii() and value.isdigit()
 
 
 def _article_id_from_href(href: str) -> Optional[str]:
