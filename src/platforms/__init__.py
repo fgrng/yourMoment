@@ -16,6 +16,8 @@ from src.platforms.types import (
     PlatformConnection,
     PostedComment,
     StudentRef,
+    TargetOption,
+    TargetValue,
 )
 
 __all__ = [
@@ -31,6 +33,8 @@ __all__ = [
     "PlatformUnavailable",
     "PostedComment",
     "StudentRef",
+    "TargetOption",
+    "TargetValue",
     "adapter_for",
     "connect",
     "use_adapter",

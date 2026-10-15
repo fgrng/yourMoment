@@ -295,7 +295,7 @@ Die Perspektive von {article_author} ist besonders aufschlussreich.
 **Endpoints**:
 - `GET /index` – List articles (with pagination, filters)
 - `GET /{id}` – Get article details and content
-- `GET /tabs` – List available article categories/tabs
+- `GET /targets` – List the target options of a platform account (myMoment: classrooms)
 
 **Filtering**:
 ```

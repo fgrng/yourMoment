@@ -538,14 +538,15 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
 
         try {
-            const response = await fetch(`/api/v1/mymoment-articles/${credentialId}/tabs`, fetchOptions());
+            const response = await fetch(`/api/v1/mymoment-articles/${credentialId}/targets`, fetchOptions());
 
             if (!response.ok) {
                 throw new Error(`Tabs konnten nicht geladen werden (HTTP ${response.status})`);
             }
 
             const data = await response.json();
-            loadedTabs = data.items || [];
+            const classrooms = (data.items || []).find(option => option.key === 'classroom');
+            loadedTabs = (classrooms ? classrooms.values : []).map(v => ({ id: v.value, name: v.label }));
 
             // Populate tab selector
             loadedTabs.forEach(tab => {

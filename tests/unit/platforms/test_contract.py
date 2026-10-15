@@ -17,6 +17,8 @@ from src.platforms import (
     PlatformUnavailable,
     PostedComment,
     StudentRef,
+    TargetOption,
+    TargetValue,
 )
 from src.platforms.mymoment.adapter import MyMomentAdapter
 from tests.fixtures.stubs import AiohttpStubResponse, AiohttpStubSession
@@ -28,6 +30,7 @@ from tests.support.mymoment_http import (
     queue_comment_post,
     queue_login,
     queue_student_dashboard,
+    queue_targets,
 )
 from tests.support.platform import FakePlatform, InMemoryCookieStore
 
@@ -43,6 +46,15 @@ def _account() -> PlatformAccount:
         password="secret",
         role="user",
     )
+
+
+# The classroom tabs of articles_index.html
+CLASSROOMS = (
+    TargetValue(value="home", label="Meine"),
+    TargetValue(value="82", label="Beispielklasse A (Testschule)"),
+    TargetValue(value="91", label="Beispielklasse B (Testschule)"),
+    TargetValue(value="alle", label="Alle"),
+)
 
 
 class FakeHarness:
@@ -62,6 +74,9 @@ class FakeHarness:
     def given_article(self) -> tuple[ArticleRef, str]:
         ref = self.adapter.add_article("3170", title="Beispieldialog", body_text="Hallo.")
         return ref, "Beispieldialog"
+
+    def given_classrooms(self) -> None:
+        self.adapter.targets = [TargetOption(key="classroom", label="Classroom", values=list(CLASSROOMS))]
 
     def given_listed_articles(self, target=None) -> None:
         # Mirrors the "alle" classroom of articles_index.html: two Unterhalten (9), one Informieren (7)
@@ -109,6 +124,9 @@ class MyMomentHarness:
     def given_article(self) -> tuple[ArticleRef, str]:
         queue_article(self.http, "3170")
         return ArticleRef(id="3170", url=f"{MYMOMENT_BASE_URL}/article/3170/"), "Beispieldialog"
+
+    def given_classrooms(self) -> None:
+        queue_targets(self.http)
 
     def given_listed_articles(self, target=None) -> None:
         queue_article_list(self.http, target)
@@ -178,6 +196,16 @@ async def test_fetched_article_url_is_absolute(harness):
 
     parsed = urlparse(content.ref.url)
     assert parsed.scheme in {"http", "https"} and parsed.netloc
+
+
+async def test_list_targets_offers_the_classrooms(harness):
+    harness.given_valid_login()
+    harness.given_classrooms()
+
+    async with harness.adapter.connect(harness.account) as connection:
+        targets = await connection.list_targets()
+
+    assert [(t.key, t.values) for t in targets] == [("classroom", list(CLASSROOMS))]
 
 
 async def test_list_articles_without_target_lists_all_articles(harness):

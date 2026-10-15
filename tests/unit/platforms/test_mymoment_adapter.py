@@ -29,6 +29,7 @@ from tests.support.mymoment_http import (
     queue_comment_post,
     queue_login,
     queue_student_dashboard,
+    queue_targets,
 )
 from tests.support.platform import InMemoryCookieStore
 
@@ -407,6 +408,15 @@ async def test_list_articles_raises_rejected_when_the_list_is_missing(adapter, h
     async with adapter.connect(account) as connection:
         with pytest.raises(PlatformRejected):
             await connection.list_articles({"classroom": "82"})
+
+
+async def test_list_targets_raises_rejected_when_the_index_is_missing(adapter, http, account):
+    queue_login(http)
+    queue_targets(http, status=404)
+
+    async with adapter.connect(account) as connection:
+        with pytest.raises(PlatformRejected):
+            await connection.list_targets()
 
 
 COMMENT_URL = f"{MYMOMENT_BASE_URL}/article/3170/comment/"

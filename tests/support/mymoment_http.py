@@ -78,6 +78,15 @@ def queue_article_list(
     )
 
 
+def queue_targets(http: AiohttpStubSession, status: int = 200) -> None:
+    """Queue the article index whose tabs name the classrooms."""
+    http.queue_response(
+        "GET",
+        f"{MYMOMENT_BASE_URL}/articles/",
+        AiohttpStubResponse(status=status, body=load_html_fixture("articles_index") if status == 200 else ""),
+    )
+
+
 def queue_student_dashboard(
     http: AiohttpStubSession,
     student_id: str = "1042",

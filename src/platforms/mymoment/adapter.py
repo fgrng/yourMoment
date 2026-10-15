@@ -27,6 +27,8 @@ from src.platforms.types import (
     PlatformAccount,
     PostedComment,
     StudentRef,
+    TargetOption,
+    TargetValue,
 )
 from src.utils.url_sanitizer import is_url_malformed, sanitize_url
 
@@ -107,6 +109,15 @@ class MyMomentConnection:
         self._last_request_time: Optional[float] = None
         self._rate_limit_lock = asyncio.Lock()
         self._csrf_token: Optional[str] = None
+
+    async def list_targets(self) -> list[TargetOption]:
+        """The classrooms this account sees, read from the tabs of the article index."""
+        page = await self._request('GET', f"{self._base_url}/articles/")
+        if page.status != 200:
+            raise PlatformRejected(f"myMoment answered {page.status} for the article index")
+
+        classrooms = [TargetValue(value=value, label=label) for value, label in parsers.parse_classroom_tabs(page.soup())]
+        return [TargetOption(key='classroom', label='Classroom', values=classrooms)]
 
     async def list_articles(self, target: Optional[Mapping[str, str]] = None) -> list[ArticleSummary]:
         """

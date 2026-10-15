@@ -14,7 +14,7 @@ import logging
 from datetime import datetime, timezone
 from email.utils import format_datetime, parsedate_to_datetime
 from http.cookies import SimpleCookie
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 from dataclasses import dataclass
 
 from bs4 import BeautifulSoup
@@ -25,7 +25,6 @@ from src.services.mymoment_session_service import MyMomentSessionService
 from src.services.mymoment_credentials_service import MyMomentCredentialsService
 from src.config.settings import get_settings
 from src.utils.url_sanitizer import sanitize_url, is_url_malformed
-from src.platforms.mymoment import parsers
 
 logger = logging.getLogger(__name__)
 
@@ -66,29 +65,6 @@ class ScrapingConfig:
             retry_attempts=settings.scraper.RETRY_ATTEMPTS,
             retry_delay=settings.scraper.RETRY_DELAY
         )
-
-
-@dataclass
-class ArticleMetadata:
-    """Article metadata extracted from myMoment."""
-    id: str
-    title: str
-    author: str
-    date: str
-    status: str
-    category_id: Optional[int]  # Category ID only, name can be looked up from parsers.CATEGORY_MAPPING
-    task_id: Optional[int]  # Task ID only, name can be looked up from parsers.TASK_MAPPING
-    visibility: str
-    url: str
-    content_preview: Optional[str] = None
-
-
-@dataclass
-class TabMetadata:
-    """Tab/filter metadata extracted from myMoment articles page."""
-    id: str  # Tab identifier (e.g., "home", "alle", "38")
-    name: str  # Display name (e.g., "Meine", "Alle", "Dummy Klasse 01")
-    tab_type: str  # Type: "home", "alle", or "class"
 
 
 @dataclass
@@ -615,228 +591,6 @@ class ScraperService:
         except Exception as e:
             logger.warning(f"Failed to check authentication status: {e}")
             return False
-
-    async def discover_new_articles(
-        self,
-        context: SessionContext,
-        tab: str = "alle",
-        category: Optional[str] = None,
-        task: Optional[str] = None,
-        search: Optional[str] = None,
-        limit: int = 20
-    ) -> List[ArticleMetadata]:
-        """
-        Discover new articles from myMoment platform.
-
-        Returns article metadata only (no full content). This method performs
-        HTTP requests only and does NOT use the database session.
-
-        Args:
-            context: Authenticated session context
-            tab: Which tab to scrape ('home', 'alle', or classroom ID)
-            category: Optional category filter (by category ID)
-            task: Optional task filter (by task ID)
-            search: Optional search string to filter articles by title
-            limit: Maximum number of articles to retrieve
-
-        Returns:
-            List of discovered articles (metadata only, no content)
-
-        Raises:
-            ScrapingError: If article discovery fails
-        """
-        try:
-            if not context.is_authenticated:
-                raise ScrapingError(f"Session not authenticated for login {context.login_id}")
-
-            # Build URL with query parameters for filtering
-            articles_url = f"{self.config.base_url}/articles/?tab={tab}"
-
-            # Add category filter if specified
-            if category:
-                articles_url += f"&kategorie={category}"
-
-            # Add task filter if specified
-            if task:
-                articles_url += f"&aufgabe={task}"
-
-            logger.debug(f"Starting HTTP request to discover articles (login {context.login_id}, tab={tab}, category={category}, task={task})")
-            await self._rate_limit()
-            async with context.aiohttp_session.get(articles_url) as response:
-                if response.status != 200:
-                    raise ScrapingError(f"Failed to load articles page: {response.status}")
-
-                html = await response.text()
-
-            soup = BeautifulSoup(html, 'html.parser')
-            articles = []
-            for entry in parsers.parse_article_list(soup, tab):
-                if len(articles) >= limit:
-                    break
-                if search and search.lower() not in entry['title'].lower():
-                    continue
-                href = entry['href']
-                articles.append(ArticleMetadata(
-                    id=entry['id'],
-                    title=entry['title'],
-                    author=entry['author'],
-                    date=entry['date'],
-                    status=entry['status'],
-                    category_id=entry['category_id'],
-                    task_id=entry['task_id'],
-                    visibility=entry['visibility'],
-                    url=f"{self.config.base_url}{href}" if href.startswith('/') else href,
-                ))
-
-            context.last_activity = datetime.utcnow()
-            logger.debug(f"HTTP request completed for article discovery (login {context.login_id})")
-            logger.info(f"Discovered {len(articles)} articles for login {context.login_id} (tab: {tab}, category: {category}, task: {task}, search: {search})")
-
-            return articles
-
-        except Exception as e:
-            logger.error(f"Failed to discover articles for login {context.login_id}: {e}")
-            raise ScrapingError(f"Article discovery failed: {e}")
-
-    async def discover_available_tabs(self, context: SessionContext) -> List[TabMetadata]:
-        """
-        Discover available tabs for the authenticated session.
-
-        Tabs represent article filters on myMoment platform:
-        - "home": User's own articles ("Meine")
-        - "alle": All publicly visible articles ("Alle")
-        - Class IDs: Articles visible to specific classes (e.g., "38", "82")
-
-        Args:
-            context: Active session context
-
-        Returns:
-            List of available tabs
-
-        Raises:
-            ScrapingError: If tab discovery fails
-        """
-        try:
-            if not context.is_authenticated:
-                raise ScrapingError(f"Session not authenticated for login {context.login_id}")
-
-            articles_url = f"{self.config.base_url}/articles/"
-
-            await self._rate_limit()
-            async with context.aiohttp_session.get(articles_url) as response:
-                if response.status != 200:
-                    raise ScrapingError(f"Failed to load articles page: {response.status}")
-
-                html = await response.text()
-
-            soup = BeautifulSoup(html, 'html.parser')
-            tabs = self._parse_article_tabs(soup)
-
-            context.last_activity = datetime.utcnow()
-            logger.info(f"Discovered {len(tabs)} tabs for login {context.login_id}")
-
-            return tabs
-
-        except Exception as e:
-            logger.error(f"Failed to discover tabs for login {context.login_id}: {e}")
-            raise ScrapingError(f"Tab discovery failed: {e}")
-
-    def _parse_article_tabs(self, soup: BeautifulSoup) -> List[TabMetadata]:
-        """
-        Parse available tabs from articles page HTML.
-
-        Args:
-            soup: BeautifulSoup object of the articles page
-
-        Returns:
-            List of TabMetadata objects
-        """
-        # Find the tab navigation (<ul class="nav nav-pills" id="pills-tab">)
-        tabs_nav = soup.find('ul', {'id': 'pills-tab'})
-        if not tabs_nav:
-            logger.warning("No tabs navigation found on articles page")
-            return []
-
-        tabs = []
-
-        # Extract all tab buttons
-        for tab_button in tabs_nav.find_all('button', {'role': 'tab'}):
-            try:
-                # Extract tab ID from data-bs-target (e.g., "#pills-home" -> "home")
-                target = tab_button.get('data-bs-target', '')
-                if not target.startswith('#pills-'):
-                    continue
-
-                tab_id = target.replace('#pills-', '')
-                tab_name = tab_button.text.strip()
-
-                # Determine tab type
-                if tab_id == 'home':
-                    tab_type = 'home'
-                elif tab_id == 'alle':
-                    tab_type = 'alle'
-                else:
-                    # Numeric ID = class tab
-                    tab_type = 'class'
-
-                tabs.append(TabMetadata(
-                    id=tab_id,
-                    name=tab_name,
-                    tab_type=tab_type
-                ))
-
-            except Exception as e:
-                logger.warning(f"Failed to extract tab metadata: {e}")
-                continue
-
-        return tabs
-
-    async def get_article_content(
-        self,
-        context: SessionContext,
-        article_id: str
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Get full content of a specific article.
-
-        This method performs HTTP requests only and does NOT use the database session.
-
-        Args:
-            context: Authenticated session context
-            article_id: Article ID to retrieve
-
-        Returns:
-            Article content dictionary or None if failed
-
-        Raises:
-            ScrapingError: If content retrieval fails
-        """
-        try:
-            if not context.is_authenticated:
-                raise ScrapingError(f"Session not authenticated for login {context.login_id}")
-
-            article_url = f"{self.config.base_url}/article/{article_id}/"
-
-            logger.debug(f"Starting HTTP request to fetch article content (article_id={article_id}, login={context.login_id})")
-            await self._rate_limit()
-            async with context.aiohttp_session.get(article_url) as response:
-                if response.status != 200:
-                    raise ScrapingError(f"Failed to load article {article_id}: {response.status}")
-
-                html = await response.text()
-
-            soup = BeautifulSoup(html, 'html.parser')
-            article_content = parsers.parse_article_detail(soup, article_id)
-            article_content['url'] = article_url
-
-            context.last_activity = datetime.utcnow()
-            logger.debug(f"HTTP request completed for article content (article_id={article_id}, login={context.login_id})")
-
-            return article_content
-
-        except Exception as e:
-            logger.error(f"Failed to get article content for {article_id}: {e}")
-            raise ScrapingError(f"Article content retrieval failed: {e}")
 
     async def _rate_limit(self):
         """Apply rate limiting to requests."""

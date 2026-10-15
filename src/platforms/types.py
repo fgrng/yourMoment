@@ -66,6 +66,23 @@ class ArticleSummary:
 
 
 @dataclass(frozen=True)
+class TargetValue:
+    """One value a target dimension can take, with the label the platform shows."""
+
+    value: str
+    label: str
+
+
+@dataclass(frozen=True)
+class TargetOption:
+    """One selectable target dimension: its key in the target mapping, a label and its values."""
+
+    key: str
+    label: str
+    values: list[TargetValue] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class PostedComment:
     """A published comment; platforms that do not report an ID return None."""
 
@@ -74,6 +91,10 @@ class PostedComment:
 
 class PlatformConnection(Protocol):
     """An authenticated connection to one platform account."""
+
+    async def list_targets(self) -> list[TargetOption]:
+        """Describe the target dimensions this account can choose from, with their values."""
+        ...
 
     async def list_articles(self, target: Optional[Mapping[str, str]] = None) -> list[ArticleSummary]:
         """List the articles of a target; the adapter validates the target's keys and values."""

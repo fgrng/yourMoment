@@ -18,6 +18,7 @@ from src.platforms import (
     PlatformRejected,
     PostedComment,
     StudentRef,
+    TargetOption,
     use_adapter,
 )
 
@@ -58,6 +59,10 @@ class FakeConnection:
     def __init__(self, platform: "FakePlatform", account: PlatformAccount) -> None:
         self._platform = platform
         self.account = account
+
+    async def list_targets(self) -> list[TargetOption]:
+        self._platform._raise_injected("list_targets")
+        return list(self._platform.targets)
 
     async def list_articles(self, target: Optional[Mapping[str, str]] = None) -> list[ArticleSummary]:
         self._platform._raise_injected("list_articles")
@@ -115,6 +120,7 @@ class FakePlatform:
     def __init__(self, base_url: str = "https://fake.example") -> None:
         self.base_url = base_url
         self.articles: dict[str, ArticleContent] = {}
+        self.targets: list[TargetOption] = []  # what `list_targets` describes
         self.connected_accounts: list[PlatformAccount] = []
         self.posted_comments: list[FakePostedComment] = []
         self.closed_articles: set[str] = set()

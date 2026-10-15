@@ -46,6 +46,26 @@ def extract_login_csrf_token(soup: BeautifulSoup) -> Optional[str]:
     return csrf_input.get('value') if csrf_input else None
 
 
+def parse_classroom_tabs(soup: BeautifulSoup) -> List[Tuple[str, str]]:
+    """
+    Read the classroom tabs of the article index as (value, label) pairs.
+
+    The value is the tab ID used as `?tab=`: "home" (own articles), "alle"
+    or a numeric classroom ID.
+    """
+    tabs_nav = soup.find('ul', {'id': 'pills-tab'})
+    if not tabs_nav:
+        logger.warning("No tabs navigation found on articles page")
+        return []
+
+    tabs = []
+    for button in tabs_nav.find_all('button', {'role': 'tab'}):
+        target = button.get('data-bs-target', '')
+        if target.startswith('#pills-'):
+            tabs.append((target.removeprefix('#pills-'), button.get_text(strip=True)))
+    return tabs
+
+
 def parse_article_list(soup: BeautifulSoup, classroom: str) -> List[Dict[str, Any]]:
     """
     Parse the article index for one classroom tab.

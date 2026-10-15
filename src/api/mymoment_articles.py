@@ -1,23 +1,33 @@
-"""Article discovery endpoints backed by live myMoment scraping."""
+"""Article browsing endpoints: targets, article lists and previews, live from the platform."""
 
 import uuid
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
 
 from src.api.schemas import (
     ArticleResponse,
     ArticleDetailResponse,
     ArticleListResponse,
-    TabResponse,
-    TabListResponse
+    TargetListResponse,
+    TargetOptionResponse,
+    TargetValueResponse,
 )
 from src.api.auth import get_current_user
 from src.config.database import get_session
 from src.models.user import User
-from src.models.mymoment_login import MyMomentLogin
+from src.platforms import (
+    ArticleRef,
+    PlatformAccount,
+    PlatformAuthError,
+    PlatformError,
+    PlatformRejected,
+    PlatformUnavailable,
+    connect,
+)
+from src.platforms.accounts import load_platform_account
 import logging
 
 logger = logging.getLogger(__name__)
@@ -26,193 +36,112 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/mymoment-articles", tags=["myMoment Articles"])
 
 
-async def verify_login_ownership(
+async def _platform_account(
     mymoment_login_id: uuid.UUID,
     user_id: uuid.UUID,
     session: AsyncSession
-) -> MyMomentLogin:
-    """Verify that the user owns the specified myMoment login."""
-    result = await session.execute(
-        select(MyMomentLogin).where(
-            and_(
-                MyMomentLogin.id == mymoment_login_id,
-                MyMomentLogin.user_id == user_id,
-                MyMomentLogin.is_active == True
-            )
-        )
-    )
-    login = result.scalar_one_or_none()
-
-    if not login:
+) -> PlatformAccount:
+    """The user's active platform account; 404 if it is someone else's or inactive."""
+    account = await load_platform_account(session, mymoment_login_id, user_id)
+    if account is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="MyMoment login not found or not accessible"
         )
+    return account
 
-    return login
+
+def _platform_error(e: PlatformError, action: str) -> HTTPException:
+    """Rejected requests answer 422, rejected credentials 502, an unreachable platform 503."""
+    if isinstance(e, PlatformRejected):
+        status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    elif isinstance(e, PlatformAuthError):
+        status_code = status.HTTP_502_BAD_GATEWAY
+    else:
+        status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return HTTPException(status_code=status_code, detail=f"Failed to {action}: {e}")
 
 
 @router.get("/{mymoment_login_id}/index", response_model=ArticleListResponse)
 async def get_articles(
     mymoment_login_id: uuid.UUID = Path(..., description="MyMoment login to use for viewing articles"),
     category: Optional[int] = Query(None, description="Filter by myMoment category ID"),
-    tab: str = Query("alle", description="MyMoment tab to scrape (alle, favoriten, entwuerfe, etc.)"),
+    tab: str = Query("alle", description="Classroom to list (alle, home or a classroom ID)"),
     limit: int = Query(20, ge=1, le=100, description="Number of articles to fetch from myMoment"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
     """
-    Browse articles from myMoment platform live via scraping.
-
-    This endpoint:
-    1. Verifies user owns the specified myMoment login
-    2. Initializes a scraping session with myMoment platform
-    3. Discovers articles based on filters (category, tab)
-    4. Returns article metadata (title, author, category, etc.)
+    Browse the articles of a classroom live on the platform, optionally of one category.
 
     Note: This does NOT store articles in the database. Articles are only
     stored when AI comments are generated via monitoring processes.
     """
+    account = await _platform_account(mymoment_login_id, current_user.id, session)
+    target = {"classroom": tab}
+    if category is not None:
+        target["category"] = str(category)
+
+    logger.info(f"User {current_user.id} listing articles with login {mymoment_login_id} (target={target}, limit={limit})")
     try:
-        # Verify user owns the myMoment login
-        await verify_login_ownership(mymoment_login_id, current_user.id, session)
+        async with connect(account) as platform:
+            summaries = (await platform.list_articles(target))[:limit]
+    except PlatformError as e:
+        raise _platform_error(e, "list articles") from e
 
-        logger.info(f"User {current_user.id} scraping articles with login {mymoment_login_id} (tab={tab}, limit={limit})")
-
-        # Initialize scraper service
-        from src.services.scraper_service import ScraperService
-        scraper = ScraperService(db_session=session)
-
-        try:
-            # Initialize scraping session for this login
-            context = await scraper.initialize_session_for_login(
-                login_id=mymoment_login_id,
-                user_id=current_user.id
-            )
-
-            # Discover articles from myMoment platform
-            discovered_articles = await scraper.discover_new_articles(
-                context=context,
-                tab=tab,
-                limit=limit
-            )
-
-            logger.info(f"Discovered {len(discovered_articles)} articles from myMoment")
-
-            # Apply filters, not implementet here / yet
-            filtered_articles = discovered_articles
-
-            if category is not None:
-                filtered_articles = [
-                    a for a in filtered_articles
-                    if a.category_id == category
-                ]
-
-            # Convert to response format
-            from datetime import datetime
-            article_responses = []
-            for article_meta in filtered_articles:
-                article_responses.append(ArticleResponse(
-                    id=article_meta.id,
-                    title=article_meta.title,
-                    author=article_meta.author,
-                    # category=article_meta.category_id if article_meta.category_id is not None else 0,
-                    published_at=None, # not available in index view
-                    edited_at=article_meta.date,
-                    scraped_at=datetime.utcnow(), # Current scraping time
-                    mymoment_url=article_meta.url,
-                    visibility=article_meta.visibility,
-                    ai_comments_count=0,  # Not stored yet
-                    accessible_by_login_ids=[mymoment_login_id]  # Current login
-                ))
-
-            return ArticleListResponse(
-                items=article_responses,
-                total=len(article_responses),
-                limit=limit,
-                offset=0
-            )
-
-        finally:
-            # Clean up scraping session
-            await scraper.cleanup_session(mymoment_login_id)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error scraping articles for user {current_user.id}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to scrape articles from myMoment: {str(e)}"
+    scraped_at = datetime.utcnow()
+    article_responses = [
+        ArticleResponse(
+            id=summary.ref.id,
+            title=summary.title,
+            author=summary.author,
+            published_at=None,  # not available in list views
+            edited_at=summary.extra.get("date") or (summary.edited_at.isoformat() if summary.edited_at else None),
+            scraped_at=scraped_at,
+            mymoment_url=summary.ref.url,
+            visibility=summary.extra.get("visibility", "Unknown"),
+            ai_comments_count=0,  # Not stored yet
+            accessible_by_login_ids=[mymoment_login_id]
         )
+        for summary in summaries
+    ]
+    return ArticleListResponse(
+        items=article_responses,
+        total=len(article_responses),
+        limit=limit,
+        offset=0
+    )
 
 
-@router.get("/{mymoment_login_id}/tabs", response_model=TabListResponse)
-async def get_available_tabs(
-    mymoment_login_id: uuid.UUID = Path(..., description="MyMoment login to use for discovering tabs"),
+@router.get("/{mymoment_login_id}/targets", response_model=TargetListResponse)
+async def get_targets(
+    mymoment_login_id: uuid.UUID = Path(..., description="MyMoment login whose targets to describe"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
     """
-    Get available article tabs for a myMoment login.
+    Describe the target dimensions a platform account can choose from.
 
-    Tabs represent different article filters on the myMoment platform:
-    - **home**: User's own articles ("Meine")
-    - **alle**: All publicly visible articles ("Alle")
-    - **class**: Articles visible to specific classes (e.g., "Dummy Klasse 01")
-
-    This endpoint scrapes the myMoment articles page to discover which tabs
-    are available for the specified login credentials.
+    For myMoment these are the classrooms: "home" (own articles), "alle"
+    and one entry per classroom of the account.
     """
+    account = await _platform_account(mymoment_login_id, current_user.id, session)
+
+    logger.info(f"User {current_user.id} listing targets for login {mymoment_login_id}")
     try:
-        # Verify user owns the myMoment login
-        await verify_login_ownership(mymoment_login_id, current_user.id, session)
+        async with connect(account) as platform:
+            options = await platform.list_targets()
+    except PlatformError as e:
+        raise _platform_error(e, "list targets") from e
 
-        logger.info(f"User {current_user.id} discovering tabs for login {mymoment_login_id}")
-
-        # Initialize scraper service
-        from src.services.scraper_service import ScraperService
-        scraper = ScraperService(db_session=session)
-
-        try:
-            # Initialize scraping session for this login
-            context = await scraper.initialize_session_for_login(
-                login_id=mymoment_login_id,
-                user_id=current_user.id
-            )
-
-            # Discover available tabs from myMoment platform
-            discovered_tabs = await scraper.discover_available_tabs(context)
-
-            logger.info(f"Discovered {len(discovered_tabs)} tabs for login {mymoment_login_id}")
-
-            # Convert to response format
-            tab_responses = [
-                TabResponse(
-                    id=tab.id,
-                    name=tab.name,
-                    tab_type=tab.tab_type
-                )
-                for tab in discovered_tabs
-            ]
-
-            return TabListResponse(
-                items=tab_responses,
-                total=len(tab_responses)
-            )
-
-        finally:
-            # Clean up scraping session
-            await scraper.cleanup_session(mymoment_login_id)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error discovering tabs for user {current_user.id}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to discover tabs from myMoment: {str(e)}"
+    return TargetListResponse(items=[
+        TargetOptionResponse(
+            key=option.key,
+            label=option.label,
+            values=[TargetValueResponse(value=v.value, label=v.label) for v in option.values],
         )
+        for option in options
+    ])
 
 
 @router.get("/{mymoment_login_id}/article/{mymoment_article_id}", response_model=ArticleDetailResponse)
@@ -223,75 +152,38 @@ async def get_article_detail(
     session: AsyncSession = Depends(get_session)
 ):
     """
-    Get detailed article information with content from myMoment platform.
+    Preview an article with its content, read live from the platform.
 
-    This endpoint:
-    1. Verifies user owns the specified myMoment login
-    2. Initializes a scraping session with myMoment platform
-    3. Fetches article content, HTML, and metadata
-    4. Returns complete article information
-
-    Note: This scrapes content live from myMoment and does NOT store it in the database.
-    Articles are only stored when AI comments are generated via monitoring processes.
+    Note: This does NOT store the article in the database. Articles are only
+    stored when AI comments are generated via monitoring processes.
     """
+    account = await _platform_account(mymoment_login_id, current_user.id, session)
+
+    logger.info(f"User {current_user.id} fetching article {mymoment_article_id} with login {mymoment_login_id}")
     try:
-        # Verify user owns the myMoment login
-        await verify_login_ownership(mymoment_login_id, current_user.id, session)
-
-        logger.info(f"User {current_user.id} fetching article {mymoment_article_id} with login {mymoment_login_id}")
-
-        # Initialize scraper service
-        from src.services.scraper_service import ScraperService
-        scraper = ScraperService(db_session=session)
-
-        try:
-            # Initialize scraping session for this login
-            context = await scraper.initialize_session_for_login(
-                login_id=mymoment_login_id,
-                user_id=current_user.id
-            )
-
-            # Get article content from myMoment platform
-            article_data = await scraper.get_article_content(
-                context=context,
-                article_id=mymoment_article_id
-            )
-
-            if not article_data:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Article not found or not accessible"
-                )
-
-            logger.info(f"Successfully fetched article {mymoment_article_id}")
-
-            # Convert to response format
-            from datetime import datetime
-            return ArticleDetailResponse(
-                id=article_data['id'],
-                title=article_data['title'],
-                author=article_data['author'],
-                published_at=None,  # Not available on detail page
-                edited_at=None,  # Not available on detail page
-                scraped_at=datetime.utcnow(),  # Current scraping time
-                mymoment_url=article_data['url'],
-                visibility='Unknown',  # Not available on detail page
-                ai_comments_count=0,  # Not stored yet
-                accessible_by_login_ids=[mymoment_login_id],  # Current login
-                content=article_data['content'],
-                raw_html=article_data['full_html'],
-                comment_ids=[]  # No stored comments yet
-            )
-
-        finally:
-            # Clean up scraping session
-            await scraper.cleanup_session(mymoment_login_id)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error fetching article {mymoment_article_id} for user {current_user.id}: {e}", exc_info=True)
+        async with connect(account) as platform:
+            # Only the ID is known here; the adapter builds the URL and returns it with the content
+            article = await platform.fetch_article(ArticleRef(id=mymoment_article_id, url=""))
+    except PlatformRejected as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch article from myMoment: {str(e)}"
-        )
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Article not found or not accessible"
+        ) from e
+    except (PlatformAuthError, PlatformUnavailable) as e:
+        raise _platform_error(e, "fetch article") from e
+
+    return ArticleDetailResponse(
+        id=article.ref.id,
+        title=article.title,
+        author=article.author,
+        published_at=article.published_at,
+        edited_at=article.edited_at.isoformat() if article.edited_at else None,
+        scraped_at=datetime.utcnow(),
+        mymoment_url=article.ref.url,
+        visibility=article.extra.get("visibility", "Unknown"),
+        ai_comments_count=0,  # Not stored yet
+        accessible_by_login_ids=[mymoment_login_id],
+        content=article.body_text,
+        raw_html=article.body_html,
+        comment_ids=[]  # No stored comments yet
+    )
