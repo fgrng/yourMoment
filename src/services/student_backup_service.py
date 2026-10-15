@@ -22,6 +22,7 @@ from src.models.article_version import ArticleVersion
 from src.models.mymoment_login import MyMomentLogin
 from src.services.base_service import BaseService
 from src.config.settings import get_student_backup_settings
+from src.utils.datetimes import utcnow
 
 
 class StudentBackupServiceError(Exception):
@@ -281,7 +282,7 @@ class StudentBackupService(BaseService):
         if is_active is not None:
             tracked_student.is_active = is_active
 
-        tracked_student.updated_at = datetime.utcnow()
+        tracked_student.updated_at = utcnow()
 
         try:
             await self.db_session.commit()
@@ -321,7 +322,7 @@ class StudentBackupService(BaseService):
             return False
 
         tracked_student.is_active = False
-        tracked_student.updated_at = datetime.utcnow()
+        tracked_student.updated_at = utcnow()
 
         try:
             await self.db_session.commit()
@@ -492,7 +493,7 @@ class StudentBackupService(BaseService):
         await self._enforce_version_limit(tracked_student_id, mymoment_article_id)
 
         # Update tracked student's last_backup_at timestamp
-        tracked_student.last_backup_at = datetime.utcnow()
+        tracked_student.last_backup_at = utcnow()
         await self.db_session.commit()
 
         return article_version

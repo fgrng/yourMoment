@@ -1,7 +1,7 @@
 """Pydantic request and response models shared across the API layer."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Optional, List
 
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, computed_field, field_validator
@@ -190,26 +190,6 @@ class MonitoringProcessResponse(BaseModel):
         # Offline, so list and detail view load while the platform is unreachable.
         # Until accounts know their platform type, every process watches myMoment.
         return list(label_target(adapter_for_platform(MYMOMENT), self.target))
-
-    @field_validator(
-        'started_at',
-        'stopped_at',
-        'expires_at',
-        'created_at',
-        'updated_at',
-        mode='before'
-    )
-    @classmethod
-    def _ensure_timezone(cls, value: Optional[datetime]) -> Optional[datetime]:
-        """Normalize naive datetimes to UTC for consistent client handling."""
-        if value is None:
-            return value
-        if isinstance(value, str):
-            # Let pydantic handle string parsing after this validator
-            return value
-        if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value
 
 
 class ProcessStartRequest(BaseModel):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 import aiohttp
 import pytest
@@ -115,7 +116,7 @@ class FakeHarness:
     def given_student_articles(self) -> StudentRef:
         # Mirrors student_dashboard.html: three articles of student 1042
         for article_id in ("2695", "2711", "2730"):
-            self.adapter.add_article(article_id, student="1042")
+            self.adapter.add_article(article_id, student="1042", edited_at=datetime(2026, 1, 28, 8, 24, tzinfo=UTC))
         self.adapter.add_article("3170", student="1043")
         return StudentRef(id="1042")
 
@@ -367,3 +368,13 @@ def test_valid_target_with_every_dimension_is_accepted(harness):
 def test_invalid_target_is_rejected_with_a_message_naming_the_key(harness, target, message):
     with pytest.raises(InvalidTarget, match=message):
         validate_target(harness.adapter, target)
+
+
+async def test_listed_student_article_times_carry_a_timezone(harness):
+    harness.given_valid_login()
+    student = harness.given_student_articles()
+
+    async with harness.adapter.connect(harness.account) as connection:
+        articles = await connection.list_student_articles(student)
+
+    assert articles and all(a.edited_at.utcoffset() is not None for a in articles)

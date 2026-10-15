@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 import os
 import uuid
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,7 @@ from src.services.auth_service import AuthService, AuthServiceValidationError, A
 from src.services.mymoment_credentials_service import MyMomentCredentialsService
 from src.services.prompt_service import PromptService
 from src.services.prompt_placeholders import SUPPORTED_PLACEHOLDERS
+from src.utils.datetimes import DISPLAY_FORMAT, format_local
 
 # Configure templates
 templates_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "templates")
@@ -32,6 +34,20 @@ def get_global_settings():
     }
 
 templates.env.globals.update(get_global_settings())
+
+
+def format_datetime(value: Optional[datetime], fmt: str = DISPLAY_FORMAT, fallback: str = "") -> str:
+    """Jinja filter: show a UTC datetime in APP_TIMEZONE, e.g. ``14.07.2026 09:30``."""
+    return format_local(value, get_settings().app.APP_TIMEZONE, fmt, fallback)
+
+
+def app_timezone() -> str:
+    """Jinja global: the APP_TIMEZONE that scripts format times in."""
+    return get_settings().app.APP_TIMEZONE
+
+
+templates.env.filters["format_datetime"] = format_datetime
+templates.env.globals["app_timezone"] = app_timezone
 
 router = APIRouter(
     tags=["Web Interface"],

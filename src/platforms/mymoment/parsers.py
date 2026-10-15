@@ -5,14 +5,18 @@ from __future__ import annotations
 import copy
 import logging
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 from bs4 import BeautifulSoup
 
 from src.utils.ids import is_number
 
 logger = logging.getLogger(__name__)
+
+# myMoment shows times as local wall-clock time without an offset.
+MYMOMENT_TIMEZONE = ZoneInfo("Europe/Zurich")
 
 
 # Category mapping: category_id -> category_name
@@ -208,12 +212,13 @@ def parse_student_articles(soup: BeautifulSoup) -> List[Dict[str, Any]]:
 
 
 def _parse_german_datetime(value: str) -> Optional[datetime]:
-    """Parse "28.01.2026 um 09:24 Uhr"; None if the text has another form."""
+    """Parse "28.01.2026 um 09:24 Uhr" (myMoment local time) as UTC; None if the text has another form."""
     try:
-        return datetime.strptime(value.replace(' um ', ' ').replace(' Uhr', ''), '%d.%m.%Y %H:%M')
+        local = datetime.strptime(value.replace(' um ', ' ').replace(' Uhr', ''), '%d.%m.%Y %H:%M')  # noqa: DTZ007
     except ValueError:
         logger.debug(f"Could not parse myMoment date '{value}'")
         return None
+    return local.replace(tzinfo=MYMOMENT_TIMEZONE).astimezone(UTC)
 
 
 def _article_id_from_href(href: str) -> Optional[str]:

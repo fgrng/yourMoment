@@ -8,7 +8,6 @@ error formats and proper logging across the application.
 import logging
 import traceback
 import uuid
-from datetime import datetime
 from typing import Any, Dict, Optional
 
 from fastapi import Request, Response, status
@@ -33,6 +32,7 @@ from src.services.monitoring_service import (
     ProcessOperationError
 )
 from src.services.prompt_service import PromptServiceError
+from src.utils.datetimes import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ class ErrorHandlerMiddleware:
             JSONResponse with error details
         """
         error_id = str(uuid.uuid4())
-        timestamp = datetime.utcnow().isoformat()
+        timestamp = utcnow().isoformat()
 
         # Log the error with context
         logger.error(
@@ -285,7 +285,7 @@ def create_error_response(
         JSONResponse with standardized error format
     """
     error_id = str(uuid.uuid4())
-    timestamp = datetime.utcnow().isoformat()
+    timestamp = utcnow().isoformat()
 
     content = {
         "error": error_type,

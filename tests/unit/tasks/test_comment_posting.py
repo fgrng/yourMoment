@@ -1,7 +1,6 @@
 from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
-from datetime import datetime
 
 import pytest
 from celery.utils.threads import LocalStack
@@ -13,6 +12,7 @@ from src.models.mymoment_login import MyMomentLogin
 from src.platforms import PlatformAuthError, PlatformUnavailable, PostedComment, use_adapter
 from src.tasks import comment_posting
 from src.tasks.comment_posting import CommentPostingTask
+from src.utils.datetimes import utcnow
 from tests.fixtures.assertions import assert_task_result_shape
 from tests.fixtures.builders import build_scenario
 from tests.fixtures.factories.comments import create_generated_ai_comment
@@ -168,7 +168,7 @@ async def test_finalize_posted_comment_updates_claimed_rows(db_session, db_engin
     )
     assert claimed is True
 
-    finalized_at = datetime.utcnow()
+    finalized_at = utcnow()
     updated = await task._finalize_posted_comment(
         scenario["ai_comment"].id,
         comment_id="replacement-comment-id",

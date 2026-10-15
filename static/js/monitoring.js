@@ -9,7 +9,6 @@ import {
     fetchOptions,
     safeParseJson,
     extractErrorMessage,
-    formatDate,
     formatProviderLabel,
     formatDuration,
     formatTarget

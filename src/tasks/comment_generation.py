@@ -30,6 +30,7 @@ from src.services.llm_service import generate_completion_standalone
 from src.services.comment_service import validate_comment, ensure_html_paragraphs
 from src.services.llm_types import LLMGenerationConfig, GenerationResult
 from src.config.database import get_database_manager
+from src.utils.datetimes import utcnow
 
 logger = logging.getLogger(__name__)
 llm_summary_logger = logging.getLogger("yourmoment.llm")
@@ -275,7 +276,7 @@ class CommentGenerationTask(BaseTask):
                     .values(
                         status="failed",
                         error_message=error_message,
-                        failed_at=datetime.utcnow(),
+                        failed_at=utcnow(),
                         comment_content="",
                     )
                 )
@@ -300,7 +301,7 @@ class CommentGenerationTask(BaseTask):
 
     async def _generate_single_comment_async(self, ai_comment_id: uuid.UUID) -> Dict[str, Any]:
         """Generate one AI comment by moving prepared -> generated idempotently."""
-        start_time = datetime.utcnow()
+        start_time = utcnow()
         snapshot = await self._read_comment_snapshot(ai_comment_id)
         if not snapshot:
             return {
@@ -327,7 +328,7 @@ class CommentGenerationTask(BaseTask):
                 "ai_comment_id": str(ai_comment_id),
                 "status": "skipped",
                 "reason": skip_reason,
-                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+                "execution_time_seconds": (utcnow() - start_time).total_seconds(),
             }
 
         log_context = self._build_log_context(
@@ -356,7 +357,7 @@ class CommentGenerationTask(BaseTask):
                 "ai_comment_id": str(ai_comment_id),
                 "status": "failed",
                 "reason": error_msg,
-                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+                "execution_time_seconds": (utcnow() - start_time).total_seconds(),
             }
         if not prompt_template:
             error_msg = f"Prompt template not found for comment {snapshot.id}"
@@ -365,7 +366,7 @@ class CommentGenerationTask(BaseTask):
                 "ai_comment_id": str(ai_comment_id),
                 "status": "failed",
                 "reason": error_msg,
-                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+                "execution_time_seconds": (utcnow() - start_time).total_seconds(),
             }
 
         llm_config = LLMGenerationConfig.from_model(provider, provider.get_api_key())
@@ -394,7 +395,7 @@ class CommentGenerationTask(BaseTask):
                     "ai_comment_id": str(ai_comment_id),
                     "status": "failed",
                     "reason": error_msg,
-                    "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+                    "execution_time_seconds": (utcnow() - start_time).total_seconds(),
                 }
 
             await self._update_generated_comment(
@@ -423,7 +424,7 @@ class CommentGenerationTask(BaseTask):
             return {
                 "ai_comment_id": str(ai_comment_id),
                 "status": "generated",
-                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+                "execution_time_seconds": (utcnow() - start_time).total_seconds(),
                 "generation_time_ms": gen_result.generation_time_ms,
             }
         except Exception as exc:

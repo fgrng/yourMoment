@@ -35,6 +35,7 @@ from src.platforms import (
 from src.platforms.accounts import load_platform_account
 from src.config.database import get_database_manager
 from src.config.encryption import DecryptionError
+from src.utils.datetimes import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +174,7 @@ class CommentPostingTask(BaseTask):
         if posted.external_id:
             return posted.external_id
 
-        timestamp = int(datetime.utcnow().timestamp())
+        timestamp = int(utcnow().timestamp())
         placeholder_id = f"{snapshot.mymoment_article_id}-{timestamp}-{str(snapshot.id)[:8]}"
         logger.debug(f"Generated placeholder comment ID: {placeholder_id}")
         return placeholder_id
@@ -338,7 +339,7 @@ class CommentPostingTask(BaseTask):
                 .values(
                     status="failed",
                     error_message=error_msg,
-                    failed_at=datetime.utcnow(),
+                    failed_at=utcnow(),
                     mymoment_comment_id=None,
                     posted_at=None,
                     retry_count=AIComment.retry_count + 1,
@@ -389,7 +390,7 @@ class CommentPostingTask(BaseTask):
 
     async def _post_single_comment_async(self, ai_comment_id: uuid.UUID) -> Dict[str, Any]:
         """Post one generated comment if the process is still allowed to publish."""
-        start_time = datetime.utcnow()
+        start_time = utcnow()
         snapshot = await self._read_comment_snapshot(ai_comment_id)
         if not snapshot:
             return {
@@ -417,7 +418,7 @@ class CommentPostingTask(BaseTask):
                 "ai_comment_id": str(ai_comment_id),
                 "status": "skipped",
                 "reason": skip_reason,
-                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+                "execution_time_seconds": (utcnow() - start_time).total_seconds(),
             }
 
         account = await self._load_platform_account(snapshot)
@@ -429,7 +430,7 @@ class CommentPostingTask(BaseTask):
                 "ai_comment_id": str(ai_comment_id),
                 "status": "skipped",
                 "reason": "already_claimed",
-                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+                "execution_time_seconds": (utcnow() - start_time).total_seconds(),
             }
 
         posted_to_platform = False
@@ -438,7 +439,7 @@ class CommentPostingTask(BaseTask):
                 posted = await self._publish(platform, snapshot)
                 posted_to_platform = True
 
-            posted_at = datetime.utcnow()
+            posted_at = utcnow()
             try:
                 updated = await self._finalize_posted_comment(
                     snapshot.id,
@@ -456,12 +457,12 @@ class CommentPostingTask(BaseTask):
                     "ai_comment_id": str(ai_comment_id),
                     "status": "posting",
                     "reason": "finalization_failed",
-                    "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+                    "execution_time_seconds": (utcnow() - start_time).total_seconds(),
                 }
             return {
                 "ai_comment_id": str(ai_comment_id),
                 "status": "posted" if updated else "skipped",
-                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+                "execution_time_seconds": (utcnow() - start_time).total_seconds(),
             }
         except Exception as exc:
             if not posted_to_platform:
@@ -491,7 +492,7 @@ class CommentPostingTask(BaseTask):
         Returns:
             Result dictionary with counts and errors
         """
-        start_time = datetime.utcnow()
+        start_time = utcnow()
         errors = []
         posted_count = 0
         failed_count = 0
@@ -519,7 +520,7 @@ class CommentPostingTask(BaseTask):
 
             if not comment_snapshots:
                 logger.info(f"No generated comments to post for process {process_id}")
-                execution_time = (datetime.utcnow() - start_time).total_seconds()
+                execution_time = (utcnow() - start_time).total_seconds()
                 return {
                     'posted': 0,
                     'failed': 0,
@@ -606,7 +607,7 @@ class CommentPostingTask(BaseTask):
                         updated = await self._finalize_posted_comment(
                             ai_comment_id=comment_snapshot.id,
                             comment_id=self._comment_id(posted, comment_snapshot),
-                            posted_at=datetime.utcnow(),
+                            posted_at=utcnow(),
                             login_id=login_id,
                         )
                     except Exception as finalize_error:
@@ -630,7 +631,7 @@ class CommentPostingTask(BaseTask):
                             comment_snapshot.id,
                         )
 
-            execution_time = (datetime.utcnow() - start_time).total_seconds()
+            execution_time = (utcnow() - start_time).total_seconds()
 
             logger.info(f"Comment posting completed for process {process_id}: "
                        f"{posted_count} posted, {failed_count} failed, {deferred_count} deferred, "
@@ -650,7 +651,7 @@ class CommentPostingTask(BaseTask):
             errors.append(error_msg)
             logger.error(error_msg)
 
-            execution_time = (datetime.utcnow() - start_time).total_seconds()
+            execution_time = (utcnow() - start_time).total_seconds()
 
             return {
                 'posted': posted_count,

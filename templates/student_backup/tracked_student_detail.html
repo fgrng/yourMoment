@@ -71,7 +71,7 @@
     const refreshArticles = document.getElementById('refreshArticles');
 
     async function loadStudentInfo() {
-        const { fetchOptions } = window.YM.utils;
+        const { fetchOptions, formatDateTime } = window.YM.utils;
         try {
             const response = await fetch(`/api/v1/student-backup/tracked-students/${studentId}`, fetchOptions('GET'));
 
@@ -95,10 +95,10 @@
                     <dd><span class="badge ${student.is_active ? 'bg-success' : 'bg-secondary'}">${student.is_active ? 'Aktiv' : 'Inaktiv'}</span></dd>
 
                     <dt>Letztes Backup</dt>
-                    <dd>${student.last_backup_at ? new Date(student.last_backup_at).toLocaleString('de-DE') : 'Noch keins'}</dd>
+                    <dd>${formatDateTime(student.last_backup_at, 'Noch keins')}</dd>
 
                     <dt>Erstellt</dt>
-                    <dd>${new Date(student.created_at).toLocaleString('de-DE')}</dd>
+                    <dd>${formatDateTime(student.created_at)}</dd>
 
                     ${student.notes ? `<dt>Notizen</dt><dd class="text-muted">${student.notes}</dd>` : ''}
                 </dl>
@@ -110,7 +110,7 @@
     }
 
     async function loadArticles() {
-        const { fetchOptions } = window.YM.utils;
+        const { fetchOptions, formatDateTime } = window.YM.utils;
         try {
             const response = await fetch(`/api/v1/student-backup/tracked-students/${studentId}/articles`, fetchOptions('GET'));
 
@@ -157,7 +157,7 @@
                                     <td><small>${article.article_task || '-'}</small></td>
                                     <td><span class="badge bg-${getStatusBadge(article.article_status)}">${article.article_status || '-'}</span></td>
                                     <td><span class="badge bg-light text-dark border">${article.version_count}</span></td>
-                                    <td><small>${article.latest_scraped_at ? new Date(article.latest_scraped_at).toLocaleString('de-DE') : '-'}</small></td>
+                                    <td><small>${formatDateTime(article.latest_scraped_at, '-')}</small></td>
                                     <td>
                                         <a href="/settings/student-backup/${studentId}/articles/${article.mymoment_article_id}"
                                            class="btn btn-outline-primary btn-sm">

@@ -47,13 +47,13 @@
                 <div class="mb-2">
                     <strong>Erstellt:</strong><br>
                     <small class="text-muted">
-                        {{ credential.created_at.strftime('%Y-%m-%d %H:%M') if credential.created_at else '–' }}
+                        {{ credential.created_at | format_datetime(fallback='–') }}
                     </small>
                 </div>
                 <div class="mb-2">
                     <strong>Zuletzt genutzt:</strong><br>
                     <small class="text-muted">
-                        {{ credential.last_used.strftime('%Y-%m-%d %H:%M') if credential.last_used else 'Noch nicht verwendet' }}
+                        {{ credential.last_used | format_datetime(fallback='Noch nicht verwendet') }}
                     </small>
                 </div>
             </div>

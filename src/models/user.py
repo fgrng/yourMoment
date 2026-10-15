@@ -6,13 +6,13 @@ Implements FR-001 (email/password authentication) and security requirements.
 """
 
 import uuid
-from datetime import datetime
 
-from sqlalchemy import Column, String, Boolean, DateTime, func
+from sqlalchemy import Column, String, Boolean, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
-from src.models.base import Base
+from src.models.base import Base, UTCDateTime
+from src.utils.datetimes import utcnow
 
 
 class User(Base):
@@ -69,14 +69,14 @@ class User(Base):
 
     # Timestamp fields for audit and tracking
     created_at = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         server_default=func.now(),
         nullable=False,
         doc="Account creation timestamp"
     )
 
     updated_at = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
@@ -274,7 +274,7 @@ class User(Base):
         It does not delete the user record for audit purposes.
         """
         self.is_active = False
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utcnow()
 
     def activate(self) -> None:
         """
@@ -283,7 +283,7 @@ class User(Base):
         This method sets is_active to True and updates the timestamp.
         """
         self.is_active = True
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utcnow()
 
     def verify_email(self) -> None:
         """
@@ -292,4 +292,4 @@ class User(Base):
         This method sets is_verified to True and updates the timestamp.
         """
         self.is_verified = True
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utcnow()

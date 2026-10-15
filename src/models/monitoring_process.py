@@ -5,14 +5,15 @@ This model represents monitoring processes that users create to
 track myMoment articles and automatically generate AI comments.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, List
 import uuid
 
-from sqlalchemy import JSON, Column, String, Boolean, DateTime, Integer, Text, UUID, ForeignKey
+from sqlalchemy import JSON, Column, String, Boolean, Integer, Text, UUID, ForeignKey
 from sqlalchemy.orm import relationship
 
-from src.models.base import BaseModel
+from src.models.base import BaseModel, UTCDateTime
+from src.utils.datetimes import utcnow
 
 if TYPE_CHECKING:
     from src.models.mymoment_login import MyMomentLogin
@@ -54,20 +55,20 @@ class MonitoringProcess(BaseModel):
     celery_posting_task_id = Column(String(255), nullable=True, index=True)
 
     # Process execution tracking
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    stopped_at = Column(DateTime(timezone=True), nullable=True)
-    last_activity_at = Column(DateTime(timezone=True), nullable=True)
-    next_discovery_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(UTCDateTime, nullable=True)
+    stopped_at = Column(UTCDateTime, nullable=True)
+    last_activity_at = Column(UTCDateTime, nullable=True)
+    next_discovery_at = Column(UTCDateTime, nullable=True)
     discovery_empty_streak = Column(Integer, nullable=False, default=0, server_default="0")
-    discovery_queued_at = Column(DateTime(timezone=True), nullable=True)
+    discovery_queued_at = Column(UTCDateTime, nullable=True)
 
     # Status tracking
     is_active = Column(Boolean, nullable=False, default=True)
 
     # Timestamps
     # Note: nullable=True due to SQLite limitations on ALTER TABLE
-    created_at = Column(DateTime(timezone=True), nullable=True, default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), nullable=True, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, nullable=True, default=utcnow)
+    updated_at = Column(UTCDateTime, nullable=True, default=utcnow, onupdate=utcnow)
 
     # Relationships
     user = relationship("User", back_populates="monitoring_processes")
@@ -91,23 +92,13 @@ class MonitoringProcess(BaseModel):
     def __repr__(self) -> str:
         return f"<MonitoringProcess(id={self.id}, name='{self.name}', status='{self.status}', user_id={self.user_id})>"
 
-    @staticmethod
-    def _normalize_utc(dt: datetime | None) -> datetime | None:
-        """Treat naive datetimes as UTC for consistent lifecycle comparisons."""
-        if dt is None:
-            return None
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
-
     @property
     def duration_exceeded(self) -> bool:
         """Check if the process has exceeded its maximum duration."""
         if not self.started_at or self.status != "running":
             return False
 
-        started_at = self._normalize_utc(self.started_at)
-        duration = datetime.now(timezone.utc) - started_at
+        duration = utcnow() - self.started_at
         max_duration = timedelta(minutes=self.max_duration_minutes)
         return duration > max_duration
 
@@ -133,8 +124,7 @@ class MonitoringProcess(BaseModel):
         """Calculate when the process will automatically expire."""
         if not self.started_at:
             return None
-        started_at = self._normalize_utc(self.started_at)
-        return started_at + timedelta(minutes=self.max_duration_minutes)
+        return self.started_at + timedelta(minutes=self.max_duration_minutes)
 
     @property
     def prompt_template_ids(self) -> List[uuid.UUID]:

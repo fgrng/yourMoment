@@ -2,7 +2,6 @@
 
 import uuid
 from typing import Optional
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +23,7 @@ from src.platforms import (
     connect,
 )
 from src.platforms.accounts import load_platform_account
+from src.utils.datetimes import utcnow
 import logging
 
 logger = logging.getLogger(__name__)
@@ -378,7 +378,7 @@ async def post_comment_to_mymoment(
             )
 
         # Platforms like myMoment return no comment ID; article_id-timestamp keeps it unique
-        posted_timestamp = datetime.utcnow()
+        posted_timestamp = utcnow()
         ai_comment.mark_as_posted(
             mymoment_comment_id=posted.external_id
             or f"{ai_comment.mymoment_article_id}-{int(posted_timestamp.timestamp())}",

@@ -54,17 +54,43 @@ export function formatTarget(entries) {
 }
 
 /**
- * Format a date string to localized format
- * @param {string|Date} value - Date value to format
- * @param {string} fallback - Fallback text if date is invalid (default: 'Unbekannt')
- * @returns {string} Formatted date string or fallback
+ * Time zone in which times are shown (APP_TIMEZONE, from the base template)
+ * @returns {string} IANA time zone name
  */
-export function formatDate(value, fallback = 'Unbekannt') {
+function appTimezone() {
+    const meta = document.querySelector('meta[name="app-timezone"]');
+    return (meta && meta.content) || 'Europe/Zurich';
+}
+
+/**
+ * Format a point in time in APP_TIMEZONE, identical to the Jinja filter
+ * format_datetime: 'dd.mm.YYYY HH:MM', or 'dd.mm.YYYY' with dateOnly.
+ * @param {string|Date} value - ISO 8601 string with offset, or Date
+ * @param {string} fallback - Text if the value is missing or invalid (default: 'Unbekannt')
+ * @param {{dateOnly?: boolean}} options - dateOnly: show the date without time
+ * @returns {string} Formatted time or fallback
+ */
+export function formatDateTime(value, fallback = 'Unbekannt', { dateOnly = false } = {}) {
     if (!value) {
         return fallback;
     }
     const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? fallback : date.toLocaleString();
+    if (Number.isNaN(date.getTime())) {
+        return fallback;
+    }
+    const parts = Object.fromEntries(
+        new Intl.DateTimeFormat('de-CH', {
+            timeZone: appTimezone(),
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23'
+        }).formatToParts(date).map(part => [part.type, part.value])
+    );
+    const day = `${parts.day}.${parts.month}.${parts.year}`;
+    return dateOnly ? day : `${day} ${parts.hour}:${parts.minute}`;
 }
 
 /**

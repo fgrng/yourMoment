@@ -7,7 +7,7 @@ according to FR-001 (email/password authentication) and security requirements.
 
 import hashlib
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional, Dict, Any, Tuple
 
 import bcrypt
@@ -20,6 +20,7 @@ from src.models.user import User
 from src.models.user_session import UserSession
 from src.services.base_service import BaseService
 from src.config.settings import get_settings
+from src.utils.datetimes import utcnow
 
 class AuthServiceError(Exception):
     """Base exception for authentication service operations."""
@@ -257,7 +258,7 @@ class AuthService(BaseService):
         from sqlalchemy import delete
 
         stmt = delete(UserSession).where(
-            UserSession.expires_at < datetime.utcnow()
+            UserSession.expires_at < utcnow()
         )
         result = await self.db_session.execute(stmt)
         await self.db_session.commit()
@@ -323,7 +324,7 @@ class AuthService(BaseService):
             JWT access token
         """
         # Generate JWT token
-        now = datetime.utcnow()
+        now = utcnow()
         expires_at = now + timedelta(minutes=self.token_expiry_minutes)
 
         # Get user (user_id is already a UUID object)

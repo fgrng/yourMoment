@@ -8,7 +8,7 @@ with immediate stop).
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Dict, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,7 @@ from src.tasks.worker import celery_app, BaseTask
 from src.models.monitoring_process import MonitoringProcess
 from src.services.monitoring_service import MonitoringService
 from src.config.database import get_database_manager
+from src.utils.datetimes import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ class TimeoutEnforcementTask(BaseTask):
 
     async def _check_process_timeouts_async(self) -> Dict[str, Any]:
         """Async implementation of process timeout checking."""
-        start_time = datetime.now(timezone.utc)
+        start_time = utcnow()
         timeout_processes = 0
         stopped_processes = 0
         errors = []
@@ -58,13 +59,13 @@ class TimeoutEnforcementTask(BaseTask):
                 )
                 running_processes = result.scalars().all()
 
-                current_time = datetime.now(timezone.utc)
+                current_time = utcnow()
 
                 # Check each process for timeout
                 for process in running_processes:
                     try:
                         # Calculate how long the process has been running
-                        started_at = MonitoringProcess._normalize_utc(process.started_at)
+                        started_at = process.started_at
                         running_duration = current_time - started_at
                         max_duration = timedelta(minutes=process.max_duration_minutes)
 
@@ -99,7 +100,7 @@ class TimeoutEnforcementTask(BaseTask):
 
                 await session.commit()
 
-                execution_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+                execution_time = (utcnow() - start_time).total_seconds()
 
                 logger.info(f"Process timeout check completed: {timeout_processes} timed out, "
                           f"{stopped_processes} stopped successfully")
@@ -110,7 +111,7 @@ class TimeoutEnforcementTask(BaseTask):
                     'stopped_processes': stopped_processes,
                     'errors': errors,
                     'execution_time_seconds': execution_time,
-                    'timestamp': datetime.now(timezone.utc).isoformat()
+                    'timestamp': utcnow().isoformat()
                 }
 
             except Exception as e:
@@ -118,14 +119,14 @@ class TimeoutEnforcementTask(BaseTask):
                 errors.append(error_msg)
                 logger.error(error_msg)
 
-                execution_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+                execution_time = (utcnow() - start_time).total_seconds()
                 return {
                     'total_processes': 0,
                     'timeout_processes': 0,
                     'stopped_processes': 0,
                     'errors': errors,
                     'execution_time_seconds': execution_time,
-                    'timestamp': datetime.now(timezone.utc).isoformat()
+                    'timestamp': utcnow().isoformat()
                 }
 
 

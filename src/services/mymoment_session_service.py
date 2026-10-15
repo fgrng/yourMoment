@@ -7,7 +7,6 @@ rejects the credentials.
 """
 
 import uuid
-from datetime import datetime
 from typing import Awaitable, Callable, Optional, Dict, Any
 
 from sqlalchemy import Select, select, and_
@@ -15,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.mymoment_session import MyMomentSession
 from src.config.database import get_database_manager
+from src.utils.datetimes import utcnow
 
 
 async def _new_db_session() -> AsyncSession:
@@ -33,7 +33,7 @@ def _active_sessions_of(account_id: uuid.UUID) -> Select:
 
 async def _usable_session(db_session: AsyncSession, account_id: uuid.UUID) -> Optional[MyMomentSession]:
     stmt = _active_sessions_of(account_id).where(
-        MyMomentSession.expires_at > datetime.utcnow()
+        MyMomentSession.expires_at > utcnow()
     ).order_by(MyMomentSession.created_at.desc()).limit(1)
     result = await db_session.execute(stmt)
     record = result.scalar_one_or_none()

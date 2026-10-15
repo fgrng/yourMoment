@@ -10,10 +10,10 @@ import uuid
 import hashlib
 from typing import Optional
 
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Text, func, UUID, JSON
+from sqlalchemy import Column, String, Integer, Boolean, ForeignKey, Text, func, UUID, JSON
 from sqlalchemy.orm import relationship
 
-from src.models.base import Base
+from src.models.base import Base, UTCDateTime
 
 
 class ArticleVersion(Base):
@@ -124,14 +124,14 @@ class ArticleVersion(Base):
 
     # Timestamps from myMoment
     article_last_modified = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         nullable=True,
         doc="Last modification timestamp from myMoment"
     )
 
     # Scraping metadata
     scraped_at = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         server_default=func.now(),
         nullable=False,
         doc="When this version was captured"

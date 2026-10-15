@@ -40,7 +40,7 @@
                                 </div>
                             </div>
                             <small class="text-muted text-end">
-                                {{ template.created_at.strftime('%Y-%m-%d') if template.created_at else '' }}
+                                {{ template.created_at | format_datetime('%d.%m.%Y') }}
                             </small>
                         </div>
                         <div class="card-body">
@@ -100,7 +100,7 @@
                                 <span class="badge bg-secondary">System</span>
                             </div>
                             <small class="text-muted text-end">
-                                {{ template.created_at.strftime('%Y-%m-%d') if template.created_at else '' }}
+                                {{ template.created_at | format_datetime('%d.%m.%Y') }}
                             </small>
                         </div>
                         <div class="card-body">

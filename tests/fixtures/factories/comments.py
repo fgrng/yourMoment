@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.settings import get_settings
 from src.models.ai_comment import AIComment
+from src.utils.datetimes import utcnow
 
 from tests.fixtures.factories._shared import ensure_same_user, next_sequence, require_owner
 
@@ -40,11 +40,11 @@ def _apply_state_defaults(status: str, kwargs: dict[str, Any]) -> dict[str, Any]
 
     if status == "posted":
         _set_default(defaults, "mymoment_comment_id", f"comment-{next_sequence('posted_comment_id')}")
-        _set_default(defaults, "posted_at", datetime.utcnow())
+        _set_default(defaults, "posted_at", utcnow())
 
     if status == "failed":
         _set_default(defaults, "error_message", "Generation failed in fixture setup.")
-        _set_default(defaults, "failed_at", datetime.utcnow())
+        _set_default(defaults, "failed_at", utcnow())
         _set_default(defaults, "retry_count", 1)
 
     return defaults
@@ -97,9 +97,9 @@ async def create_ai_comment(
         "article_category": overrides.pop("article_category", 7),
         "article_task_id": overrides.pop("article_task_id", 4),
         "article_url": overrides.pop("article_url", f"https://www.mymoment.ch/article/{index}/"),
-        "article_published_at": overrides.pop("article_published_at", datetime.utcnow()),
-        "article_edited_at": overrides.pop("article_edited_at", datetime.utcnow()),
-        "article_scraped_at": overrides.pop("article_scraped_at", datetime.utcnow()),
+        "article_published_at": overrides.pop("article_published_at", utcnow()),
+        "article_edited_at": overrides.pop("article_edited_at", utcnow()),
+        "article_scraped_at": overrides.pop("article_scraped_at", utcnow()),
         "article_metadata": overrides.pop("article_metadata", {"source": "fixture"}),
         "is_hidden": overrides.pop("is_hidden", False),
         "status": status,
@@ -107,7 +107,7 @@ async def create_ai_comment(
         "ai_provider_name": overrides.pop("ai_provider_name", None),
         "generation_tokens": overrides.pop("generation_tokens", None),
         "generation_time_ms": overrides.pop("generation_time_ms", None),
-        "created_at": overrides.pop("created_at", datetime.utcnow()),
+        "created_at": overrides.pop("created_at", utcnow()),
         "posted_at": overrides.pop("posted_at", None),
         "failed_at": overrides.pop("failed_at", None),
         "error_message": overrides.pop("error_message", None),

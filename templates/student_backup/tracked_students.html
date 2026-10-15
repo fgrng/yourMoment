@@ -49,7 +49,7 @@
     const triggerBackupBtn = document.getElementById('triggerBackupBtn');
 
     async function loadStudents() {
-        const { fetchOptions } = window.YM.utils;
+        const { fetchOptions, formatDateTime } = window.YM.utils;
         try {
             const response = await fetch('/api/v1/student-backup/tracked-students/index', fetchOptions('GET'));
 
@@ -99,7 +99,7 @@
                         <div class="mb-2">
                             <strong>Letztes Backup:</strong>
                             <small class="text-muted">
-                                ${student.last_backup_at ? new Date(student.last_backup_at).toLocaleString('de-DE') : 'Noch kein Backup'}
+                                ${formatDateTime(student.last_backup_at, 'Noch kein Backup')}
                             </small>
                         </div>
                         ${student.notes ? `

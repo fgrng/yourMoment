@@ -10,7 +10,6 @@ This module implements Task 1 of the refactored monitoring pipeline:
 import asyncio
 import logging
 import uuid
-from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
@@ -29,6 +28,7 @@ from src.platforms import MYMOMENT, ArticleSummary, InvalidTarget, adapter_for_p
 from src.platforms.accounts import load_platform_account
 from src.config.database import get_database_manager
 from src.utils.ids import as_int
+from src.utils.datetimes import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -239,7 +239,7 @@ class ArticleDiscoveryTask(BaseTask):
                         article_task_id=as_int(article.extra.get("arrangement")),
                         article_url=article.ref.url,
                         article_edited_at=None,  # Not available from index
-                        article_scraped_at=datetime.utcnow(),
+                        article_scraped_at=utcnow(),
 
                         # Content fields - empty for now (filled in preparation stage)
                         article_content="",
@@ -306,7 +306,7 @@ class ArticleDiscoveryTask(BaseTask):
         Returns:
             Result dictionary with counts and errors
         """
-        start_time = datetime.utcnow()
+        start_time = utcnow()
         errors = []
         total_discovered = 0
         created_ai_comment_ids: List[uuid.UUID] = []
@@ -356,7 +356,7 @@ class ArticleDiscoveryTask(BaseTask):
                 )
                 total_discovered = len(created_ai_comment_ids)
 
-            execution_time = (datetime.utcnow() - start_time).total_seconds()
+            execution_time = (utcnow() - start_time).total_seconds()
 
             logger.info(f"Article discovery completed for process {process_id}: "
                        f"{total_discovered} records created, "
@@ -377,7 +377,7 @@ class ArticleDiscoveryTask(BaseTask):
             errors.append(error_msg)
             logger.error(error_msg)
 
-            execution_time = (datetime.utcnow() - start_time).total_seconds()
+            execution_time = (utcnow() - start_time).total_seconds()
 
             return {
                 'discovered': total_discovered,

@@ -132,7 +132,7 @@ async def cmd_db_migrate(args: argparse.Namespace) -> None:
 
 async def cmd_db_seed(args: argparse.Namespace) -> None:
     """Seed database with essential data (system templates and optionally a test user)."""
-    from datetime import datetime
+    from src.utils.datetimes import utcnow
     from sqlalchemy import select
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -204,8 +204,8 @@ async def cmd_db_seed(args: argparse.Namespace) -> None:
                         category="SYSTEM",
                         user_id=None,
                         is_active=True,
-                        created_at=datetime.utcnow(),
-                        updated_at=datetime.utcnow(),
+                        created_at=utcnow(),
+                        updated_at=utcnow(),
                     )
                     session.add(template)
 
@@ -233,8 +233,8 @@ async def cmd_db_seed(args: argparse.Namespace) -> None:
                         password_hash=password_hash,
                         is_active=True,
                         is_verified=True,
-                        created_at=datetime.utcnow(),
-                        updated_at=datetime.utcnow(),
+                        created_at=utcnow(),
+                        updated_at=utcnow(),
                     )
                     session.add(user)
                     await session.flush()
@@ -340,7 +340,7 @@ async def cmd_db_stats(args: argparse.Namespace) -> None:
 async def cmd_user_create(args: argparse.Namespace) -> None:
     """Create a new user interactively."""
     import bcrypt
-    from datetime import datetime
+    from src.utils.datetimes import utcnow
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from src.config.database import get_database_manager
@@ -386,8 +386,8 @@ async def cmd_user_create(args: argparse.Namespace) -> None:
                 password_hash=password_hash,
                 is_active=True,
                 is_verified=is_verified,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                created_at=utcnow(),
+                updated_at=utcnow(),
             )
 
             session.add(user)

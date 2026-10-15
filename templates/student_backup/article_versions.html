@@ -45,7 +45,7 @@
     const versionsContainer = document.getElementById('versionsContainer');
 
     async function loadVersions() {
-        const { fetchOptions } = window.YM.utils;
+        const { fetchOptions, formatDateTime } = window.YM.utils;
         try {
             const response = await fetch(
                 `/api/v1/student-backup/tracked-students/${studentId}/versions?mymoment_article_id=${articleId}`,
@@ -99,10 +99,10 @@
                                         </span>
                                     </td>
                                     <td>
-                                        <small>${new Date(version.scraped_at).toLocaleString('de-DE')}</small>
+                                        <small>${formatDateTime(version.scraped_at)}</small>
                                     </td>
                                     <td>
-                                        <small>${version.article_last_modified ? new Date(version.article_last_modified).toLocaleString('de-DE') : '-'}</small>
+                                        <small>${formatDateTime(version.article_last_modified, '-')}</small>
                                     </td>
                                     <td>
                                         <a href="/settings/student-backup/versions/${version.id}"

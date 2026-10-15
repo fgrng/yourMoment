@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.services.monitoring_service import MonitoringService
 from src.tasks.timeout_enforcer import TimeoutEnforcementTask
+from src.utils.datetimes import utcnow
 from tests.fixtures.builders import build_scenario
 from tests.fixtures.factories import create_monitoring_process
 
@@ -31,7 +32,7 @@ async def test_timeout_enforcer_stops_only_overdue_processes(
 ):
     scenario = await build_scenario("minimal_happy_path", db_session)
     overdue_process = scenario["process"]
-    overdue_process.started_at = datetime.now(timezone.utc) - timedelta(minutes=31)
+    overdue_process.started_at = utcnow() - timedelta(minutes=31)
     overdue_process.max_duration_minutes = 30
     overdue_process.status = "running"
     overdue_process.is_active = True
@@ -43,7 +44,7 @@ async def test_timeout_enforcer_stops_only_overdue_processes(
         mymoment_logins=scenario["logins"],
         prompt_templates=scenario["prompts"],
         status="running",
-        started_at=datetime.now(timezone.utc) - timedelta(minutes=10),
+        started_at=utcnow() - timedelta(minutes=10),
         max_duration_minutes=30,
     )
     await db_session.commit()

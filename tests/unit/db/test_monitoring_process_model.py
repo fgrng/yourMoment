@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import pytest
 
 from src.models.monitoring_process import MonitoringProcess
+from src.utils.datetimes import utcnow
 from tests.fixtures.factories import (
     create_llm_provider,
     create_monitoring_process,
@@ -54,7 +55,7 @@ async def test_status_helpers_and_timestamps_reflect_current_process_state(db_se
         db_session,
         user=user,
         status="running",
-        started_at=datetime.now(timezone.utc),
+        started_at=utcnow(),
     )
     failed_process = await create_monitoring_process(db_session, user=user, status="failed")
 
@@ -74,25 +75,25 @@ async def test_status_helpers_and_timestamps_reflect_current_process_state(db_se
 
 async def test_duration_exceeded_and_expires_at_handle_running_datetimes(db_session):
     user = await create_user(db_session)
-    aware_started_at = datetime.now(timezone.utc) - timedelta(minutes=30)
-    aware_process = await create_monitoring_process(
+    recent_started_at = utcnow() - timedelta(minutes=30)
+    recent_process = await create_monitoring_process(
         db_session,
         user=user,
         status="running",
-        started_at=aware_started_at,
+        started_at=recent_started_at,
         max_duration_minutes=60,
     )
-    naive_process = await create_monitoring_process(
+    overdue_process = await create_monitoring_process(
         db_session,
         user=user,
         status="running",
-        started_at=datetime.utcnow() - timedelta(minutes=90),
+        started_at=utcnow() - timedelta(minutes=90),
         max_duration_minutes=60,
     )
 
-    assert aware_process.duration_exceeded is False
-    assert aware_process.expires_at == aware_started_at + timedelta(minutes=60)
-    assert naive_process.duration_exceeded is True
+    assert recent_process.duration_exceeded is False
+    assert recent_process.expires_at == recent_started_at + timedelta(minutes=60)
+    assert overdue_process.duration_exceeded is True
 
 
 async def test_target_and_search_term_are_stored_and_loaded(db_session):

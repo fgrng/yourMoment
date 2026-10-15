@@ -11,12 +11,12 @@ import uuid
 import logging
 from abc import ABC
 from typing import Optional, Any, Dict
-from datetime import datetime
 
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.user import User
+from src.utils.datetimes import utcnow
 
 class BaseServiceError(Exception):
     """Base exception for all service operations."""
@@ -158,7 +158,7 @@ class BaseService(ABC):
         """
         log_data = {
             "operation": operation,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utcnow().isoformat(),
             "service": self.__class__.__name__
         }
 

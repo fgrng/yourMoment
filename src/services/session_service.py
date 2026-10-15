@@ -6,13 +6,14 @@ tracking, session cleanup, and security monitoring.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import List, Optional, Dict, Any
 
 from sqlalchemy import select, delete, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.user_session import UserSession
+from src.utils.datetimes import utcnow
 
 
 class SessionService:
@@ -49,7 +50,7 @@ class SessionService:
             and_(
                 UserSession.user_id == user_id,
                 UserSession.is_active == True,
-                UserSession.expires_at > datetime.utcnow()
+                UserSession.expires_at > utcnow()
             )
         ).order_by(UserSession.last_activity.desc())
 
@@ -70,7 +71,7 @@ class SessionService:
             and_(
                 UserSession.token_hash == token_hash,
                 UserSession.is_active == True,
-                UserSession.expires_at > datetime.utcnow()
+                UserSession.expires_at > utcnow()
             )
         )
 
@@ -182,7 +183,7 @@ class SessionService:
             Number of sessions cleaned up
         """
         stmt = delete(UserSession).where(
-            UserSession.expires_at < datetime.utcnow()
+            UserSession.expires_at < utcnow()
         )
 
         result = await self.db.execute(stmt)
@@ -200,7 +201,7 @@ class SessionService:
         Returns:
             Number of sessions cleaned up
         """
-        cutoff_time = datetime.utcnow() - inactive_threshold
+        cutoff_time = utcnow() - inactive_threshold
 
         stmt = delete(UserSession).where(
             UserSession.last_activity < cutoff_time
@@ -229,7 +230,7 @@ class SessionService:
         active_stmt = select(func.count(UserSession.id)).where(
             and_(
                 UserSession.is_active == True,
-                UserSession.expires_at > datetime.utcnow(),
+                UserSession.expires_at > utcnow(),
                 *base_conditions
             )
         )
@@ -239,7 +240,7 @@ class SessionService:
         # Expired sessions count
         expired_stmt = select(func.count(UserSession.id)).where(
             and_(
-                UserSession.expires_at <= datetime.utcnow(),
+                UserSession.expires_at <= utcnow(),
                 *base_conditions
             )
         )
@@ -310,7 +311,7 @@ class SessionService:
         Returns:
             Dictionary with rapid creation analysis
         """
-        cutoff_time = datetime.utcnow() - time_window
+        cutoff_time = utcnow() - time_window
 
         # Get recent sessions
         stmt = select(UserSession).where(
