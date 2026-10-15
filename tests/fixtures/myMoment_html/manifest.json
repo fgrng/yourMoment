@@ -37,7 +37,8 @@
       "required_assertions": [
         "at least one article card parsed",
         "article ID present on each card",
-        "tab labels present"
+        "tab labels present",
+        "arrangement filter options present"
       ],
       "known_omitted_fields": [
         "pagination state (synthetic fixture has no next page)"

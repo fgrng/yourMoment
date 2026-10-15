@@ -75,6 +75,9 @@ TARGET_VALUES = {
 
 
 class FakeHarness:
+    # The default target description of the fake platform
+    target_dimensions = [("category", "Category"), ("arrangement", "Arrangement"), ("classroom", "Classroom")]
+
     def __init__(self) -> None:
         self.adapter = FakePlatform()
         self.account = _account()
@@ -121,6 +124,8 @@ class FakeHarness:
 
 
 class MyMomentHarness:
+    target_dimensions = [("category", "Kategorie"), ("arrangement", "Schreibaufgabe"), ("classroom", "Klasse")]
+
     def __init__(self) -> None:
         self.http = AiohttpStubSession()
         self.adapter = MyMomentAdapter(
@@ -222,7 +227,7 @@ async def test_list_targets_offers_one_option_per_dimension_of_the_description(h
     async with harness.adapter.connect(harness.account) as connection:
         targets = await connection.list_targets()
 
-    assert [(t.key, t.label) for t in targets] == [(d.key, d.label) for d in harness.adapter.describe_target()]
+    assert [(t.key, t.label) for t in targets] == harness.target_dimensions
 
 
 async def test_list_targets_offers_the_values_of_every_dimension(harness):

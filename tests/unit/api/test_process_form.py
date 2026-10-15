@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import os
-import re
 import uuid
 
 import pytest
+from bs4 import BeautifulSoup
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.testclient import TestClient
@@ -30,8 +30,15 @@ def client(fake_platform) -> TestClient:
     return TestClient(app)
 
 
-def _target_keys(html: str) -> list[str]:
-    return re.findall(r'data-target-key="([^"]+)"', html)
+def _target_fields(html: str) -> list[str]:
+    """The labels of the fields under "Ziel des Prozesses", as the user reads them."""
+    soup = BeautifulSoup(html, "html.parser")
+    heading = soup.find(lambda tag: tag.name == "label" and "Ziel des Prozesses" in tag.get_text())
+    block = heading.parent
+    return [
+        block.find("label", attrs={"for": select["id"]}).get_text(" ", strip=True)
+        for select in block.find_all("select")
+    ]
 
 
 @pytest.fixture
@@ -44,13 +51,7 @@ def wordpress_like(fake_platform):
 
 
 @pytest.mark.parametrize("path", ["/processes/new", f"/processes/{uuid.uuid4()}/edit"], ids=["new", "edit"])
-def test_form_offers_one_field_per_dimension_of_the_target_description(client, wordpress_like, path):
+def test_form_offers_one_labelled_field_per_dimension_of_the_target_description(client, wordpress_like, path):
     html = client.get(path).text
 
-    assert _target_keys(html) == ["site_category", "tag"]
-
-
-def test_form_labels_the_fields_of_the_target_like_the_description(client, wordpress_like):
-    html = client.get("/processes/new").text
-
-    assert ">Rubrik" in html and ">Schlagwort" in html
+    assert _target_fields(html) == ["Rubrik *", "Schlagwort"]

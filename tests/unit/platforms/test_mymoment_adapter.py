@@ -503,6 +503,20 @@ async def test_list_targets_raises_rejected_when_the_index_is_missing(adapter, h
             await connection.list_targets()
 
 
+async def test_list_targets_without_arrangement_filter_offers_no_arrangements(adapter, http, account):
+    queue_login(http)
+    http.queue_response(
+        "GET",
+        f"{MYMOMENT_BASE_URL}/articles/",
+        AiohttpStubResponse(status=200, body="<html><body><p>Keine Filter</p></body></html>"),
+    )
+
+    async with adapter.connect(account) as connection:
+        targets = await connection.list_targets()
+
+    assert {t.key: t.values for t in targets}["arrangement"] == []
+
+
 COMMENT_URL = f"{MYMOMENT_BASE_URL}/article/3170/comment/"
 
 
