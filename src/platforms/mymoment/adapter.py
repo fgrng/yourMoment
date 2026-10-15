@@ -20,7 +20,14 @@ from bs4 import BeautifulSoup
 from src.platforms.errors import PlatformAuthError, PlatformRejected, PlatformUnavailable
 from src.platforms.mymoment import parsers
 from src.platforms.mymoment.cookies import CookieStore, restore_cookie_jar, serialize_cookie_jar
-from src.platforms.types import ArticleContent, ArticleRef, ArticleSummary, PlatformAccount, PostedComment
+from src.platforms.types import (
+    ArticleContent,
+    ArticleRef,
+    ArticleSummary,
+    PlatformAccount,
+    PostedComment,
+    StudentRef,
+)
 from src.utils.url_sanitizer import is_url_malformed, sanitize_url
 
 logger = logging.getLogger(__name__)
@@ -200,6 +207,36 @@ class MyMomentConnection:
         logger.info(f"Posted comment to myMoment article {ref.id} (hidden={hidden})")
         return PostedComment()
 
+    async def list_student_articles(self, student: StudentRef) -> list[ArticleSummary]:
+        """
+        List the articles on a student's dashboard, which only admin accounts may see.
+
+        `category` is set where the dashboard shows exactly one known category;
+        `extra` carries the categories as shown, status and visibility.
+        """
+        if not parsers.is_number(student.id):
+            raise PlatformRejected(f"Unknown myMoment student: {student.id!r}")
+
+        page = await self._request('GET', f"{self._base_url}/dashboard/user/{student.id}/")
+        if page.status != 200:
+            raise PlatformRejected(f"myMoment answered {page.status} for the dashboard of student {student.id}")
+
+        summaries = []
+        for entry in parsers.parse_student_articles(page.soup()):
+            summaries.append(ArticleSummary(
+                ref=ArticleRef(id=entry['id'], url=self._article_url(entry['id'])),
+                title=entry['title'],
+                author='',  # the dashboard belongs to one student and shows no author
+                category=str(entry['category_id']) if entry['category_id'] is not None else None,
+                edited_at=entry['last_modified'],
+                extra={
+                    'categories': ', '.join(entry['categories']),
+                    'status': entry['status'],
+                    'visibility': entry['visibility'],
+                },
+            ))
+        return summaries
+
     def _article_url(self, article_id: str) -> str:
         return f"{self._base_url}/article/{article_id}/"
 
@@ -344,20 +381,15 @@ def _validate_target(target: Mapping[str, str]) -> dict[str, str]:
         raise PlatformRejected(f"myMoment target values must be strings: {dict(target)}")
 
     classroom = target.get('classroom')
-    if classroom is not None and classroom not in ('home', 'alle') and not _is_number(classroom):
+    if classroom is not None and classroom not in ('home', 'alle') and not parsers.is_number(classroom):
         raise PlatformRejected(f"Unknown myMoment classroom: {classroom!r}")
     category = target.get('category')
-    if category is not None and not (_is_number(category) and int(category) in parsers.CATEGORY_MAPPING):
+    if category is not None and not (parsers.is_number(category) and int(category) in parsers.CATEGORY_MAPPING):
         raise PlatformRejected(f"Unknown myMoment category: {category!r}")
     arrangement = target.get('arrangement')
-    if arrangement is not None and not _is_number(arrangement):
+    if arrangement is not None and not parsers.is_number(arrangement):
         raise PlatformRejected(f"Unknown myMoment arrangement: {arrangement!r}")
     return dict(target)
-
-
-def _is_number(value: str) -> bool:
-    """ASCII digits only: str.isdigit() also accepts e.g. '²', which int() rejects."""
-    return value.isascii() and value.isdigit()
 
 
 def _contradicts(shown_id: Optional[int], wanted: Optional[str]) -> bool:
