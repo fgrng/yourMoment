@@ -5,8 +5,11 @@ from datetime import datetime
 
 import pytest
 from celery.utils.threads import LocalStack
+from sqlalchemy import Select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from src.models.mymoment_login import MyMomentLogin
 from src.platforms import PlatformAuthError, PlatformUnavailable, PostedComment, use_adapter
 from src.tasks import comment_posting
 from src.tasks.comment_posting import CommentPostingTask
@@ -65,6 +68,11 @@ async def _run_post_comment_task(task, ai_comment_id, *, retries=0, max_retries=
     return await asyncio.to_thread(_call)
 
 
+async def _run_batch_task(task, process_id):
+    batch_task_body = type(comment_posting.post_comments_for_articles._get_current_object()).run  # without autoretry
+    return await asyncio.to_thread(batch_task_body, task, str(process_id))
+
+
 async def _generated_comment_on_platform(db_session, fake_platform, **ai_comment):
     scenario = await build_scenario("generated_not_posted", db_session, overrides={"ai_comment": ai_comment})
     await db_session.commit()
@@ -76,7 +84,7 @@ async def test_post_single_comment_transitions_generated_to_posted(db_session, d
     scenario = await _generated_comment_on_platform(db_session, fake_platform)
 
     task = _bind_task_sessions(CommentPostingTask(), db_engine)
-    result = await task._post_single_comment_async(scenario["ai_comment"].id)
+    result = await _run_post_comment_task(task, scenario["ai_comment"].id)
 
     assert_task_result_shape(result, required_keys=("status", "ai_comment_id"), expected_status="posted")
     await db_session.refresh(scenario["ai_comment"])
@@ -90,7 +98,7 @@ async def test_post_single_comment_publishes_the_text_with_ai_prefix(db_session,
     )
 
     task = _bind_task_sessions(CommentPostingTask(), db_engine)
-    await task._post_single_comment_async(scenario["ai_comment"].id)
+    await _run_post_comment_task(task, scenario["ai_comment"].id)
 
     [posted] = fake_platform.posted_comments
     assert (posted.ref.id, posted.text, posted.hidden, posted.account.id) == (
@@ -105,7 +113,7 @@ async def test_post_single_comment_stores_a_placeholder_comment_id(db_session, d
     scenario = await _generated_comment_on_platform(db_session, fake_platform)
 
     task = _bind_task_sessions(CommentPostingTask(), db_engine)
-    await task._post_single_comment_async(scenario["ai_comment"].id)
+    await _run_post_comment_task(task, scenario["ai_comment"].id)
 
     await db_session.refresh(scenario["ai_comment"])
     assert scenario["ai_comment"].mymoment_comment_id.startswith(f"{scenario['ai_comment'].mymoment_article_id}-")
@@ -390,7 +398,7 @@ async def test_batch_posting_posts_every_generated_comment_of_the_process(db_ses
     process, first, second = await _process_with_two_generated_comments(db_session, fake_platform)
 
     task = _bind_task_sessions(CommentPostingTask(), db_engine)
-    result = await task._post_comments_async(process.id)
+    result = await _run_batch_task(task, process.id)
 
     assert (result["status"], result["posted"]) == ("success", 2)
     assert sorted(c.ref.id for c in fake_platform.posted_comments) == sorted(
@@ -403,7 +411,7 @@ async def test_batch_posting_marks_rejected_comment_failed_and_posts_the_rest(db
     fake_platform.reject_comments(first.mymoment_article_id)
 
     task = _bind_task_sessions(CommentPostingTask(), db_engine)
-    result = await task._post_comments_async(process.id)
+    result = await _run_batch_task(task, process.id)
 
     await db_session.refresh(first)
     await db_session.refresh(second)
@@ -415,11 +423,12 @@ async def test_batch_posting_keeps_comments_generated_when_platform_is_unavailab
     fake_platform.fail("post_comment", PlatformUnavailable("timeout"))
 
     task = _bind_task_sessions(CommentPostingTask(), db_engine)
-    result = await task._post_comments_async(process.id)
+    with pytest.raises(comment_posting.PostingDeferred):
+        await _run_batch_task(task, process.id)
 
     await db_session.refresh(first)
     await db_session.refresh(second)
-    assert (result["deferred"], result["failed"], first.status, second.status) == (2, 0, "generated", "generated")
+    assert (first.status, second.status) == ("generated", "generated")
 
 
 async def test_batch_posting_marks_comments_failed_when_credentials_are_wrong(db_session, db_engine, fake_platform):
@@ -427,11 +436,60 @@ async def test_batch_posting_marks_comments_failed_when_credentials_are_wrong(db
     fake_platform.fail("connect", PlatformAuthError("wrong password"))
 
     task = _bind_task_sessions(CommentPostingTask(), db_engine)
-    result = await task._post_comments_async(process.id)
+    result = await _run_batch_task(task, process.id)
 
     await db_session.refresh(first)
     await db_session.refresh(second)
     assert (result["failed"], result["deferred"], first.status, second.status) == (2, 0, "failed", "failed")
+
+
+async def test_batch_posting_marks_comments_failed_when_credentials_cannot_be_decrypted(
+    db_session, db_engine, fake_platform
+):
+    process, first, second = await _process_with_two_generated_comments(db_session, fake_platform)
+    login = await db_session.get(MyMomentLogin, first.mymoment_login_id)
+    login.username_encrypted = "not-a-fernet-token"
+    await db_session.commit()
+
+    task = _bind_task_sessions(CommentPostingTask(), db_engine)
+    result = await _run_batch_task(task, process.id)
+
+    await db_session.refresh(first)
+    await db_session.refresh(second)
+    assert (result["failed"], first.status, second.status) == (2, "failed", "failed")
+
+
+def _fail_platform_account_reads(task):
+    """A database outage that hits only the query for platform accounts."""
+    get_session = task.get_async_session
+
+    async def _get_async_session():
+        session = await get_session()
+        execute = session.execute
+
+        async def _execute(statement, *args, **kwargs):
+            if isinstance(statement, Select) and MyMomentLogin.__table__ in statement.get_final_froms():
+                raise OperationalError(str(statement), {}, Exception("database is locked"))
+            return await execute(statement, *args, **kwargs)
+
+        session.execute = _execute
+        return session
+
+    task.get_async_session = _get_async_session
+    return task
+
+
+async def test_batch_posting_keeps_comments_generated_when_accounts_cannot_be_read(
+    db_session, db_engine, fake_platform
+):
+    process, first, second = await _process_with_two_generated_comments(db_session, fake_platform)
+
+    task = _fail_platform_account_reads(_bind_task_sessions(CommentPostingTask(), db_engine))
+    result = await _run_batch_task(task, process.id)
+
+    await db_session.refresh(first)
+    await db_session.refresh(second)
+    assert (result["status"], first.status, second.status) == ("failed", "generated", "generated")
 
 
 async def test_batch_posting_task_raises_for_celery_retry_when_comments_were_deferred(
@@ -441,6 +499,5 @@ async def test_batch_posting_task_raises_for_celery_retry_when_comments_were_def
     fake_platform.fail("connect", PlatformUnavailable("connection refused"))
 
     task = _bind_task_sessions(CommentPostingTask(), db_engine)
-    batch_task_body = type(comment_posting.post_comments_for_articles._get_current_object()).run  # without autoretry
     with pytest.raises(comment_posting.PostingDeferred):
-        await asyncio.to_thread(batch_task_body, task, str(process.id))
+        await _run_batch_task(task, process.id)

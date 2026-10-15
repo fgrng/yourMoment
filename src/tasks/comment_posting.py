@@ -34,6 +34,7 @@ from src.platforms import (
 )
 from src.platforms.accounts import load_platform_account
 from src.config.database import get_database_manager
+from src.config.encryption import DecryptionError
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,8 @@ class CommentPostingTask(BaseTask):
 
         Uses Pattern 4: Batch Read with Cached Reference Data.
         Reads all comments in one session, then the accounts in a second one.
-        Inactive or missing accounts are absent from the cache.
+        Inactive, missing or undecryptable accounts are absent from the cache;
+        database errors abort the batch.
 
         Args:
             process_id: Monitoring process UUID
@@ -116,8 +118,8 @@ class CommentPostingTask(BaseTask):
                 for login_id, user_id in logins:
                     try:
                         account = await load_platform_account(session, login_id, user_id)
-                    except Exception as e:
-                        logger.error(f"Failed to load platform account {login_id}: {e}")
+                    except DecryptionError as e:
+                        logger.error(f"Failed to decrypt platform account {login_id}: {e}")
                         continue
                     if account is not None:
                         cached_accounts[login_id] = account
@@ -162,36 +164,17 @@ class CommentPostingTask(BaseTask):
         return posted
 
     def _comment_id(self, posted: PostedComment, snapshot: CommentSnapshot) -> str:
-        """The platform's comment ID, else a placeholder."""
-        return posted.external_id or self._generate_placeholder_comment_id(
-            snapshot.mymoment_article_id,
-            snapshot.id,
-        )
-
-    def _generate_placeholder_comment_id(
-        self,
-        article_id: str,
-        ai_comment_id: uuid.UUID
-    ) -> str:
         """
-        Generate unique placeholder comment ID.
+        The platform's comment ID, else a unique placeholder.
 
         Platforms like myMoment don't return comment IDs after posting, so we
-        generate a unique identifier for tracking purposes.
-
-        Format: {article_id}-{timestamp}-{ai_comment_id_prefix}
-
-        Args:
-            article_id: MyMoment article ID
-            ai_comment_id: AIComment UUID
-
-        Returns:
-            Unique placeholder comment ID
+        generate one for tracking: {article_id}-{timestamp}-{ai_comment_id_prefix}
         """
-        timestamp = int(datetime.utcnow().timestamp())
-        comment_id_prefix = str(ai_comment_id)[:8]
-        placeholder_id = f"{article_id}-{timestamp}-{comment_id_prefix}"
+        if posted.external_id:
+            return posted.external_id
 
+        timestamp = int(datetime.utcnow().timestamp())
+        placeholder_id = f"{snapshot.mymoment_article_id}-{timestamp}-{str(snapshot.id)[:8]}"
         logger.debug(f"Generated placeholder comment ID: {placeholder_id}")
         return placeholder_id
 
