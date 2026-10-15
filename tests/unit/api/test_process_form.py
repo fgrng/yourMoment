@@ -55,3 +55,13 @@ def test_form_offers_one_labelled_field_per_dimension_of_the_target_description(
     html = client.get(path).text
 
     assert _target_fields(html) == ["Rubrik *", "Schlagwort"]
+
+
+@pytest.mark.parametrize("path", ["/processes/new", f"/processes/{uuid.uuid4()}/edit"], ids=["new", "edit"])
+def test_form_offers_an_editable_search_term(client, path):
+    soup = BeautifulSoup(client.get(path).text, "html.parser")
+
+    label = soup.find("label", string="Suchbegriff")
+    search = soup.find(id=label["for"])
+    assert search.name == "input" and not search.has_attr("disabled")
+    assert "nicht verfügbar" not in search.parent.get_text()

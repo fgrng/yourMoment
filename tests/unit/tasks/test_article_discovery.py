@@ -113,6 +113,19 @@ async def test_discovery_keeps_only_titles_with_the_search_term(db_session, db_e
     await task._discover_articles_async(scenario["process"].id)
 
     assert [c.mymoment_article_id for c in await _comments_of(db_session, scenario["process"].id)] == ["1"]
+    assert fake_platform.listed_targets == [scenario["process"].target]
+
+
+async def test_discovery_keeps_all_titles_without_a_search_term(db_session, db_engine, fake_platform):
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"search_filter": None}})
+    await db_session.commit()
+    _add_target_article(fake_platform, "1", title="Der Rotpanda")
+    _add_target_article(fake_platform, "2", title="Der Eisbär")
+
+    task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
+    await task._discover_articles_async(scenario["process"].id)
+
+    assert sorted(c.mymoment_article_id for c in await _comments_of(db_session, scenario["process"].id)) == ["1", "2"]
 
 
 async def test_discovery_creates_at_most_20_rows_per_login(db_session, db_engine, fake_platform):
