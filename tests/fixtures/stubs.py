@@ -6,7 +6,8 @@ import json
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import Any
+from http.cookies import SimpleCookie
+from typing import Any, Callable
 
 from celery.exceptions import MaxRetriesExceededError
 
@@ -100,14 +101,28 @@ class AiohttpStubResponse:
 
 
 class AiohttpStubSession:
-    """Queue-driven `aiohttp.ClientSession` stub for scraper tests."""
+    """Queue-driven `aiohttp.ClientSession` stub for adapter tests.
 
-    def __init__(self) -> None:
-        self._routes: dict[tuple[str, str], deque[AiohttpStubResponse]] = defaultdict(deque)
+    A queued exception is raised instead of answering. With a cookie jar
+    (see `as_factory`), `Set-Cookie` headers of responses land in the jar.
+    """
+
+    def __init__(self, cookie_jar: Any = None) -> None:
+        self._routes: dict[tuple[str, str], deque[AiohttpStubResponse | BaseException]] = defaultdict(deque)
         self.requests: list[dict[str, Any]] = []
         self.closed = False
+        self.cookie_jar = cookie_jar
 
-    def queue_response(self, method: str, url: str, response: AiohttpStubResponse) -> None:
+    def as_factory(self) -> Callable[..., "AiohttpStubSession"]:
+        """Return a `ClientSession`-like factory that hands out this stub."""
+
+        def factory(*, cookie_jar: Any = None, **_kwargs: Any) -> "AiohttpStubSession":
+            self.cookie_jar = cookie_jar
+            return self
+
+        return factory
+
+    def queue_response(self, method: str, url: str, response: AiohttpStubResponse | BaseException) -> None:
         self._routes[(method.upper(), url)].append(response)
 
     def request(self, method: str, url: str, **kwargs: Any) -> AiohttpStubResponse:
@@ -115,7 +130,15 @@ class AiohttpStubSession:
         key = (method.upper(), url)
         if not self._routes[key]:
             raise AssertionError(f"no queued aiohttp response for {method.upper()} {url}")
-        return self._routes[key].popleft()
+        response = self._routes[key].popleft()
+        if isinstance(response, BaseException):
+            raise response
+        set_cookie = response.headers.get("Set-Cookie")
+        if set_cookie and self.cookie_jar is not None:
+            from yarl import URL
+
+            self.cookie_jar.update_cookies(SimpleCookie(set_cookie), response_url=URL(url))
+        return response
 
     def get(self, url: str, **kwargs: Any) -> AiohttpStubResponse:
         return self.request("GET", url, **kwargs)

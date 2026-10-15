@@ -21,6 +21,7 @@
 ```
 src/
 ├── api/            # FastAPI routers by domain (auth, monitoring, articles, etc.)
+├── platforms/      # Platform interface (ADR-0001): connect(), typed results/errors, myMoment adapter
 ├── services/       # Business logic layer (context-managed service classes)
 ├── models/         # SQLAlchemy models with encryption helpers
 ├── tasks/          # Celery task entry points

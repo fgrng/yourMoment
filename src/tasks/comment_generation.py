@@ -2,8 +2,7 @@
 AI comment generation task for myMoment monitoring processes.
 
 This module implements Task 3 of the refactored monitoring pipeline:
-- Reads prepared AIComments with full article content
-- Caches LLM provider configurations and prompt templates in memory
+- Reads a prepared AIComment with full article content
 - Formats prompts with article data
 - Generates comments via LLM API calls (outside database sessions)
 - Updates AIComment records with generated content and metadata
@@ -13,13 +12,13 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 from dataclasses import dataclass
 
 from celery import current_task
 from celery.exceptions import MaxRetriesExceededError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, update
 
 from src.config.logging import format_log_context
 from src.tasks.worker import celery_app, BaseTask
@@ -27,7 +26,7 @@ from src.tasks.process_guards import get_process_skip_reason
 from src.models.ai_comment import AIComment
 from src.models.llm_provider import LLMProviderConfiguration
 from src.models.prompt_template import PromptTemplate
-from src.services.llm_service import LLMProviderError, generate_completion_standalone
+from src.services.llm_service import generate_completion_standalone
 from src.services.comment_service import validate_comment, ensure_html_paragraphs
 from src.services.llm_types import LLMGenerationConfig, GenerationResult
 from src.config.database import get_database_manager
@@ -71,102 +70,6 @@ class CommentGenerationTask(BaseTask):
         """Get async database session."""
         sessionmaker = await self.db_manager.create_sessionmaker()
         return sessionmaker()
-
-    async def _read_and_cache_for_generation(
-        self,
-        process_id: uuid.UUID
-    ) -> tuple[List[CommentSnapshot], Dict[uuid.UUID, LLMGenerationConfig], Dict[uuid.UUID, PromptConfig]]:
-        """
-        Read prepared AIComments and cache reference data.
-
-        Uses Pattern 4: Batch Read with Cached Reference Data.
-        Reads all prepared AIComments, then caches LLM providers and prompt templates
-        to avoid repeated database lookups during generation.
-
-        Args:
-            process_id: Monitoring process UUID
-
-        Returns:
-            Tuple of (comment_snapshots, llm_configs_cache, prompt_configs_cache)
-        """
-        # Step 1: Read prepared AIComments
-        session = await self.get_async_session()
-        async with session:
-            result = await session.execute(
-                select(AIComment).where(
-                    and_(
-                        AIComment.monitoring_process_id == process_id,
-                        AIComment.status == 'prepared'
-                    )
-                )
-            )
-            ai_comments = result.scalars().all()
-
-            # Extract unique foreign key IDs
-            unique_llm_ids = set(c.llm_provider_id for c in ai_comments if c.llm_provider_id)
-            unique_prompt_ids = set(c.prompt_template_id for c in ai_comments if c.prompt_template_id)
-
-            # Create lightweight snapshots
-            comment_snapshots = [
-                CommentSnapshot(
-                    id=c.id,
-                    mymoment_article_id=c.mymoment_article_id,
-                    article_title=c.article_title,
-                    article_content=c.article_content,
-                    article_author=c.article_author,
-                    article_category=c.article_category,
-                    article_published_at=c.article_published_at,
-                    article_url=c.article_url,
-                    llm_provider_id=c.llm_provider_id,
-                    prompt_template_id=c.prompt_template_id,
-                    article_raw_html=c.article_raw_html,
-                    article_edited_at=c.article_edited_at,
-                    monitoring_process_id=c.monitoring_process_id,
-                    status=c.status,
-                )
-                for c in ai_comments
-            ]
-        # Session closed
-
-        logger.info(f"Read {len(comment_snapshots)} prepared AIComments for process {process_id}")
-
-        # Step 2: Cache LLM provider configurations as DTOs
-        llm_configs_cache = {}
-        if unique_llm_ids:
-            session = await self.get_async_session()
-            async with session:
-                result = await session.execute(
-                    select(LLMProviderConfiguration).where(
-                        LLMProviderConfiguration.id.in_(unique_llm_ids)
-                    )
-                )
-                providers = result.scalars().all()
-                llm_configs_cache = {
-                    p.id: LLMGenerationConfig.from_model(p, p.get_api_key())
-                    for p in providers
-                }
-            # Session closed
-            logger.info(f"Cached {len(llm_configs_cache)} LLM provider DTOs")
-
-        # Step 3: Cache prompt templates
-        prompt_configs_cache = {}
-        if unique_prompt_ids:
-            session = await self.get_async_session()
-            async with session:
-                result = await session.execute(
-                    select(PromptTemplate).where(
-                        PromptTemplate.id.in_(unique_prompt_ids)
-                    )
-                )
-                templates = result.scalars().all()
-                prompt_configs_cache = {
-                    t.id: PromptConfig(template_model=t)
-                    for t in templates
-                }
-            # Session closed
-            logger.info(f"Cached {len(prompt_configs_cache)} prompt templates")
-
-        return comment_snapshots, llm_configs_cache, prompt_configs_cache
 
     async def _read_comment_snapshot(self, ai_comment_id: uuid.UUID) -> Optional[CommentSnapshot]:
         """Read a single AIComment with the fields needed for generation."""
@@ -535,225 +438,6 @@ class CommentGenerationTask(BaseTask):
             )
             raise
 
-    async def _generate_comments_async(self, process_id: uuid.UUID) -> Dict[str, Any]:
-        """
-        Main async method for comment generation.
-
-        Implements the generation workflow using Pattern 4:
-        1. Batch read prepared AIComments and cache reference data
-        2. For each comment: format prompt, call LLM API, update record
-        3. Handle errors per article (one failure doesn't stop others)
-        4. Track timing and aggregate results
-
-        Args:
-            process_id: Monitoring process UUID
-
-        Returns:
-            Result dictionary with counts and errors
-        """
-        start_time = datetime.utcnow()
-        generated_count = 0
-        failed_count = 0
-        errors = []
-        total_generation_time_ms = 0
-
-        try:
-            skip_reason = await get_process_skip_reason(
-                self.get_async_session,
-                process_id,
-            )
-            if skip_reason:
-                return {
-                    'generated': 0,
-                    'failed': 0,
-                    'errors': [],
-                    'execution_time_seconds': 0,
-                    'avg_generation_time_ms': 0,
-                    'status': 'skipped',
-                    'reason': skip_reason,
-                }
-
-            # Step 1: Read and cache (Pattern 4)
-            comment_snapshots, llm_configs, prompt_configs = await self._read_and_cache_for_generation(
-                process_id
-            )
-
-            if not comment_snapshots:
-                logger.info(f"No prepared AIComments found for process {process_id}")
-                return {
-                    'generated': 0,
-                    'failed': 0,
-                    'errors': [],
-                    'execution_time_seconds': 0,
-                    'avg_generation_time_ms': 0,
-                    'status': 'success'
-                }
-
-            logger.info(f"Starting comment generation for {len(comment_snapshots)} articles")
-
-            # Step 2: Process each comment
-            for i, comment_snapshot in enumerate(comment_snapshots, 1):
-                log_context = self._build_log_context(process_id, comment_snapshot)
-                log_context_str = format_log_context(**log_context)
-                try:
-                    skip_reason = await get_process_skip_reason(
-                        self.get_async_session,
-                        comment_snapshot.monitoring_process_id,
-                    )
-                    if skip_reason:
-                        logger.info(
-                            "Skipping generation for AIComment %s: %s",
-                            comment_snapshot.id,
-                            skip_reason,
-                        )
-                        continue
-
-                    # Get cached configurations
-                    llm_config = llm_configs.get(comment_snapshot.llm_provider_id)
-                    prompt_config = prompt_configs.get(comment_snapshot.prompt_template_id)
-
-                    if not llm_config:
-                        error_msg = f"LLM provider configuration not found for comment {comment_snapshot.id}"
-                        logger.error(error_msg)
-                        await self._mark_comment_failed(comment_snapshot.id, error_msg)
-                        failed_count += 1
-                        errors.append(error_msg)
-                        continue
-
-                    if not prompt_config:
-                        error_msg = f"Prompt template not found for comment {comment_snapshot.id}"
-                        logger.error(error_msg)
-                        await self._mark_comment_failed(comment_snapshot.id, error_msg)
-                        failed_count += 1
-                        errors.append(error_msg)
-                        continue
-
-                    # Format user prompt with article data
-                    formatted_prompt = self._format_user_prompt(comment_snapshot, prompt_config)
-                    llm_summary_logger.info(
-                        "comment_generation_start %s",
-                        log_context_str,
-                    )
-
-                    # Generate comment via LLM (outside DB session)
-                    gen_result = await self._generate_comment_with_llm(
-                        formatted_prompt=formatted_prompt,
-                        system_prompt=prompt_config.template_model.system_prompt,
-                        llm_config=llm_config,
-                        log_context=log_context,
-                    )
-
-                    # Normalize to HTML paragraphs, then add AI prefix
-                    normalized_content = ensure_html_paragraphs(gen_result.comment_content)
-                    comment_with_prefix = self._add_ai_prefix(normalized_content)
-
-                    # Validate comment before persisting (mirrors CommentService quality gate)
-                    validation = validate_comment(comment_with_prefix)
-                    if not validation["is_valid"]:
-                        error_msg = f"Comment failed validation for article {comment_snapshot.mymoment_article_id}: {validation['errors']}"
-                        logger.error(error_msg)
-                        await self._mark_comment_failed(comment_snapshot.id, error_msg)
-                        failed_count += 1
-                        errors.append(error_msg)
-                        continue
-
-                    # Update AIComment record
-                    comment_data = {
-                        'comment_content': comment_with_prefix,
-                        'reasoning_content': gen_result.reasoning_content,
-                        'ai_model_name': gen_result.model_used,
-                        'ai_provider_name': gen_result.provider_used,
-                        'generation_tokens': gen_result.total_tokens,
-                        'generation_time_ms': gen_result.generation_time_ms
-                    }
-
-                    await self._update_generated_comment(comment_snapshot.id, comment_data)
-
-                    generated_count += 1
-                    gen_time_ms = gen_result.generation_time_ms or 0
-                    total_generation_time_ms += gen_time_ms
-                    llm_summary_logger.info(
-                        "comment_generation_done %s",
-                        format_log_context(
-                            **log_context,
-                            status="generated",
-                            provider=gen_result.provider_used,
-                            model=gen_result.model_used,
-                            duration_ms=gen_time_ms,
-                            total_tokens=gen_result.total_tokens,
-                        ),
-                    )
-
-                    logger.info(
-                        f"[{i}/{len(comment_snapshots)}] Generated comment for "
-                        f"{comment_snapshot.article_title!r} via {gen_result.model_used} "
-                        f"({gen_time_ms:.0f}ms, {gen_result.total_tokens or 0} tokens) "
-                        f"{log_context_str}"
-                    )
-
-                except LLMProviderError as e:
-                    error_msg = f"LLM generation failed for article {comment_snapshot.mymoment_article_id}: {str(e)}"
-                    llm_summary_logger.error(
-                        "comment_generation_failed %s",
-                        format_log_context(**log_context, status="failed", error=str(e)),
-                    )
-                    logger.error(error_msg)
-                    await self._mark_comment_failed(comment_snapshot.id, error_msg)
-                    failed_count += 1
-                    errors.append(error_msg)
-
-                except Exception as e:
-                    error_msg = f"Unexpected error generating comment for article {comment_snapshot.mymoment_article_id}: {str(e)}"
-                    llm_summary_logger.error(
-                        "comment_generation_failed %s",
-                        format_log_context(
-                            **log_context,
-                            status="failed",
-                            error_type=type(e).__name__,
-                            error=str(e),
-                        ),
-                    )
-                    logger.error(error_msg)
-                    await self._mark_comment_failed(comment_snapshot.id, error_msg)
-                    failed_count += 1
-                    errors.append(error_msg)
-
-            # Calculate statistics
-            execution_time = (datetime.utcnow() - start_time).total_seconds()
-            avg_generation_time = total_generation_time_ms / generated_count if generated_count > 0 else 0
-
-            logger.info(
-                f"Comment generation completed for process {process_id}: "
-                f"{generated_count} generated, {failed_count} failed, "
-                f"avg generation time: {avg_generation_time:.0f}ms, "
-                f"total time: {execution_time:.2f}s"
-            )
-
-            return {
-                'generated': generated_count,
-                'failed': failed_count,
-                'errors': errors,
-                'execution_time_seconds': execution_time,
-                'avg_generation_time_ms': avg_generation_time,
-                'status': 'success' if failed_count == 0 else 'partial'
-            }
-
-        except Exception as e:
-            error_msg = f"Comment generation failed: {str(e)}"
-            errors.append(error_msg)
-            logger.error(error_msg)
-
-            execution_time = (datetime.utcnow() - start_time).total_seconds()
-
-            return {
-                'generated': generated_count,
-                'failed': failed_count,
-                'errors': errors,
-                'execution_time_seconds': execution_time,
-                'avg_generation_time_ms': 0,
-                'status': 'failed'
-            }
-
 
 def _normalize_identifier(identifier: Any, compat_args: tuple[Any, ...]) -> str:
     """Accept both Celery invocation and legacy direct task calls in tests."""
@@ -824,64 +508,3 @@ def generate_comment_for_article(self, ai_comment_id: Any, *compat_args: Any) ->
                 "reason": f"Max retries exhausted: {exc}",
                 "execution_time_seconds": 0,
             }
-
-
-@celery_app.task(
-    bind=True,
-    base=CommentGenerationTask,
-    name='src.tasks.comment_generation.generate_comments_for_articles',
-    queue='generation',
-    max_retries=3,
-    default_retry_delay=180
-)
-def generate_comments_for_articles(self, process_id: Any, *compat_args: Any) -> Dict[str, Any]:
-    """
-    Celery task wrapper for AI comment generation.
-
-    This is the entry point for the generation stage of the monitoring pipeline.
-    Generates AI comments for prepared articles with status='prepared',
-    updates them to status='generated'.
-
-    Args:
-        process_id: Monitoring process UUID as string
-
-    Returns:
-        Dictionary with generation results:
-        - generated: Number of comments successfully generated
-        - failed: Number of comments that failed generation
-        - errors: List of error messages
-        - execution_time_seconds: Task execution time
-        - avg_generation_time_ms: Average LLM generation time per comment
-        - status: 'success', 'partial', or 'failed'
-    """
-    try:
-        process_id = _normalize_identifier(process_id, compat_args)
-        task_id = getattr(self.request, "id", None)
-        logger.info(
-            "Starting comment generation task %s",
-            format_log_context(task_id=task_id, process_id=process_id),
-        )
-        result = asyncio.run(self._generate_comments_async(uuid.UUID(process_id)))
-        logger.info(
-            "Comment generation task completed %s",
-            format_log_context(
-                task_id=task_id,
-                process_id=process_id,
-                generated=result.get("generated"),
-                failed=result.get("failed"),
-                status=result.get("status"),
-            ),
-        )
-        return result
-
-    except Exception as exc:
-        logger.error(
-            "Comment generation task failed %s",
-            format_log_context(
-                task_id=getattr(self.request, "id", None),
-                process_id=process_id,
-                error=str(exc),
-            ),
-        )
-        # Retry with exponential backoff
-        self.retry(exc=exc, countdown=180)

@@ -6,7 +6,7 @@ Celery-based background task processing system for the yourMoment application.
 
 The background task system provides asynchronous execution using a **parallel pipeline architecture** with four independent stages:
 
-- **Article Discovery** – Scrape myMoment article metadata and create work items
+- **Article Discovery** – List the target's articles on the platform and create work items
 - **Article Preparation** – Fetch full article content for discovered items
 - **Comment Generation** – AI-powered comment creation using configured LLM providers
 - **Comment Posting** – Publishing generated comments to myMoment
@@ -20,13 +20,14 @@ API Layer: POST /start-process
     ↓
 MonitoringService.start_process()
     ↓
-[Spawn 4 Tasks in Parallel]
-    ├─→ discover_articles task (queue: discovery)
-    ├─→ prepare_content_of_articles task (queue: preparation)
-    ├─→ generate_comments_for_articles task (queue: generation)
-    └─→ post_comments_for_articles task (queue: posting)
+discover_articles task (queue: discovery)
+    ↓
+[Per discovered article, a Celery chain]
+    ├─→ prepare_article_content task (queue: preparation)
+    ├─→ generate_comment_for_article task (queue: generation)
+    └─→ post_comment_for_article task (queue: posting, skipped if generate_only)
 
-Each task polls for work via AIComment.status:
+Each stage advances AIComment.status:
     Discovery Stage          Preparation Stage        Generation Stage       Posting Stage
     ┌─────────────────────┐  ┌────────────────────┐   ┌──────────────────┐  ┌──────────────────┐
     │  discover_articles  │  │  prepare_content   │   │  generate_comment│  │  post_comments   │
@@ -97,14 +98,11 @@ docker-compose -f docker-compose.celery.yml up -d celery_monitor
 ### Registered Tasks
 
 **Pipeline Stage Tasks** (run in parallel, coordinate via AIComment.status)
-- `discover_articles` (discovery queue) – Scrape article metadata, create AIComment records with status='discovered'
-- `prepare_content_of_articles` (preparation queue) – Fetch full article content, update status='prepared'
-- `generate_comments_for_articles` (generation queue) – Generate AI comments via LLM, update status='generated'
-- `post_comments_for_articles` (posting queue) – Post to myMoment, update status='posted' or 'failed'
-
-**Session Management** (`sessions` queue)
-- `cleanup_expired_sessions` – Remove expired myMoment session records
-- `cleanup_old_session_records` – Archive old session data
+- `discover_articles` (discovery queue) – List article summaries, create AIComment records with status='discovered'
+- `prepare_article_content` (preparation queue) – Fetch full content of one article, update status='prepared'
+- `generate_comment_for_article` (generation queue) – Generate one AI comment via LLM, update status='generated'
+- `post_comment_for_article` (posting queue) – Post one comment to myMoment, update status='posted' or 'failed'
+- `post_comments_for_articles` (posting queue) – Post all generated comments of a process; used by manual posting for generate-only processes
 
 **Timeout Enforcement** (`timeouts` queue)
 - `check_process_timeouts` – Enforce max_duration_minutes limits, revoke all 4 stage tasks on timeout
@@ -112,15 +110,20 @@ docker-compose -f docker-compose.celery.yml up -d celery_monitor
 **Continuous Monitoring** (`scheduler` queue)
 - `trigger_monitoring_pipeline` – Periodic task spawner (configurable interval) for continuous monitoring
 
+**Student Backup** (`backup` queue, only with `STUDENT_BACKUP_ENABLED=true`)
+- `backup_all_tracked_students`, `backup_single_student`, `trigger_backup` – Back up the articles of tracked students as Article Versions
+- Works through the platform interface (`connect`, `list_student_articles`, `fetch_article`), one connection per admin account; only admin accounts are used
+- Short DB sessions for reads and writes; no session is open during platform calls
+- A new version is stored only if content or metadata changed; its URL is the absolute URL from the platform
+
 ### Task Queues
 
 | Queue | Purpose | Task Modules | Concurrency |
 |-------|---------|--------------|-------------|
-| `discovery` | Article metadata scraping | `article_discovery.*` | 1-2 (network-bound) |
+| `discovery` | Article listing | `article_discovery.*` | 1-2 (network-bound) |
 | `preparation` | Article content fetching | `article_preparation.*` | 1-2 (network-bound) |
 | `generation` | LLM comment generation | `comment_generation.*` | 2-4 (I/O-bound) |
 | `posting` | Comment posting to myMoment | `comment_posting.*` | 1-2 (network-bound) |
-| `sessions` | Session lifecycle management | `session_manager.*` | 1 (low volume) |
 | `timeouts` | Duration enforcement | `timeout_enforcer.*` | 1 (low volume) |
 | `scheduler` | Continuous monitoring | `scheduler.*` | 1 (low volume) |
 | `celery` | Default queue | Miscellaneous | - |
@@ -130,7 +133,6 @@ docker-compose -f docker-compose.celery.yml up -d celery_monitor
 | Task | Schedule | Description |
 |------|----------|-------------|
 | `check-process-timeouts` | Every 30s (configurable) | Enforce max_duration_minutes limits, revoke stage tasks on timeout |
-| `cleanup-expired-sessions` | Every 5 min | Remove expired myMoment session records |
 | `trigger-monitoring-pipeline` | Every 60s (configurable) | Spawn pipeline stage tasks for running processes (continuous monitoring) |
 
 ## Configuration
@@ -163,7 +165,6 @@ CELERY_WORKER_CONCURRENCY=4  # Number of worker processes
 **Periodic Task Intervals** (configurable via environment variables)
 - `PROCESS_HEALTH_CHECK_INTERVAL_SECONDS` – Check process timeouts (default: 30 seconds)
 - `ARTICLE_DISCOVERY_INTERVAL_SECONDS` – Trigger monitoring pipeline (default: 60 seconds)
-- Session cleanup interval is hardcoded to 300 seconds (5 minutes)
 
 **Task Routing** (parallel architecture)
 Tasks are automatically routed by module name:
@@ -171,7 +172,6 @@ Tasks are automatically routed by module name:
 - `article_preparation.*` → `preparation` queue
 - `comment_generation.*` → `generation` queue
 - `comment_posting.*` → `posting` queue
-- `session_manager.*` → `sessions` queue
 - `timeout_enforcer.*` → `timeouts` queue
 - `scheduler.*` → `scheduler` queue
 
@@ -193,30 +193,29 @@ Tasks are automatically routed by module name:
    - Prevents double-spawning via task state checking
 
 3. **Article Discovery Stage** (`discover_articles` task)
-   - Scrapes article metadata from each associated login
+   - Lists the articles of the process target (classroom, category, arrangement) for each associated login through the platform interface (`connect`, `list_articles`); the search term filters titles
    - Creates AIComment records with status='discovered'
    - Creates cross-product: articles × logins × prompts
    - No external I/O within database transactions
 
-4. **Article Preparation Stage** (`prepare_content_of_articles` task)
-   - Polls for AIComments with status='discovered'
-   - Fetches full article content for each
+4. **Article Preparation Stage** (`prepare_article_content` task)
+   - Runs per AIComment with status='discovered'
+   - Fetches full article content through the platform interface (`src/platforms`: `connect`, `fetch_article`)
    - Updates AIComment with content, sets status='prepared'
    - Per-article error isolation (failures don't cascade)
 
-5. **Comment Generation Stage** (`generate_comments_for_articles` task)
-   - Polls for AIComments with status='prepared'
-   - Calls LLM provider for each article
-   - Caches LLM configs and prompt templates in memory
+5. **Comment Generation Stage** (`generate_comment_for_article` task)
+   - Runs per AIComment with status='prepared'
+   - Calls LLM provider
    - Updates AIComment with generated text, sets status='generated'
    - Per-article LLM error handling
 
-6. **Comment Posting Stage** (`post_comments_for_articles` task)
-   - Polls for AIComments with status='generated'
-   - Posts to myMoment via each associated login
-   - Caches login credentials in memory
+6. **Comment Posting Stage** (`post_comment_for_article` task)
+   - Runs per AIComment with status='generated'
+   - Posts through the platform interface (`connect`, `post_comment`) with the comment's platform account; manual posting (`POST /comments/{id}/post`, `post_comments_for_articles`) uses the same interface
    - Updates status='posted' on success, 'failed' on error
-   - Exponential backoff retry (max 3 attempts)
+   - Retry policy by error type: `PlatformUnavailable` (and unexpected errors) are retried with exponential backoff (max 3 attempts); `PlatformRejected` (article deleted, comments closed) and `PlatformAuthError` mark the comment failed without retry
+   - The batch task leaves comments with retryable errors 'generated' and raises `PostingDeferred`, so Celery retries the batch
    - Optional if `generate_only=True` (task not spawned)
 
 7. **Timeout Enforcement** (runs at configurable interval, default 30s)
@@ -229,7 +228,6 @@ Tasks are automatically routed by module name:
    - API calls `MonitoringService.stop_process(process_id)`
    - **Revokes all 4 active stage tasks** (discovery, preparation, generation, posting)
    - Updates process status to "stopped"
-   - Sessions cleanup handled by `cleanup_expired_sessions` (5-minute schedule)
 
 ## Database Session Management
 

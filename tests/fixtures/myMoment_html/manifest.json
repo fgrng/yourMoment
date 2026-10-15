@@ -31,7 +31,7 @@
       ],
       "covered_parser_methods": [
         "parse_article_list",
-        "parse_article_tabs"
+        "parse_classroom_tabs"
       ],
       "required_assertions": [
         "at least one article card parsed",
@@ -50,7 +50,7 @@
         "tab parsing"
       ],
       "covered_parser_methods": [
-        "parse_article_tabs"
+        "parse_classroom_tabs"
       ],
       "required_assertions": [
         "tab labels present"
@@ -121,6 +121,29 @@
       "known_omitted_fields": [
         "real class/school names (replaced with Beispielklasse A/B / Testschule)"
       ]
+    },
+    {
+      "file": "student_dashboard.html",
+      "source_url": "https://www.mymoment.ch/dashboard/user/1042/",
+      "source_type": "synthetic",
+      "covers": [
+        "student dashboard article table",
+        "multiple categories per article",
+        "articles tab scoped against the comments tab"
+      ],
+      "covered_parser_methods": [
+        "parse_student_articles"
+      ],
+      "required_assertions": [
+        "article ID from the edit link of each row",
+        "status, visibility and last modified per row",
+        "rows of the comments tab are not listed"
+      ],
+      "known_omitted_fields": [
+        "author (the dashboard belongs to one student and shows no author column)",
+        "assets and scripts of the live page"
+      ],
+      "note": "Built from the table structure the previous dashboard parser documented; no live capture available."
     }
   ],
   "sanitization": {

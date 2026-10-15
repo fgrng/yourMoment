@@ -16,8 +16,14 @@ from src.api.auth import get_current_user
 from src.config.database import get_session
 from src.models.user import User
 from src.models.ai_comment import AIComment
-from src.models.mymoment_login import MyMomentLogin
-from src.services.scraper_service import ScraperService, ScrapingError
+from src.platforms import (
+    ArticleRef,
+    PlatformAuthError,
+    PlatformRejected,
+    PlatformUnavailable,
+    connect,
+)
+from src.platforms.accounts import load_platform_account
 import logging
 
 logger = logging.getLogger(__name__)
@@ -278,9 +284,12 @@ async def post_comment_to_mymoment(
 
     **Process:**
     1. Validates comment ownership and status
-    2. Initializes scraper session with myMoment credentials
-    3. Posts comment using the scraper service (respects is_hidden field)
+    2. Connects to the platform with the comment's platform account
+    3. Posts the comment through the platform interface (respects is_hidden field)
     4. Updates comment status to 'posted' on success
+
+    Platform errors leave the comment 'generated': refused comments answer
+    422, rejected credentials 502, an unreachable platform 503.
 
     Returns the updated AI comment with posted status and timestamp.
     """
@@ -335,77 +344,54 @@ async def post_comment_to_mymoment(
                 detail="No myMoment login associated with this comment"
             )
 
-        login_stmt = select(MyMomentLogin).where(
-            and_(
-                MyMomentLogin.id == ai_comment.mymoment_login_id,
-                MyMomentLogin.user_id == current_user.id,
-                MyMomentLogin.is_active.is_(True)
-            )
-        )
-        login_result = await session.execute(login_stmt)
-        mymoment_login = login_result.scalar_one_or_none()
-
-        if not mymoment_login:
+        account = await load_platform_account(session, ai_comment.mymoment_login_id, current_user.id)
+        if account is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Associated myMoment login not found or inactive"
             )
 
-        # Initialize scraper service and post comment
-        async with ScraperService(session) as scraper:
-            try:
-                # Initialize session for this login
-                session_context = await scraper.initialize_session_for_login(
-                    login_id=mymoment_login.id,
-                    user_id=current_user.id
+        try:
+            async with connect(account) as platform:
+                posted = await platform.post_comment(
+                    ArticleRef(id=ai_comment.mymoment_article_id, url=ai_comment.article_url),
+                    AIComment.apply_ai_prefix(ai_comment.comment_content),
+                    hidden=ai_comment.is_hidden,
                 )
+        except PlatformRejected as e:
+            logger.warning(f"myMoment refused comment {comment_id}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"myMoment refused the comment: {e}"
+            )
+        except PlatformAuthError as e:
+            logger.warning(f"myMoment rejected the credentials while posting comment {comment_id}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="myMoment rejected the credentials of the associated login"
+            )
+        except PlatformUnavailable as e:
+            logger.error(f"myMoment unavailable while posting comment {comment_id}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="myMoment is not reachable, please try again later"
+            )
 
-                # Post the comment
-                post_success = await scraper.post_comment(
-                    context=session_context,
-                    article_id=ai_comment.mymoment_article_id,
-                    comment_content=ai_comment.comment_content,
-                    highlight=None,
-                    hide_comment=ai_comment.is_hidden
-                )
+        # Platforms like myMoment return no comment ID; article_id-timestamp keeps it unique
+        posted_timestamp = datetime.utcnow()
+        ai_comment.mark_as_posted(
+            mymoment_comment_id=posted.external_id
+            or f"{ai_comment.mymoment_article_id}-{int(posted_timestamp.timestamp())}",
+            posted_at=posted_timestamp
+        )
 
-                if not post_success:
-                    raise HTTPException(
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail="Failed to post comment to myMoment"
-                    )
+        await session.commit()
+        await session.refresh(ai_comment)
 
-                # Generate a placeholder comment ID (myMoment doesn't return one in current implementation)
-                # Format: article_id-timestamp to ensure uniqueness
-                posted_timestamp = datetime.utcnow()
-                placeholder_comment_id = f"{ai_comment.mymoment_article_id}-{int(posted_timestamp.timestamp())}"
-
-                # Update comment status using the model's method
-                ai_comment.mark_as_posted(
-                    mymoment_comment_id=placeholder_comment_id,
-                    posted_at=posted_timestamp
-                )
-
-                await session.commit()
-                await session.refresh(ai_comment)
-
-                logger.info(
-                    f"Successfully posted AI comment {comment_id} to myMoment "
-                    f"article {ai_comment.mymoment_article_id}"
-                )
-
-            except ScrapingError as e:
-                logger.error(f"Scraping error while posting comment {comment_id}: {e}")
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=f"Failed to communicate with myMoment platform: {str(e)}"
-                )
-            except Exception as e:
-                logger.error(f"Unexpected error posting comment {comment_id}: {e}")
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to post comment to myMoment"
-                )
+        logger.info(
+            f"Successfully posted AI comment {comment_id} to myMoment "
+            f"article {ai_comment.mymoment_article_id}"
+        )
 
         # Return updated comment
         return serialize_ai_comment(ai_comment)

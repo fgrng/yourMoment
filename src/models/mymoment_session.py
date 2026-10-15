@@ -265,35 +265,3 @@ class MyMomentSession(Base):
         if self.is_expired():
             return 0.0
         return (self.expires_at - datetime.utcnow()).total_seconds() / 3600.0
-
-    @classmethod
-    def cleanup_expired_sessions(cls, session) -> int:
-        """
-        Clean up expired sessions from database.
-
-        Args:
-            session: SQLAlchemy database session
-
-        Returns:
-            Number of sessions cleaned up
-        """
-        from sqlalchemy import and_
-
-        # Find expired sessions
-        expired_sessions = session.query(cls).filter(
-            and_(
-                cls.expires_at < datetime.utcnow(),
-                cls.is_active == True  # Only clean up active sessions
-            )
-        )
-
-        count = expired_sessions.count()
-
-        # Deactivate expired sessions (don't delete for audit purposes)
-        expired_sessions.update({
-            "is_active": False,
-            "updated_at": datetime.utcnow()
-        })
-
-        session.commit()
-        return count

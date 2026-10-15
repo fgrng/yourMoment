@@ -3,7 +3,7 @@ Comment posting task for myMoment monitoring processes.
 
 This module implements Task 4 of the refactored monitoring pipeline:
 - Reads generated AIComments with status='generated'
-- Posts comments to myMoment using authenticated sessions
+- Posts comments through the platform interface (`connect`, `post_comment`)
 - Uses short-lived database sessions with no external I/O inside transactions
 - Implements Pattern 4: Batch Read with Cached Reference Data
 """
@@ -11,6 +11,7 @@ This module implements Task 4 of the refactored monitoring pipeline:
 import asyncio
 import logging
 import uuid
+from contextlib import AsyncExitStack
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
@@ -22,16 +23,28 @@ from sqlalchemy import and_, select, update
 from src.tasks.worker import celery_app, BaseTask
 from src.tasks.process_guards import get_process_skip_reason
 from src.models.ai_comment import AIComment
-from src.models.mymoment_login import MyMomentLogin
-from src.services.scraper_service import (
-    ScraperService,
-    ScrapingConfig,
-    ScrapingError,
-    SessionContext,
+from src.platforms import (
+    ArticleRef,
+    PlatformAccount,
+    PlatformAuthError,
+    PlatformConnection,
+    PlatformRejected,
+    PostedComment,
+    connect,
 )
+from src.platforms.accounts import load_platform_account
 from src.config.database import get_database_manager
+from src.config.encryption import DecryptionError
 
 logger = logging.getLogger(__name__)
+
+# Final failures: wrong credentials, a refused comment, missing data.
+# Everything else (PlatformUnavailable, unexpected errors) is retried.
+_NOT_RETRYABLE = (PlatformAuthError, PlatformRejected, ValueError)
+
+
+class PostingDeferred(Exception):
+    """Batch posting left comments 'generated' after retryable errors."""
 
 
 @dataclass
@@ -39,6 +52,7 @@ class CommentSnapshot:
     """Lightweight snapshot of an AIComment for posting."""
     id: uuid.UUID
     mymoment_article_id: str
+    article_url: str
     comment_content: str
     mymoment_login_id: uuid.UUID
     article_title: str
@@ -46,14 +60,6 @@ class CommentSnapshot:
     monitoring_process_id: Optional[uuid.UUID]
     user_id: uuid.UUID
     status: str
-
-
-@dataclass
-class LoginCredentials:
-    """Cached login credentials for posting."""
-    login_id: uuid.UUID
-    username: str
-    password: str
 
 
 class CommentPostingTask(BaseTask):
@@ -70,18 +76,20 @@ class CommentPostingTask(BaseTask):
     async def _read_and_cache_for_posting(
         self,
         process_id: uuid.UUID
-    ) -> tuple[List[CommentSnapshot], Dict[uuid.UUID, LoginCredentials]]:
+    ) -> tuple[List[CommentSnapshot], Dict[uuid.UUID, PlatformAccount]]:
         """
-        Read generated AIComments and cache MyMomentLogin credentials.
+        Read generated AIComments and cache their platform accounts.
 
         Uses Pattern 4: Batch Read with Cached Reference Data.
-        Reads all comments in one session, then reads login credentials in separate sessions.
+        Reads all comments in one session, then the accounts in a second one.
+        Inactive, missing or undecryptable accounts are absent from the cache;
+        database errors abort the batch.
 
         Args:
             process_id: Monitoring process UUID
 
         Returns:
-            Tuple of (comment_snapshots, cached_logins)
+            Tuple of (comment_snapshots, cached_accounts)
         """
         # Step 1: Read AIComments to post
         session = await self.get_async_session()
@@ -95,151 +103,78 @@ class CommentPostingTask(BaseTask):
                     )
                 )
             )
-            ai_comments = result.scalars().all()
-
-            # Extract unique login IDs
-            unique_login_ids = set(c.mymoment_login_id for c in ai_comments if c.mymoment_login_id)
-
-            # Create lightweight snapshots
-            comment_snapshots = [
-                CommentSnapshot(
-                    id=c.id,
-                    mymoment_article_id=c.mymoment_article_id,
-                    comment_content=c.comment_content,
-                    mymoment_login_id=c.mymoment_login_id,
-                    article_title=c.article_title,
-                    is_hidden=c.is_hidden,
-                    monitoring_process_id=c.monitoring_process_id,
-                    user_id=c.user_id,
-                    status=c.status,
-                )
-                for c in ai_comments
-            ]
+            comment_snapshots = [_snapshot(c) for c in result.scalars().all()]
         # Session closed
 
         logger.info(f"Read {len(comment_snapshots)} generated comments for process {process_id}")
-        logger.debug(f"Unique logins needed: {len(unique_login_ids)}")
 
-        # Step 2: Read and cache login credentials
-        cached_logins = {}
+        # Step 2: Read and cache platform accounts (decrypted once per login)
+        cached_accounts: Dict[uuid.UUID, PlatformAccount] = {}
+        logins = {(c.mymoment_login_id, c.user_id) for c in comment_snapshots if c.mymoment_login_id}
 
-        if unique_login_ids:
+        if logins:
             session = await self.get_async_session()
             async with session:
-                result = await session.execute(
-                    select(MyMomentLogin).where(
-                        MyMomentLogin.id.in_(unique_login_ids)
-                    )
-                )
-                logins = result.scalars().all()
-
-                for login in logins:
+                for login_id, user_id in logins:
                     try:
-                        # Decrypt credentials once and cache
-                        username = login.get_username()
-                        password = login.get_password()
-
-                        cached_logins[login.id] = LoginCredentials(
-                            login_id=login.id,
-                            username=username,
-                            password=password
-                        )
-                    except Exception as e:
-                        logger.error(f"Failed to decrypt credentials for login {login.id}: {e}")
+                        account = await load_platform_account(session, login_id, user_id)
+                    except DecryptionError as e:
+                        logger.error(f"Failed to decrypt platform account {login_id}: {e}")
                         continue
+                    if account is not None:
+                        cached_accounts[login_id] = account
             # Session closed
 
-        logger.info(f"Cached credentials for {len(cached_logins)} logins")
+        logger.info(f"Cached {len(cached_accounts)} platform accounts")
 
-        return comment_snapshots, cached_logins
+        return comment_snapshots, cached_accounts
 
     async def _read_comment_snapshot(self, ai_comment_id: uuid.UUID) -> Optional[CommentSnapshot]:
         """Read a single AIComment with the fields required for posting."""
         session = await self.get_async_session()
         async with session:
             ai_comment = await session.get(AIComment, ai_comment_id)
-            if not ai_comment:
-                return None
+            return _snapshot(ai_comment) if ai_comment else None
 
-            return CommentSnapshot(
-                id=ai_comment.id,
-                mymoment_article_id=ai_comment.mymoment_article_id,
-                comment_content=ai_comment.comment_content or "",
-                mymoment_login_id=ai_comment.mymoment_login_id,
-                article_title=ai_comment.article_title,
-                is_hidden=ai_comment.is_hidden,
-                monitoring_process_id=ai_comment.monitoring_process_id,
-                user_id=ai_comment.user_id,
-                status=ai_comment.status,
+    async def _load_platform_account(self, snapshot: CommentSnapshot) -> PlatformAccount:
+        """Load the comment's platform account; a missing account is final (ValueError)."""
+        session = await self.get_async_session()
+        async with session:
+            account = await load_platform_account(
+                session, snapshot.mymoment_login_id, snapshot.user_id
             )
-
-    async def _post_single_comment(
-        self,
-        context: SessionContext,
-        article_id: str,
-        comment_content: str,
-        scraper: ScraperService,
-        hide_comment: bool = False
-    ) -> bool:
-        """
-        Post a single comment to myMoment.
-
-        This method runs OUTSIDE any database session.
-        Uses ScraperService.post_comment() to perform the HTTP request.
-
-        Args:
-            context: Authenticated session context
-            article_id: MyMoment article ID
-            comment_content: Comment text (with AI prefix)
-            scraper: ScraperService instance
-            hide_comment: Whether to hide the comment on myMoment
-
-        Returns:
-            True if posting succeeded, False if myMoment returned an unsuccessful response
-        """
-        try:
-            success = await scraper.post_comment(
-                context=context,
-                article_id=article_id,
-                comment_content=comment_content,
-                hide_comment=hide_comment
+        if account is None:
+            raise ValueError(
+                f"Platform account {snapshot.mymoment_login_id} not found or inactive"
             )
+        return account
 
-            if success:
-                logger.info(f"Successfully posted comment to article {article_id}")
-            else:
-                logger.warning(f"Comment posting returned False for article {article_id}")
-
-            return success
-
-        except Exception as e:
-            logger.error(f"Failed to post comment to article {article_id}: {e}")
-            raise
-
-    def _generate_placeholder_comment_id(
-        self,
-        article_id: str,
-        ai_comment_id: uuid.UUID
-    ) -> str:
+    async def _publish(self, platform: PlatformConnection, snapshot: CommentSnapshot) -> PostedComment:
         """
-        Generate unique placeholder comment ID.
+        Post one comment through the platform interface, outside any DB session.
 
-        myMoment doesn't return comment IDs after posting, so we generate
-        a unique identifier for tracking purposes.
-
-        Format: {article_id}-{timestamp}-{ai_comment_id_prefix}
-
-        Args:
-            article_id: MyMoment article ID
-            ai_comment_id: AIComment UUID
-
-        Returns:
-            Unique placeholder comment ID
+        The AI prefix (FR-006) is applied here, exactly once.
         """
+        posted = await platform.post_comment(
+            ArticleRef(id=snapshot.mymoment_article_id, url=snapshot.article_url),
+            AIComment.apply_ai_prefix(snapshot.comment_content),
+            hidden=snapshot.is_hidden,
+        )
+        logger.info(f"Successfully posted comment to article {snapshot.mymoment_article_id}")
+        return posted
+
+    def _comment_id(self, posted: PostedComment, snapshot: CommentSnapshot) -> str:
+        """
+        The platform's comment ID, else a unique placeholder.
+
+        Platforms like myMoment don't return comment IDs after posting, so we
+        generate one for tracking: {article_id}-{timestamp}-{ai_comment_id_prefix}
+        """
+        if posted.external_id:
+            return posted.external_id
+
         timestamp = int(datetime.utcnow().timestamp())
-        comment_id_prefix = str(ai_comment_id)[:8]
-        placeholder_id = f"{article_id}-{timestamp}-{comment_id_prefix}"
-
+        placeholder_id = f"{snapshot.mymoment_article_id}-{timestamp}-{str(snapshot.id)[:8]}"
         logger.debug(f"Generated placeholder comment ID: {placeholder_id}")
         return placeholder_id
 
@@ -449,19 +384,8 @@ class CommentPostingTask(BaseTask):
         )
 
     def _is_retryable_posting_error(self, exc: Exception) -> bool:
-        """Classify posting failures so auth/config issues do not loop through retries."""
-        if isinstance(exc, ValueError):
-            return False
-
-        if isinstance(exc, ScrapingError):
-            error_text = str(exc).lower()
-            non_retryable_fragments = (
-                "failed to authenticate with mymoment",
-                "session not authenticated",
-            )
-            return not any(fragment in error_text for fragment in non_retryable_fragments)
-
-        return True
+        """Decide by error type: auth failures and refused comments do not loop through retries."""
+        return not isinstance(exc, _NOT_RETRYABLE)
 
     async def _post_single_comment_async(self, ai_comment_id: uuid.UUID) -> Dict[str, Any]:
         """Post one generated comment if the process is still allowed to publish."""
@@ -496,7 +420,7 @@ class CommentPostingTask(BaseTask):
                 "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
             }
 
-        scraping_config = ScrapingConfig.from_settings()
+        account = await self._load_platform_account(snapshot)
         claimed = await self._claim_comment_for_posting(
             snapshot.id,
         )
@@ -508,53 +432,23 @@ class CommentPostingTask(BaseTask):
                 "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
             }
 
-        posted_to_mymoment = False
+        posted_to_platform = False
         try:
-            session = await self.get_async_session()
-            async with session:
-                async with ScraperService(session, scraping_config) as scraper:
-                    try:
-                        context = await scraper.initialize_session_for_login(
-                            login_id=snapshot.mymoment_login_id,
-                            user_id=snapshot.user_id,
-                        )
-                        success = await self._post_single_comment(
-                            context=context,
-                            article_id=snapshot.mymoment_article_id,
-                            comment_content=snapshot.comment_content,
-                            scraper=scraper,
-                            hide_comment=snapshot.is_hidden,
-                        )
-                    finally:
-                        try:
-                            await scraper.cleanup_session(snapshot.mymoment_login_id)
-                        except Exception as cleanup_error:
-                            logger.warning(
-                                "Failed to cleanup posting session for login %s: %s",
-                                snapshot.mymoment_login_id,
-                                cleanup_error,
-                            )
+            async with connect(account) as platform:
+                posted = await self._publish(platform, snapshot)
+                posted_to_platform = True
 
-            if not success:
-                await self._revert_comment_claim(snapshot.id)
-                raise RuntimeError("Comment posting returned False")
-
-            posted_to_mymoment = True
             posted_at = datetime.utcnow()
-            comment_id = self._generate_placeholder_comment_id(
-                snapshot.mymoment_article_id,
-                snapshot.id,
-            )
             try:
                 updated = await self._finalize_posted_comment(
                     snapshot.id,
-                    comment_id=comment_id,
+                    comment_id=self._comment_id(posted, snapshot),
                     posted_at=posted_at,
                     login_id=snapshot.mymoment_login_id,
                 )
             except Exception as finalize_error:
                 logger.error(
-                    "Comment posted to myMoment for AIComment %s but finalization failed: %s",
+                    "Comment posted for AIComment %s but finalization failed: %s",
                     snapshot.id,
                     finalize_error,
                 )
@@ -570,23 +464,29 @@ class CommentPostingTask(BaseTask):
                 "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
             }
         except Exception as exc:
-            if not posted_to_mymoment:
+            if not posted_to_platform:
                 await self._revert_comment_claim(snapshot.id)
             logger.error("Failed to post comment for AIComment %s: %s", snapshot.id, exc)
             raise
 
-    async def _post_comments_async(self, process_id: uuid.UUID) -> Dict[str, Any]:
+    async def _post_comments_async(self, process_id: uuid.UUID, final_attempt: bool = False) -> Dict[str, Any]:
         """
         Main async method for comment posting.
 
         Implements the posting workflow using Pattern 4:
-        1. Read generated AIComments and cache login credentials (batch read)
-        2. Initialize scraper sessions for unique logins (outside DB session)
-        3. For each comment: post to myMoment (outside DB session)
+        1. Read generated AIComments and cache platform accounts (batch read)
+        2. Connect once per platform account (outside DB session)
+        3. For each comment: post through the platform interface (outside DB session)
         4. Update AIComment status one at a time (single updates)
+
+        Errors are handled by type: refused comments and wrong credentials
+        mark the comment failed; retryable errors leave it 'generated' and
+        count it as deferred, so the Celery task retries the batch. On the
+        final attempt retryable errors mark the comment failed as well.
 
         Args:
             process_id: Monitoring process UUID
+            final_attempt: True once Celery has no retries left
 
         Returns:
             Result dictionary with counts and errors
@@ -595,6 +495,7 @@ class CommentPostingTask(BaseTask):
         errors = []
         posted_count = 0
         failed_count = 0
+        deferred_count = 0
 
         try:
             skip_reason = await get_process_skip_reason(
@@ -606,6 +507,7 @@ class CommentPostingTask(BaseTask):
                 return {
                     'posted': 0,
                     'failed': 0,
+                    'deferred': 0,
                     'errors': [],
                     'execution_time_seconds': 0,
                     'status': 'skipped',
@@ -613,7 +515,7 @@ class CommentPostingTask(BaseTask):
                 }
 
             # Step 1: Read and cache (Pattern 4)
-            comment_snapshots, cached_logins = await self._read_and_cache_for_posting(process_id)
+            comment_snapshots, cached_accounts = await self._read_and_cache_for_posting(process_id)
 
             if not comment_snapshots:
                 logger.info(f"No generated comments to post for process {process_id}")
@@ -621,6 +523,7 @@ class CommentPostingTask(BaseTask):
                 return {
                     'posted': 0,
                     'failed': 0,
+                    'deferred': 0,
                     'errors': [],
                     'execution_time_seconds': execution_time,
                     'status': 'success'
@@ -629,167 +532,117 @@ class CommentPostingTask(BaseTask):
             logger.info(f"Starting comment posting for process {process_id}: "
                        f"{len(comment_snapshots)} comments")
 
-            # Step 2: Initialize scraper and sessions (outside DB session)
-            scraping_config = ScrapingConfig.from_settings()
+            async def _handle_failure(snapshot: CommentSnapshot, exc: Exception) -> None:
+                nonlocal failed_count, deferred_count
+                errors.append(f"Failed to post comment for AIComment {snapshot.id}: {exc}")
+                logger.error(errors[-1])
+                reason = str(exc)
+                if self._is_retryable_posting_error(exc):
+                    if not final_attempt:
+                        deferred_count += 1
+                        return
+                    reason = f"Max retries exhausted: {exc}"
+                try:
+                    await self._mark_comment_failed_safe(snapshot.id, reason)
+                except Exception as mark_error:
+                    logger.error(f"Failed to mark comment as failed: {mark_error}")
+                failed_count += 1
 
-            # Get user_id for session initialization
-            session = await self.get_async_session()
-            async with session:
-                # Get user_id from first comment
-                first_comment = await session.get(AIComment, comment_snapshots[0].id)
-                if not first_comment:
-                    raise ValueError("Failed to get user_id from first comment")
-                user_id = first_comment.user_id
-            # Session closed
+            async with AsyncExitStack() as stack:
+                # Step 2: One connection per platform account
+                connections: Dict[uuid.UUID, PlatformConnection] = {}
+                connect_errors: Dict[uuid.UUID, Exception] = {}
+                for login_id, account in cached_accounts.items():
+                    try:
+                        connections[login_id] = await stack.enter_async_context(connect(account))
+                        logger.info(f"Connected platform account {login_id}")
+                    except Exception as e:
+                        connect_errors[login_id] = e
+                        logger.error(f"Failed to connect platform account {login_id}: {e}")
 
-            # Create scraper session for temporary use
-            session = await self.get_async_session()
-            async with session:
-                async with ScraperService(session, scraping_config) as scraper:
-                    # Initialize session contexts for each unique login
-                    session_contexts: Dict[uuid.UUID, SessionContext] = {}
+                # Step 3: Post comments one at a time (outside DB sessions)
+                for comment_snapshot in comment_snapshots:
+                    skip_reason = await get_process_skip_reason(
+                        self.get_async_session,
+                        comment_snapshot.monitoring_process_id,
+                        require_posting_enabled=True,
+                    )
+                    if skip_reason:
+                        logger.info(
+                            "Skipping posting for AIComment %s: %s",
+                            comment_snapshot.id,
+                            skip_reason,
+                        )
+                        continue
 
-                    for login_id, credentials in cached_logins.items():
-                        try:
-                            context = await scraper.initialize_session_for_login(
-                                login_id=login_id,
-                                user_id=user_id
-                            )
-                            session_contexts[login_id] = context
-                            logger.info(f"Initialized session for login {login_id} (user: {credentials.username})")
-                        except Exception as e:
-                            error_msg = f"Failed to initialize session for login {login_id}: {str(e)}"
-                            errors.append(error_msg)
-                            logger.error(error_msg)
-                            # Continue with other logins
+                    login_id = comment_snapshot.mymoment_login_id
+                    platform = connections.get(login_id)
+                    if platform is None:
+                        await _handle_failure(
+                            comment_snapshot,
+                            connect_errors.get(login_id)
+                            or ValueError(f"Platform account {login_id} not found or inactive"),
+                        )
+                        continue
 
-                    if not session_contexts:
-                        raise ValueError("Failed to initialize any sessions for posting")
+                    claimed = await self._claim_comment_for_posting(
+                        ai_comment_id=comment_snapshot.id,
+                    )
+                    if not claimed:
+                        logger.info(
+                            "Skipping stale posting claim for AIComment %s inside batch posting",
+                            comment_snapshot.id,
+                        )
+                        continue
 
-                    # Step 3: Post comments one at a time (outside DB sessions)
-                    for idx, comment_snapshot in enumerate(comment_snapshots):
-                        try:
-                            skip_reason = await get_process_skip_reason(
-                                self.get_async_session,
-                                comment_snapshot.monitoring_process_id,
-                                require_posting_enabled=True,
-                            )
-                            if skip_reason:
-                                logger.info(
-                                    "Skipping posting for AIComment %s: %s",
-                                    comment_snapshot.id,
-                                    skip_reason,
-                                )
-                                continue
+                    try:
+                        posted = await self._publish(platform, comment_snapshot)
+                    except Exception as e:
+                        await self._revert_comment_claim(comment_snapshot.id)
+                        await _handle_failure(comment_snapshot, e)
+                        continue
 
-                            # Find session context for this comment's login
-                            context = session_contexts.get(comment_snapshot.mymoment_login_id)
+                    try:
+                        updated = await self._finalize_posted_comment(
+                            ai_comment_id=comment_snapshot.id,
+                            comment_id=self._comment_id(posted, comment_snapshot),
+                            posted_at=datetime.utcnow(),
+                            login_id=login_id,
+                        )
+                    except Exception as finalize_error:
+                        logger.error(
+                            "Comment posted for AIComment %s but finalization failed: %s",
+                            comment_snapshot.id,
+                            finalize_error,
+                        )
+                        posted_count += 1
+                        continue
 
-                            if not context:
-                                error_msg = f"No session found for login {comment_snapshot.mymoment_login_id}"
-                                logger.error(error_msg)
-                                await self._mark_comment_failed(
-                                    comment_snapshot.id,
-                                    error_msg,
-                                    expected_status="generated",
-                                )
-                                failed_count += 1
-                                continue
-
-                            # Apply rate limiting between posts
-                            if idx > 0:
-                                await asyncio.sleep(scraping_config.rate_limit_delay)
-
-                            claimed = await self._claim_comment_for_posting(
-                                ai_comment_id=comment_snapshot.id,
-                            )
-
-                            if not claimed:
-                                logger.info(
-                                    "Skipping stale posting claim for AIComment %s inside batch posting",
-                                    comment_snapshot.id,
-                                )
-                                continue
-
-                            posted_to_mymoment = False
-                            try:
-                                success = await self._post_single_comment(
-                                    context=context,
-                                    article_id=comment_snapshot.mymoment_article_id,
-                                    comment_content=comment_snapshot.comment_content,
-                                    scraper=scraper,
-                                    hide_comment=comment_snapshot.is_hidden
-                                )
-
-                                if not success:
-                                    await self._revert_comment_claim(comment_snapshot.id)
-                                    raise RuntimeError("Comment posting returned False")
-
-                                posted_to_mymoment = True
-                                posted_at = datetime.utcnow()
-                                comment_id = self._generate_placeholder_comment_id(
-                                    comment_snapshot.mymoment_article_id,
-                                    comment_snapshot.id,
-                                )
-                                try:
-                                    updated = await self._finalize_posted_comment(
-                                        ai_comment_id=comment_snapshot.id,
-                                        comment_id=comment_id,
-                                        posted_at=posted_at,
-                                        login_id=comment_snapshot.mymoment_login_id,
-                                    )
-                                except Exception as finalize_error:
-                                    logger.error(
-                                        "Comment posted to myMoment for AIComment %s but finalization failed: %s",
-                                        comment_snapshot.id,
-                                        finalize_error,
-                                    )
-                                    posted_count += 1
-                                    continue
-
-                                if updated:
-                                    posted_count += 1
-                                    logger.info(
-                                        f"Posted comment {posted_count}/{len(comment_snapshots)}: "
-                                        f"'{comment_snapshot.article_title[:50]}'"
-                                    )
-                                else:
-                                    logger.info(
-                                        "Skipping stale posting completion for AIComment %s",
-                                        comment_snapshot.id,
-                                    )
-                            except Exception:
-                                if not posted_to_mymoment:
-                                    await self._revert_comment_claim(comment_snapshot.id)
-                                raise
-
-                        except Exception as e:
-                            error_msg = f"Failed to post comment for AIComment {comment_snapshot.id}: {str(e)}"
-                            errors.append(error_msg)
-                            logger.error(error_msg)
-
-                            try:
-                                await self._mark_comment_failed_safe(
-                                    comment_snapshot.id,
-                                    str(e),
-                                )
-                            except Exception as mark_error:
-                                logger.error(f"Failed to mark comment as failed: {mark_error}")
-
-                            failed_count += 1
+                    if updated:
+                        posted_count += 1
+                        logger.info(
+                            f"Posted comment {posted_count}/{len(comment_snapshots)}: "
+                            f"'{comment_snapshot.article_title[:50]}'"
+                        )
+                    else:
+                        logger.info(
+                            "Skipping stale posting completion for AIComment %s",
+                            comment_snapshot.id,
+                        )
 
             execution_time = (datetime.utcnow() - start_time).total_seconds()
 
             logger.info(f"Comment posting completed for process {process_id}: "
-                       f"{posted_count} posted, {failed_count} failed, "
+                       f"{posted_count} posted, {failed_count} failed, {deferred_count} deferred, "
                        f"{len(errors)} errors, {execution_time:.2f}s")
 
             return {
                 'posted': posted_count,
                 'failed': failed_count,
+                'deferred': deferred_count,
                 'errors': errors,
                 'execution_time_seconds': execution_time,
-                'status': 'success' if failed_count == 0 else 'partial'
+                'status': 'success' if failed_count == 0 and deferred_count == 0 else 'partial'
             }
 
         except Exception as e:
@@ -802,10 +655,26 @@ class CommentPostingTask(BaseTask):
             return {
                 'posted': posted_count,
                 'failed': failed_count,
+                'deferred': deferred_count,
                 'errors': errors,
                 'execution_time_seconds': execution_time,
                 'status': 'failed'
             }
+
+
+def _snapshot(ai_comment: AIComment) -> CommentSnapshot:
+    return CommentSnapshot(
+        id=ai_comment.id,
+        mymoment_article_id=ai_comment.mymoment_article_id,
+        article_url=ai_comment.article_url,
+        comment_content=ai_comment.comment_content or "",
+        mymoment_login_id=ai_comment.mymoment_login_id,
+        article_title=ai_comment.article_title,
+        is_hidden=ai_comment.is_hidden,
+        monitoring_process_id=ai_comment.monitoring_process_id,
+        user_id=ai_comment.user_id,
+        status=ai_comment.status,
+    )
 
 
 def _normalize_identifier(identifier: Any, compat_args: tuple[Any, ...]) -> str:
@@ -922,6 +791,7 @@ def post_comments_for_articles(self, process_id: Any, *compat_args: Any) -> Dict
     - Max retries: 3
     - Exponential backoff: 60s, 120s, 240s
     - Jitter enabled to prevent thundering herd
+    - The last attempt marks comments failed instead of deferring them
 
     Args:
         process_id: Monitoring process UUID as string
@@ -930,6 +800,7 @@ def post_comments_for_articles(self, process_id: Any, *compat_args: Any) -> Dict
         Dictionary with posting results:
         - posted: Number of comments successfully posted
         - failed: Number of comments that failed to post
+        - deferred: Number of comments left 'generated' after retryable errors
         - errors: List of error messages
         - execution_time_seconds: Task execution time
         - status: 'success', 'partial', or 'failed'
@@ -937,8 +808,12 @@ def post_comments_for_articles(self, process_id: Any, *compat_args: Any) -> Dict
     try:
         process_id = _normalize_identifier(process_id, compat_args)
         logger.info(f"Starting comment posting task for process {process_id}")
-        result = asyncio.run(self._post_comments_async(uuid.UUID(process_id)))
+        final_attempt = self.request.retries >= self.max_retries
+        result = asyncio.run(self._post_comments_async(uuid.UUID(process_id), final_attempt))
         logger.info(f"Comment posting task completed: {result}")
+        if result.get('deferred'):
+            # Celery's autoretry runs the batch again; it picks up the comments still 'generated'
+            raise PostingDeferred(f"{result['deferred']} comments deferred: {result['errors']}")
         return result
 
     except Exception as exc:
