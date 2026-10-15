@@ -269,6 +269,31 @@ async def test_failed_cookie_discard_still_reports_rejected_credentials(http, ac
             pass
 
 
+class _FailingLoadCookieStore(InMemoryCookieStore):
+    async def load(self, account_id):
+        raise RuntimeError("database is locked")
+
+
+async def test_failed_cookie_load_leads_to_new_login(http, account):
+    cookie_store = _FailingLoadCookieStore()
+    adapter = MyMomentAdapter(cookie_store=cookie_store, http_session_factory=http.as_factory())
+    queue_login(http, session_cookie="fresh-session")
+
+    async with adapter.connect(account):
+        pass
+
+    assert _stored_cookie_value(cookie_store, account) == "fresh-session"
+
+
+async def test_fresh_login_ignores_a_valid_stored_cookie(adapter, http, cookie_store, account):
+    cookie_store.saved[account.id] = _stored_session("stored-session")
+    queue_login(http, succeed=False)
+
+    with pytest.raises(PlatformAuthError):
+        async with adapter.connect(account, fresh_login=True):
+            pass
+
+
 async def test_login_page_without_csrf_token_raises_unavailable(adapter, http, account):
     http.queue_response("GET", LOGIN_URL, AiohttpStubResponse(status=200, body="<html><body>Wartung</body></html>"))
 
@@ -301,6 +326,38 @@ async def test_fetch_article_rejects_malformed_id_without_request(adapter, http,
 async def test_redirect_without_location_raises_unavailable(adapter, http, account):
     queue_login(http)
     http.queue_response("GET", ARTICLE_URL, AiohttpStubResponse(status=302))
+
+    async with adapter.connect(account) as connection:
+        with pytest.raises(PlatformUnavailable):
+            await connection.fetch_article(ArticleRef(id="3170", url=ARTICLE_URL))
+
+
+@pytest.mark.parametrize("status", [307, 308])
+async def test_redirect_keeping_the_method_resends_the_form(adapter, http, account, status):
+    confirm_url = f"{MYMOMENT_BASE_URL}/accounts/login/confirm/"
+    http.queue_response("GET", LOGIN_URL, logged_out_page())
+    http.queue_response(
+        "POST", LOGIN_URL, AiohttpStubResponse(status=status, headers={"Location": "/accounts/login/confirm/"})
+    )
+    http.queue_response(
+        "POST",
+        confirm_url,
+        AiohttpStubResponse(status=302, headers={"Location": "/", "Set-Cookie": "sessionid=fresh; Path=/"}),
+    )
+    http.queue_response("GET", HOME_URL, logged_in_page())
+    http.queue_response("GET", HOME_URL, logged_in_page())
+
+    async with adapter.connect(account):
+        pass
+
+    resent = next(r for r in http.requests if r["url"] == confirm_url)
+    assert (resent["method"], resent["kwargs"]["data"]["password"]) == ("POST", "secret")
+
+
+async def test_endless_redirects_raise_unavailable(adapter, http, account):
+    queue_login(http)
+    for _ in range(6):
+        http.queue_response("GET", ARTICLE_URL, AiohttpStubResponse(status=302, headers={"Location": ARTICLE_URL}))
 
     async with adapter.connect(account) as connection:
         with pytest.raises(PlatformUnavailable):
@@ -374,6 +431,17 @@ async def test_list_articles_reads_the_teacher_table(adapter, http, account):
         ("3170", "7", "10", "Publiziert"),
         ("3171", "9", None, "Entwurf"),
     ]
+
+
+async def test_list_articles_reads_the_id_from_a_link_to_the_edit_page(adapter, http, account):
+    target = {"classroom": "82"}
+    queue_login(http)
+    queue_article_list(http, target, body=_TEACHER_TABLE.replace('href="/article/3171/"', 'href="/article/3171/edit/"'))
+
+    async with adapter.connect(account) as connection:
+        articles = await connection.list_articles(target)
+
+    assert [a.ref.id for a in articles] == ["3170", "3171"]
 
 
 async def test_list_articles_arrangement_target_is_sent_and_kept_on_the_summaries(adapter, http, account):
@@ -487,13 +555,37 @@ async def test_post_comment_does_not_follow_the_success_redirect(adapter, http, 
 
 
 async def test_post_comment_refused_by_myMoment_raises_rejected(adapter, http, account):
+    # The article was deleted between reading the form and posting it
+    queue_login(http)
+    queue_article(http, "3170")
+    queue_comment_post(http, "3170", status=404)
+
+    async with adapter.connect(account) as connection:
+        with pytest.raises(PlatformRejected):
+            await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>")
+
+
+async def test_post_comment_forbidden_by_an_expired_session_raises_unavailable(adapter, http, account):
+    # Django answers 403 to an expired session or a stale CSRF token; a new connection can succeed
     queue_login(http)
     queue_article(http, "3170")
     queue_comment_post(http, "3170", status=403)
 
     async with adapter.connect(account) as connection:
-        with pytest.raises(PlatformRejected):
+        with pytest.raises(PlatformUnavailable):
             await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>")
+
+
+@pytest.mark.parametrize("article_id", ["edit", "..", "3170/comment", "²", ""])
+async def test_post_comment_rejects_malformed_id_without_request(adapter, http, account, article_id):
+    queue_login(http)
+
+    async with adapter.connect(account) as connection:
+        requests_before = len(http.requests)
+        with pytest.raises(PlatformRejected):
+            await connection.post_comment(ArticleRef(id=article_id, url=ARTICLE_URL), "<p>Toll!</p>")
+
+    assert len(http.requests) == requests_before
 
 
 async def test_post_comment_without_comment_form_raises_rejected_without_posting(adapter, http, account):

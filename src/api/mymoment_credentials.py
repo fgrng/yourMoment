@@ -415,7 +415,8 @@ async def test_credentials(
     account = platform_account_from_login(credentials)
 
     try:
-        async with connect(account):
+        # A stored session would hide a password changed on the platform since
+        async with connect(account, fresh_login=True):
             pass
     except PlatformAuthError as e:
         logger.warning("Authentication failed during credential test for credentials %s: %s", credentials_id, e)

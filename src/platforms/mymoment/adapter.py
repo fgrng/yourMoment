@@ -30,6 +30,7 @@ from src.platforms.types import (
     TargetOption,
     TargetValue,
 )
+from src.utils.ids import is_number
 from src.utils.url_sanitizer import is_url_malformed, sanitize_url
 
 logger = logging.getLogger(__name__)
@@ -76,7 +77,9 @@ class MyMomentAdapter:
         self._http_session_factory = http_session_factory
 
     @asynccontextmanager
-    async def connect(self, account: PlatformAccount) -> AsyncIterator["MyMomentConnection"]:
+    async def connect(
+        self, account: PlatformAccount, *, fresh_login: bool = False
+    ) -> AsyncIterator["MyMomentConnection"]:
         jar = aiohttp.CookieJar()
         http = self._http_session_factory(
             cookie_jar=jar,
@@ -85,7 +88,7 @@ class MyMomentAdapter:
         )
         connection = MyMomentConnection(account, http, jar, self._rate_limit_delay)
         try:
-            await connection._open(self._cookie_store)
+            await connection._open(self._cookie_store, fresh_login)
             yield connection
         finally:
             await http.close()
@@ -160,7 +163,7 @@ class MyMomentConnection:
         return summaries
 
     async def fetch_article(self, ref: ArticleRef) -> ArticleContent:
-        if not parsers.is_number(ref.id):
+        if not is_number(ref.id):
             raise PlatformRejected(f"Unknown myMoment article: {ref.id!r}")
 
         url = self._article_url(ref.id)
@@ -187,8 +190,13 @@ class MyMomentConnection:
         Fill in the article's comment form and submit it.
 
         The form's CSRF token comes from the article page. myMoment answers a
-        successful post with 200 or 302; it reports no comment ID.
+        successful post with 200 or 302; it reports no comment ID. Django
+        answers 403 to an expired session or a stale CSRF token, which a new
+        connection can overcome, so 403 counts as unavailable.
         """
+        if not is_number(ref.id):
+            raise PlatformRejected(f"Unknown myMoment article: {ref.id!r}")
+
         url = self._article_url(ref.id)
         page = await self._request('GET', url)
         if page.status != 200:
@@ -216,6 +224,8 @@ class MyMomentConnection:
                 'Content-Type': 'application/x-www-form-urlencoded'
             },
         )
+        if response.status == 403:
+            raise PlatformUnavailable(f"myMoment refused the session for the comment on article {ref.id}")
         if response.status not in (200, 302):
             raise PlatformRejected(f"myMoment answered {response.status} to the comment on article {ref.id}")
         logger.info(f"Posted comment to myMoment article {ref.id} (hidden={hidden})")
@@ -228,7 +238,7 @@ class MyMomentConnection:
         `category` is set where the dashboard shows exactly one known category;
         `extra` carries the categories as shown, status and visibility.
         """
-        if not parsers.is_number(student.id):
+        if not is_number(student.id):
             raise PlatformRejected(f"Unknown myMoment student: {student.id!r}")
 
         page = await self._request('GET', f"{self._base_url}/dashboard/user/{student.id}/")
@@ -254,9 +264,9 @@ class MyMomentConnection:
     def _article_url(self, article_id: str) -> str:
         return f"{self._base_url}/article/{article_id}/"
 
-    async def _open(self, cookie_store: CookieStore) -> None:
-        """Reuse stored cookies if myMoment still accepts them, else log in."""
-        if await self._restore_session(cookie_store):
+    async def _open(self, cookie_store: CookieStore, fresh_login: bool) -> None:
+        """Reuse stored cookies if myMoment still accepts them, else log in; `fresh_login` always logs in."""
+        if not fresh_login and await self._restore_session(cookie_store):
             logger.info(f"Restored myMoment session for account {self._account.id}")
         else:
             try:
@@ -395,13 +405,13 @@ def _validate_target(target: Mapping[str, str]) -> dict[str, str]:
         raise PlatformRejected(f"myMoment target values must be strings: {dict(target)}")
 
     classroom = target.get('classroom')
-    if classroom is not None and classroom not in ('home', 'alle') and not parsers.is_number(classroom):
+    if classroom is not None and classroom not in ('home', 'alle') and not is_number(classroom):
         raise PlatformRejected(f"Unknown myMoment classroom: {classroom!r}")
     category = target.get('category')
-    if category is not None and not (parsers.is_number(category) and int(category) in parsers.CATEGORY_MAPPING):
+    if category is not None and not (is_number(category) and int(category) in parsers.CATEGORY_MAPPING):
         raise PlatformRejected(f"Unknown myMoment category: {category!r}")
     arrangement = target.get('arrangement')
-    if arrangement is not None and not parsers.is_number(arrangement):
+    if arrangement is not None and not is_number(arrangement):
         raise PlatformRejected(f"Unknown myMoment arrangement: {arrangement!r}")
     return dict(target)
 

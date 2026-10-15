@@ -469,7 +469,7 @@ class CommentPostingTask(BaseTask):
             logger.error("Failed to post comment for AIComment %s: %s", snapshot.id, exc)
             raise
 
-    async def _post_comments_async(self, process_id: uuid.UUID) -> Dict[str, Any]:
+    async def _post_comments_async(self, process_id: uuid.UUID, final_attempt: bool = False) -> Dict[str, Any]:
         """
         Main async method for comment posting.
 
@@ -481,10 +481,12 @@ class CommentPostingTask(BaseTask):
 
         Errors are handled by type: refused comments and wrong credentials
         mark the comment failed; retryable errors leave it 'generated' and
-        count it as deferred, so the Celery task retries the batch.
+        count it as deferred, so the Celery task retries the batch. On the
+        final attempt retryable errors mark the comment failed as well.
 
         Args:
             process_id: Monitoring process UUID
+            final_attempt: True once Celery has no retries left
 
         Returns:
             Result dictionary with counts and errors
@@ -534,11 +536,14 @@ class CommentPostingTask(BaseTask):
                 nonlocal failed_count, deferred_count
                 errors.append(f"Failed to post comment for AIComment {snapshot.id}: {exc}")
                 logger.error(errors[-1])
+                reason = str(exc)
                 if self._is_retryable_posting_error(exc):
-                    deferred_count += 1
-                    return
+                    if not final_attempt:
+                        deferred_count += 1
+                        return
+                    reason = f"Max retries exhausted: {exc}"
                 try:
-                    await self._mark_comment_failed_safe(snapshot.id, str(exc))
+                    await self._mark_comment_failed_safe(snapshot.id, reason)
                 except Exception as mark_error:
                     logger.error(f"Failed to mark comment as failed: {mark_error}")
                 failed_count += 1
@@ -786,6 +791,7 @@ def post_comments_for_articles(self, process_id: Any, *compat_args: Any) -> Dict
     - Max retries: 3
     - Exponential backoff: 60s, 120s, 240s
     - Jitter enabled to prevent thundering herd
+    - The last attempt marks comments failed instead of deferring them
 
     Args:
         process_id: Monitoring process UUID as string
@@ -802,7 +808,8 @@ def post_comments_for_articles(self, process_id: Any, *compat_args: Any) -> Dict
     try:
         process_id = _normalize_identifier(process_id, compat_args)
         logger.info(f"Starting comment posting task for process {process_id}")
-        result = asyncio.run(self._post_comments_async(uuid.UUID(process_id)))
+        final_attempt = self.request.retries >= self.max_retries
+        result = asyncio.run(self._post_comments_async(uuid.UUID(process_id), final_attempt))
         logger.info(f"Comment posting task completed: {result}")
         if result.get('deferred'):
             # Celery's autoretry runs the batch again; it picks up the comments still 'generated'

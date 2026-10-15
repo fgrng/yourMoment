@@ -39,6 +39,14 @@ async def test_check_connects_with_the_decrypted_account(db_session, fake_platfo
     assert (response["username"], account.id, account.username) == ("teacher", login.id, "teacher")
 
 
+async def test_check_logs_in_instead_of_reusing_a_stored_session(db_session, fake_platform):
+    user, login = await _stored_login(db_session)
+
+    await _check(db_session, user, login)
+
+    assert [account.id for account in fake_platform.fresh_logins] == [login.id]
+
+
 @pytest.mark.parametrize(
     ("error", "expected"),
     [

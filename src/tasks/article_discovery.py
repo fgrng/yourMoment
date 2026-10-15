@@ -28,6 +28,7 @@ from src.models.monitoring_process_prompt import MonitoringProcessPrompt
 from src.platforms import ArticleSummary, connect
 from src.platforms.accounts import load_platform_account
 from src.config.database import get_database_manager
+from src.utils.ids import as_int
 
 logger = logging.getLogger(__name__)
 
@@ -236,8 +237,8 @@ class ArticleDiscoveryTask(BaseTask):
                         mymoment_article_id=article.ref.id,
                         article_title=article.title,
                         article_author=article.author,
-                        article_category=_as_int(article.category),
-                        article_task_id=_as_int(article.extra.get("arrangement")),
+                        article_category=as_int(article.category),
+                        article_task_id=as_int(article.extra.get("arrangement")),
                         article_url=article.ref.url,
                         article_edited_at=None,  # Not available from index
                         article_scraped_at=datetime.utcnow(),
@@ -398,13 +399,6 @@ def _target_of(config: ProcessConfig) -> Dict[str, str]:
     if config.task_filter is not None:
         target["arrangement"] = str(config.task_filter)
     return target
-
-
-def _as_int(value: Optional[str]) -> Optional[int]:
-    """Convert a platform ID string to the integer column, None if not numeric."""
-    if value is None or not (value.isascii() and value.isdigit()):
-        return None
-    return int(value)
 
 
 def _dispatch_processing_chains(

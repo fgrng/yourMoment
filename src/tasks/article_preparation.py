@@ -21,11 +21,23 @@ from sqlalchemy import and_, update
 from src.tasks.worker import celery_app, BaseTask
 from src.tasks.process_guards import get_process_skip_reason
 from src.models.ai_comment import AIComment
-from src.platforms import ArticleContent, ArticleRef, PlatformAccount, connect
+from src.platforms import (
+    ArticleContent,
+    ArticleRef,
+    PlatformAccount,
+    PlatformAuthError,
+    PlatformRejected,
+    connect,
+)
 from src.platforms.accounts import load_platform_account
 from src.config.database import get_database_manager
+from src.utils.ids import as_int
 
 logger = logging.getLogger(__name__)
+
+# Final failures: wrong credentials, a refused article, a missing account.
+# Everything else (PlatformUnavailable, unexpected errors) is retried.
+_NOT_RETRYABLE = (PlatformAuthError, PlatformRejected, ValueError)
 
 
 @dataclass
@@ -72,14 +84,14 @@ class ArticlePreparationTask(BaseTask):
             )
 
     async def _load_platform_account(self, snapshot: ArticleSnapshot) -> PlatformAccount:
-        """Load the decrypted platform account of the AIComment."""
+        """Load the decrypted platform account of the AIComment; a missing account is final (ValueError)."""
         session = await self.get_async_session()
         async with session:
             account = await load_platform_account(
                 session, snapshot.mymoment_login_id, snapshot.user_id
             )
         if account is None:
-            raise RuntimeError(
+            raise ValueError(
                 f"Platform account {snapshot.mymoment_login_id} not found or inactive"
             )
         return account
@@ -115,10 +127,10 @@ class ArticlePreparationTask(BaseTask):
                     "failed_at": None,
                 }
                 # The schema still stores myMoment's integer IDs
-                category_id = _as_int(content.category)
+                category_id = as_int(content.category)
                 if category_id is not None:
                     values["article_category"] = category_id
-                arrangement_id = _as_int(content.extra.get("arrangement"))
+                arrangement_id = as_int(content.extra.get("arrangement"))
                 if arrangement_id is not None:
                     values["article_task_id"] = arrangement_id
 
@@ -268,13 +280,6 @@ class ArticlePreparationTask(BaseTask):
             raise
 
 
-def _as_int(value: Optional[str]) -> Optional[int]:
-    """Convert a platform ID string to the integer column, None if not numeric."""
-    if value is None or not value.isdigit():
-        return None
-    return int(value)
-
-
 def _normalize_identifier(identifier: Any, compat_args: tuple[Any, ...]) -> str:
     """Accept both Celery invocation and legacy direct task calls in tests."""
     if isinstance(identifier, str):
@@ -300,6 +305,21 @@ def prepare_article_content(self, ai_comment_id: Any, *compat_args: Any) -> Dict
         result = asyncio.run(self._prepare_single_article_async(uuid.UUID(ai_comment_id)))
         logger.info(f"Single-article preparation task completed: {result}")
         return result
+    except _NOT_RETRYABLE as exc:
+        logger.error(f"Single-article preparation failed permanently for AIComment {ai_comment_id}: {exc}")
+        asyncio.run(
+            self._mark_article_failed(
+                uuid.UUID(ai_comment_id),
+                str(exc),
+                expected_status="discovered",
+            )
+        )
+        return {
+            "ai_comment_id": ai_comment_id,
+            "status": "failed",
+            "reason": str(exc),
+            "execution_time_seconds": 0,
+        }
     except Exception as exc:
         countdown = min(60 * (2 ** self.request.retries), 300)
         logger.warning(

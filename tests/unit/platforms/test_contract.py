@@ -253,9 +253,19 @@ async def test_post_comment_publishes_the_text(harness):
     ref = harness.given_article_open_for_comments()
 
     async with harness.adapter.connect(harness.account) as connection:
+        await connection.post_comment(ref, "<p>Schöner Text!</p>")
+
+    assert harness.posted_texts() == ["<p>Schöner Text!</p>"]
+
+
+async def test_post_comment_returns_the_posted_comment(harness):
+    harness.given_valid_login()
+    ref = harness.given_article_open_for_comments()
+
+    async with harness.adapter.connect(harness.account) as connection:
         posted = await connection.post_comment(ref, "<p>Schöner Text!</p>")
 
-    assert (isinstance(posted, PostedComment), harness.posted_texts()) == (True, ["<p>Schöner Text!</p>"])
+    assert isinstance(posted, PostedComment)
 
 
 async def test_post_comment_to_article_refusing_comments_is_rejected(harness):

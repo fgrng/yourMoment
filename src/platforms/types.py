@@ -116,4 +116,6 @@ class PlatformConnection(Protocol):
 class PlatformAdapter(Protocol):
     """Speaks to one platform type; `connect` opens and closes a connection."""
 
-    def connect(self, account: PlatformAccount) -> AsyncContextManager[PlatformConnection]: ...
+    def connect(
+        self, account: PlatformAccount, *, fresh_login: bool = False
+    ) -> AsyncContextManager[PlatformConnection]: ...

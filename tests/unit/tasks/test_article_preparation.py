@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
+from celery.utils.threads import LocalStack
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from src.platforms import ArticleContent, ArticleRef, PlatformUnavailable
+from src.platforms import ArticleContent, ArticleRef, PlatformAuthError, PlatformRejected, PlatformUnavailable
 from src.tasks import article_preparation
 from src.tasks.article_preparation import ArticlePreparationTask
 from tests.fixtures.assertions import assert_task_result_shape
@@ -22,6 +25,25 @@ def _bind_task_sessions(task, db_engine):
 
     task.get_async_session = _get_async_session
     return task
+
+
+async def _run_prepare_task(task, ai_comment_id):
+    """Run the Celery entrypoint on its first attempt; any retry fails the test."""
+
+    def _retry(*, exc, countdown):
+        raise AssertionError(f"retry() should not have been called for {exc!r}")
+
+    def _call():
+        if task.request_stack is None:
+            task.request_stack = LocalStack()
+        task.push_request(id="fixture-task-id", retries=0)
+        task.retry = _retry
+        try:
+            return article_preparation.prepare_article_content.run.__func__(task, str(ai_comment_id))
+        finally:
+            task.pop_request()
+
+    return await asyncio.to_thread(_call)
 
 
 async def test_prepare_single_article_transitions_discovered_to_prepared(
@@ -88,6 +110,53 @@ async def test_prepare_single_article_propagates_platform_errors_for_retry(
 
     await db_session.refresh(scenario["ai_comment"])
     assert scenario["ai_comment"].status == "discovered"
+
+
+async def test_prepare_single_article_ignores_a_category_that_is_no_number(db_session, db_engine, fake_platform):
+    scenario = await build_scenario("article_discovered_not_prepared", db_session)
+    await db_session.commit()
+    fake_platform.add_article(scenario["ai_comment"].mymoment_article_id, category="²")
+
+    task = _bind_task_sessions(ArticlePreparationTask(), db_engine)
+    await task._prepare_single_article_async(scenario["ai_comment"].id)
+
+    await db_session.refresh(scenario["ai_comment"])
+    assert scenario["ai_comment"].status == "prepared"
+
+
+@pytest.mark.parametrize(
+    ("operation", "error"),
+    [
+        ("connect", PlatformAuthError("wrong password")),
+        ("fetch_article", PlatformRejected("article deleted")),
+    ],
+    ids=["wrong-credentials", "rejected"],
+)
+async def test_final_platform_errors_mark_the_article_failed_without_retry(
+    db_session, db_engine, fake_platform, operation, error
+):
+    scenario = await build_scenario("article_discovered_not_prepared", db_session)
+    await db_session.commit()
+    fake_platform.fail(operation, error)
+
+    task = _bind_task_sessions(ArticlePreparationTask(), db_engine)
+    await _run_prepare_task(task, scenario["ai_comment"].id)
+
+    await db_session.refresh(scenario["ai_comment"])
+    assert (scenario["ai_comment"].status, scenario["ai_comment"].error_message) == ("failed", str(error))
+
+
+async def test_inactive_platform_account_marks_the_article_failed_without_retry(db_session, db_engine, fake_platform):
+    scenario = await build_scenario(
+        "article_discovered_not_prepared", db_session, overrides={"login": {"is_active": False}}
+    )
+    await db_session.commit()
+
+    task = _bind_task_sessions(ArticlePreparationTask(), db_engine)
+    await _run_prepare_task(task, scenario["ai_comment"].id)
+
+    await db_session.refresh(scenario["ai_comment"])
+    assert scenario["ai_comment"].status == "failed"
 
 
 async def test_prepare_single_article_skips_rows_that_already_advanced(db_session, db_engine):

@@ -32,6 +32,7 @@ from src.platforms import (
     connect,
 )
 from src.platforms.accounts import load_platform_account
+from src.utils.ids import is_number
 from src.services.student_backup_service import (
     StudentBackupService,
     StudentBackupDisabledError,
@@ -299,7 +300,7 @@ def _snapshot(student) -> StudentSnapshot:
 
 def _article_version_id(ref: ArticleRef) -> int:
     """The one place where the platform's string ID becomes the integer column of ArticleVersion."""
-    if not (ref.id.isascii() and ref.id.isdigit()):
+    if not is_number(ref.id):
         raise StudentBackupValidationError(f"Article ID {ref.id!r} does not fit the integer column of ArticleVersion")
     return int(ref.id)
 

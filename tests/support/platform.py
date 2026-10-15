@@ -122,6 +122,7 @@ class FakePlatform:
         self.articles: dict[str, ArticleContent] = {}
         self.targets: list[TargetOption] = []  # what `list_targets` describes
         self.connected_accounts: list[PlatformAccount] = []
+        self.fresh_logins: list[PlatformAccount] = []  # accounts connected without reusing a session
         self.posted_comments: list[FakePostedComment] = []
         self.closed_articles: set[str] = set()
         self.article_students: dict[str, str] = {}
@@ -166,9 +167,11 @@ class FakePlatform:
         return ref
 
     @asynccontextmanager
-    async def connect(self, account: PlatformAccount) -> AsyncIterator[FakeConnection]:
+    async def connect(self, account: PlatformAccount, *, fresh_login: bool = False) -> AsyncIterator[FakeConnection]:
         self._raise_injected("connect")
         self.connected_accounts.append(account)
+        if fresh_login:
+            self.fresh_logins.append(account)
         yield FakeConnection(self, account)
 
     def _raise_injected(self, operation: str) -> None:

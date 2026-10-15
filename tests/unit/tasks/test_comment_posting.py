@@ -68,9 +68,17 @@ async def _run_post_comment_task(task, ai_comment_id, *, retries=0, max_retries=
     return await asyncio.to_thread(_call)
 
 
-async def _run_batch_task(task, process_id):
+async def _run_batch_task(task, process_id, *, retries=0):
     batch_task_body = type(comment_posting.post_comments_for_articles._get_current_object()).run  # without autoretry
-    return await asyncio.to_thread(batch_task_body, task, str(process_id))
+
+    def _call():
+        _attach_retry_context(task, retries=retries)
+        try:
+            return batch_task_body(task, str(process_id))
+        finally:
+            task.pop_request()
+
+    return await asyncio.to_thread(_call)
 
 
 async def _generated_comment_on_platform(db_session, fake_platform, **ai_comment):
@@ -288,7 +296,7 @@ class _GatedPlatform(FakePlatform):
         self.release = asyncio.Event()
 
     @asynccontextmanager
-    async def connect(self, account):
+    async def connect(self, account, *, fresh_login=False):
         yield _GatedConnection(self, account)
 
 
@@ -429,6 +437,21 @@ async def test_batch_posting_keeps_comments_generated_when_platform_is_unavailab
     await db_session.refresh(first)
     await db_session.refresh(second)
     assert (first.status, second.status) == ("generated", "generated")
+
+
+async def test_batch_posting_marks_comments_failed_once_retries_are_exhausted(db_session, db_engine, fake_platform):
+    process, first, second = await _process_with_two_generated_comments(db_session, fake_platform)
+    fake_platform.fail("post_comment", PlatformUnavailable("timeout"))
+
+    task = _bind_task_sessions(CommentPostingTask(), db_engine)
+    await _run_batch_task(task, process.id, retries=3)
+
+    await db_session.refresh(first)
+    await db_session.refresh(second)
+    assert [(c.status, c.error_message) for c in (first, second)] == [
+        ("failed", "Max retries exhausted: timeout"),
+        ("failed", "Max retries exhausted: timeout"),
+    ]
 
 
 async def test_batch_posting_marks_comments_failed_when_credentials_are_wrong(db_session, db_engine, fake_platform):
