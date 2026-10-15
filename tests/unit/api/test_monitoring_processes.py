@@ -12,7 +12,7 @@ from src.api.monitoring_processes import (
     update_monitoring_process,
 )
 from src.api.schemas import MonitoringProcessCreate, MonitoringProcessUpdate
-from src.platforms import PlatformUnavailable
+from src.platforms import PlatformUnavailable, TargetDimension
 from tests.fixtures.factories.mymoment import create_mymoment_login
 from tests.fixtures.factories.prompts import create_user_prompt_template
 from tests.fixtures.factories.providers import create_llm_provider
@@ -117,10 +117,11 @@ async def test_list_and_detail_show_the_target_with_the_labels_of_the_descriptio
 
 
 async def test_target_is_shown_while_the_platform_is_unreachable(db_session, fake_platform):
+    fake_platform.target_description = (TargetDimension(key="classroom", label="Klasse", required=True),)
     fake_platform.fail("connect", PlatformUnavailable("myMoment ist nicht erreichbar"))
     user = await create_user(db_session)
     created = await _create(db_session, user, target={"classroom": "4711"})
 
     detail = await get_monitoring_process(process_id=created.id, current_user=user, session=db_session)
 
-    assert _shown(detail) == [("Classroom", "4711")]
+    assert _shown(detail) == [("Klasse", "4711")]

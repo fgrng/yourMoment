@@ -39,9 +39,3 @@ def test_unknown_key_is_shown_with_its_raw_key(platform):
         TargetEntry(key="classroom", label="Klasse", value="4711"),
         TargetEntry(key="site", label="site", value="blog"),
     )
-
-
-def test_labelling_needs_no_connection(platform):
-    label_target(platform, {"classroom": "4711"})
-
-    assert platform.connected_accounts == []
