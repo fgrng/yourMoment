@@ -17,7 +17,7 @@ from urllib.parse import urlencode, urljoin
 import aiohttp
 from bs4 import BeautifulSoup
 
-from src.platforms.errors import PlatformAuthError, PlatformRejected, PlatformUnavailable
+from src.platforms.errors import InvalidTarget, PlatformAuthError, PlatformRejected, PlatformUnavailable
 from src.platforms.mymoment import parsers
 from src.platforms.mymoment.cookies import CookieStore, restore_cookie_jar, serialize_cookie_jar
 from src.platforms.types import (
@@ -27,6 +27,7 @@ from src.platforms.types import (
     PlatformAccount,
     PostedComment,
     StudentRef,
+    TargetDimension,
     TargetOption,
     TargetValue,
 )
@@ -46,7 +47,12 @@ _HEADERS = {
 }
 _REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 _MAX_REDIRECTS = 5
-_TARGET_KEYS = {'category', 'arrangement', 'classroom'}
+_TARGET_DESCRIPTION = (
+    TargetDimension(key='category', label='Kategorie'),
+    TargetDimension(key='arrangement', label='Schreibaufgabe'),
+    TargetDimension(key='classroom', label='Klasse', required=True),
+)
+_TARGET_KEYS = {dimension.key for dimension in _TARGET_DESCRIPTION}
 _DEFAULT_CLASSROOM = 'alle'
 
 
@@ -75,6 +81,14 @@ class MyMomentAdapter:
         self._rate_limit_delay = rate_limit_delay
         self._timeout = timeout
         self._http_session_factory = http_session_factory
+
+    def describe_target(self) -> tuple[TargetDimension, ...]:
+        return _TARGET_DESCRIPTION
+
+    def check_target(self, target: Mapping[str, str]) -> None:
+        """A process must name its classroom: "alle" would watch every classroom the account sees."""
+        if target.get('classroom') == _DEFAULT_CLASSROOM:
+            raise InvalidTarget("Klasse „alle“ ist nicht erlaubt; bitte eine einzelne Klasse wählen")
 
     @asynccontextmanager
     async def connect(

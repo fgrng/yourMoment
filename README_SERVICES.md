@@ -192,6 +192,8 @@ Each call opens its own short-lived DB session, so no DB connection is held whil
 
 Login, cookie reuse, rate limiting and HTML parsing live in the myMoment adapter. Tasks and routers talk to platforms only through `src.platforms.connect` (ADR-0001).
 
+Each adapter describes its target offline (`describe_target()`: dimensions with key, label, required flag; myMoment: `category`, `arrangement`, `classroom` required). `src.platforms.validate_target(adapter, target)` is the one check of a target: known keys, required keys present, non-empty string values, then the adapter's own rules (`check_target`; myMoment rejects classroom "alle"). It raises `InvalidTarget` and needs no connection; `adapter_for_platform(MYMOMENT)` returns the adapter for it (ADR-0002).
+
 ---
 
 ### LLM and Comment Services
@@ -358,6 +360,8 @@ PlatformError (src/platforms, independent hierarchy)
 ├── PlatformAuthError
 ├── PlatformUnavailable
 └── PlatformRejected
+
+InvalidTarget (src/platforms, ValueError): a target does not match its platform's target description
 ```
 
 ### Exception Handling Pattern

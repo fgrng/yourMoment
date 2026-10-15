@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from src.platforms import (
     ArticleRef,
+    InvalidTarget,
     PlatformAccount,
     PlatformAuthError,
     PlatformRejected,
@@ -19,6 +20,7 @@ from src.platforms import (
     StudentRef,
     TargetOption,
     TargetValue,
+    validate_target,
 )
 from src.platforms.mymoment.adapter import MyMomentAdapter
 from tests.fixtures.stubs import AiohttpStubResponse, AiohttpStubSession
@@ -298,3 +300,39 @@ async def test_listed_student_article_urls_are_absolute(harness):
 
     parsed = [urlparse(a.ref.url) for a in articles]
     assert parsed and all(p.scheme in {"http", "https"} and p.netloc for p in parsed)
+
+
+def test_target_description_has_category_arrangement_and_required_classroom(harness):
+    description = harness.adapter.describe_target()
+
+    assert [(d.key, d.required) for d in description] == [
+        ("category", False),
+        ("arrangement", False),
+        ("classroom", True),
+    ]
+
+
+def test_valid_target_without_optional_dimensions_is_accepted(harness):
+    assert validate_target(harness.adapter, {"classroom": "82"}) == {"classroom": "82"}
+
+
+def test_valid_target_with_every_dimension_is_accepted(harness):
+    target = {"category": "7", "arrangement": "4", "classroom": "82"}
+
+    assert validate_target(harness.adapter, target) == target
+
+
+@pytest.mark.parametrize(
+    ("target", "message"),
+    [
+        ({"classroom": "82", "colour": "blue"}, "colour"),
+        ({"category": "7"}, "classroom"),
+        ({"classroom": ""}, "classroom"),
+        ({"classroom": "   "}, "classroom"),
+        ({"classroom": 82}, "classroom"),
+    ],
+    ids=["unknown-key", "missing-required-key", "empty-value", "blank-value", "non-string-value"],
+)
+def test_invalid_target_is_rejected_with_a_message_naming_the_key(harness, target, message):
+    with pytest.raises(InvalidTarget, match=message):
+        validate_target(harness.adapter, target)

@@ -6,6 +6,8 @@ from typing import AsyncContextManager, Optional
 
 from src.platforms.types import PlatformAccount, PlatformAdapter, PlatformConnection
 
+MYMOMENT = "mymoment"
+
 _override: Optional[PlatformAdapter] = None
 
 
@@ -20,8 +22,15 @@ def adapter_for(account: PlatformAccount) -> PlatformAdapter:
 
     Until the schema knows platform types, every account is a myMoment account.
     """
+    return adapter_for_platform(MYMOMENT)
+
+
+def adapter_for_platform(platform: str) -> PlatformAdapter:
+    """Return the adapter for a platform type, e.g. to read its target description offline."""
     if _override is not None:
         return _override
+    if platform != MYMOMENT:
+        raise ValueError(f"Unknown platform: {platform!r}")
     return _default_mymoment_adapter()
 
 

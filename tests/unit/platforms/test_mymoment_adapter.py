@@ -9,12 +9,16 @@ from datetime import datetime
 import pytest
 
 from src.platforms import (
+    MYMOMENT,
     ArticleRef,
+    InvalidTarget,
     PlatformAccount,
     PlatformAuthError,
     PlatformRejected,
     PlatformUnavailable,
     StudentRef,
+    adapter_for_platform,
+    validate_target,
 )
 from src.platforms.mymoment.adapter import MyMomentAdapter
 from tests.fixtures.stubs import AiohttpStubResponse, AiohttpStubSession
@@ -701,3 +705,18 @@ def _dashboard_row(category_cell: str = "<li>Unterhalten</li>", edited: str = "2
       <td>{edited}</td>
     </tr></tbody></table></div>
     """
+
+
+def test_target_labels_are_german(adapter):
+    assert [d.label for d in adapter.describe_target()] == ["Kategorie", "Schreibaufgabe", "Klasse"]
+
+
+def test_target_with_classroom_alle_is_rejected(adapter):
+    with pytest.raises(InvalidTarget, match="alle"):
+        validate_target(adapter, {"classroom": "alle"})
+
+
+def test_target_of_the_mymoment_platform_is_described_without_network():
+    adapter = adapter_for_platform(MYMOMENT)
+
+    assert [d.key for d in adapter.describe_target()] == ["category", "arrangement", "classroom"]
