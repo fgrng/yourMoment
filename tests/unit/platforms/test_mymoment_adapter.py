@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from src.platforms import ArticleRef, PlatformAccount, PlatformRejected, PlatformUnavailable
+from src.platforms import ArticleRef, PlatformAccount, PlatformAuthError, PlatformRejected, PlatformUnavailable
 from src.platforms.mymoment.adapter import MyMomentAdapter
 from tests.fixtures.stubs import AiohttpStubResponse, AiohttpStubSession
 from tests.support.mymoment_http import (
@@ -97,6 +97,18 @@ async def test_invalid_stored_cookie_leads_to_new_login(adapter, http, cookie_st
         pass
 
     assert _stored_cookie_value(cookie_store, account) == "fresh-session"
+
+
+async def test_rejected_credentials_discard_the_stored_cookie(adapter, http, cookie_store, account):
+    cookie_store.saved[account.id] = _stored_session("expired-session")
+    http.queue_response("GET", HOME_URL, logged_out_page())
+    queue_login(http, succeed=False)
+
+    with pytest.raises(PlatformAuthError):
+        async with adapter.connect(account):
+            pass
+
+    assert account.id not in cookie_store.saved
 
 
 async def test_login_sends_credentials_with_csrf_token(adapter, http, account):

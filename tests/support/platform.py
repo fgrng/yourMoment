@@ -32,6 +32,9 @@ class InMemoryCookieStore:
     async def save(self, account_id: uuid.UUID, data: dict[str, Any]) -> None:
         self.saved[account_id] = data
 
+    async def discard(self, account_id: uuid.UUID) -> None:
+        self.saved.pop(account_id, None)
+
 
 _TARGET_KEYS = {"category", "arrangement", "classroom"}
 

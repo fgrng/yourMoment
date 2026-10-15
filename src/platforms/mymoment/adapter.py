@@ -208,7 +208,11 @@ class MyMomentConnection:
         if await self._restore_session(cookie_store):
             logger.info(f"Restored myMoment session for account {self._account.id}")
         else:
-            await self._login()
+            try:
+                await self._login()
+            except PlatformAuthError:
+                await self._discard_session(cookie_store)
+                raise
             logger.info(f"Logged in to myMoment for account {self._account.id}")
 
         # Saving renews the stored session; failures must not break the connection.
@@ -216,6 +220,13 @@ class MyMomentConnection:
             await cookie_store.save(self._account.id, serialize_cookie_jar(self._jar, self._csrf_token))
         except Exception as e:
             logger.warning(f"Failed to persist myMoment cookies for account {self._account.id}: {e}")
+
+    async def _discard_session(self, cookie_store: CookieStore) -> None:
+        # Cookies of rejected credentials must not be reused; best-effort like saving.
+        try:
+            await cookie_store.discard(self._account.id)
+        except Exception as e:
+            logger.warning(f"Failed to discard myMoment cookies for account {self._account.id}: {e}")
 
     async def _restore_session(self, cookie_store: CookieStore) -> bool:
         # Like saving, loading is best-effort: without stored cookies we log in.

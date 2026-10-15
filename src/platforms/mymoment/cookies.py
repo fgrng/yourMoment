@@ -27,6 +27,8 @@ class CookieStore(Protocol):
 
     async def save(self, account_id: uuid.UUID, data: Dict[str, Any]) -> None: ...
 
+    async def discard(self, account_id: uuid.UUID) -> None: ...
+
 
 def serialize_cookie_jar(jar: CookieJar, csrf_token: Optional[str] = None) -> Dict[str, Any]:
     """Serialize a cookie jar into a persistable dictionary."""

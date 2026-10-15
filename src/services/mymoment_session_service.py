@@ -378,3 +378,9 @@ class MyMomentSessionCookieStore:
             record.update_session_data(data)
             record.renew_session()
             await db_session.commit()
+
+    async def discard(self, account_id: uuid.UUID) -> None:
+        """Deactivate the account's stored sessions so their cookies are not reused."""
+        db_session = await self._new_db_session()
+        async with db_session:
+            await MyMomentSessionService(db_session)._deactivate_login_sessions(account_id)

@@ -15,6 +15,8 @@ from src.api.schemas import (
 )
 from src.config.database import get_session
 from src.models.user import User
+from src.platforms import PlatformAuthError, PlatformUnavailable, connect
+from src.platforms.accounts import load_platform_account
 from src.services.mymoment_credentials_service import (
     MyMomentCredentialsService,
     MyMomentCredentialsServiceError,
@@ -379,9 +381,10 @@ async def validate_credentials(
     "/{credentials_id}/test",
     responses={
         200: {"description": "Authentication test successful"},
-        400: {"model": ErrorResponse, "description": "Bad request - authentication failed"},
-        401: {"model": ErrorResponse, "description": "Unauthorized"},
-        404: {"model": ErrorResponse, "description": "Not found"}
+        400: {"model": ErrorResponse, "description": "Bad request - credentials could not be decrypted"},
+        401: {"model": ErrorResponse, "description": "Unauthorized or credentials rejected by myMoment"},
+        404: {"model": ErrorResponse, "description": "Not found"},
+        503: {"model": ErrorResponse, "description": "myMoment not reachable"}
     }
 )
 async def test_credentials(
@@ -391,20 +394,11 @@ async def test_credentials(
     db: AsyncSession = Depends(get_session)
 ):
     """
-    Test myMoment credentials by attempting to authenticate with the platform.
+    Test myMoment credentials by connecting to the platform.
 
-    This endpoint attempts to create a real session on the myMoment platform
-    using the stored credentials. It verifies that:
-    - Credentials can be decrypted
-    - Username and password are accepted by myMoment
-    - A valid session can be established
-
-    The test session is automatically cleaned up after verification.
+    Wrong credentials and an unreachable platform get distinct answers, so the
+    user knows whether to fix the password or try again later.
     """
-    from src.services.scraper_service import ScraperService, AuthenticationError, ScrapingError, SessionError
-    from src.services.mymoment_session_service import MyMomentSessionService
-
-    # Get the credentials
     credentials = await service.get_credentials_by_id(credentials_id, current_user.id)
 
     if not credentials:
@@ -419,108 +413,30 @@ async def test_credentials(
             normalized_error or "Credentials could not be validated."
         )
 
-    # Initialize services for scraping
-    session_service = MyMomentSessionService(db)
-    scraper_service = ScraperService(db)
+    account = await load_platform_account(db, credentials_id, current_user.id)
+    if account is None:
+        _raise_not_found()
 
     try:
-        # Attempt to initialize and authenticate a session
-        context = await scraper_service._initialize_single_session(credentials_id, current_user.id)
-
-        if not context.is_authenticated:
-            logger.warning(
-                "Authentication failed during credential test for credentials %s",
-                credentials_id
-            )
-            raise http_error(
-                status.HTTP_400_BAD_REQUEST,
-                "mymoment_credentials_authentication_failed",
-                "Failed to authenticate with the myMoment platform."
-            )
-
-        # Clean up the test session
-        await scraper_service.cleanup_session(credentials_id)
-
-        # Also deactivate the database session record
-        if context.session_id:
-            await session_service.deactivate_session(context.session_id)
-
-        return {
-            "message": "Authentication successful",
-            "username": credentials.username,
-            "platform": "myMoment"
-        }
-
-    except AuthenticationError as e:
-        # Clean up on authentication failure
-        await scraper_service.cleanup_session(credentials_id)
-        logger.warning(
-            "Authentication failed during credential test for credentials %s: %s",
-            credentials_id,
-            e
-        )
+        async with connect(account):
+            pass
+    except PlatformAuthError as e:
+        logger.warning("Authentication failed during credential test for credentials %s: %s", credentials_id, e)
         raise http_error(
             status.HTTP_401_UNAUTHORIZED,
             "mymoment_credentials_authentication_failed",
             "Authentication failed. Please verify your username and password are correct."
         )
-
-    except SessionError as e:
-        # Clean up on session error
-        await scraper_service.cleanup_session(credentials_id)
-        error_message = str(e)
-
-        # Check if it's an authentication failure wrapped in SessionError
-        if "Authentication failed" in error_message or "Login failed" in error_message:
-            logger.warning(
-                "Authentication failed (via SessionError) during credential test for credentials %s: %s",
-                credentials_id,
-                e
-            )
-            raise http_error(
-                status.HTTP_401_UNAUTHORIZED,
-                "mymoment_credentials_authentication_failed",
-                "Authentication failed. Please verify your username and password are correct."
-            )
-
-        # Generic session error
-        logger.error(
-            "Session initialization error during credential test for credentials %s: %s",
-            credentials_id,
-            e,
-            exc_info=True
-        )
+    except PlatformUnavailable as e:
+        logger.error("myMoment unavailable during credential test for credentials %s: %s", credentials_id, e)
         raise http_error(
-            status.HTTP_400_BAD_REQUEST,
-            "mymoment_credentials_session_error",
-            f"Unable to initialize a session with the myMoment platform: {error_message}"
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "mymoment_credentials_platform_unavailable",
+            "The myMoment platform is not reachable. Please try again later."
         )
 
-    except ScrapingError as e:
-        # Clean up on scraping error (catch-all for other ScrapingError subclasses)
-        await scraper_service.cleanup_session(credentials_id)
-        logger.error(
-            "Scraping error during credential test for credentials %s: %s",
-            credentials_id,
-            e,
-            exc_info=True
-        )
-        raise http_error(
-            status.HTTP_400_BAD_REQUEST,
-            "mymoment_credentials_scraping_error",
-            "Unable to complete scraping validation for the provided credentials."
-        )
-
-    except Exception:
-        # Clean up on unexpected error
-        await scraper_service.cleanup_session(credentials_id)
-        logger.error(
-            "Unexpected error during credential test for credentials %s",
-            credentials_id,
-            exc_info=True
-        )
-        raise http_error(
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-            "mymoment_credentials_test_error",
-            "An unexpected error occurred while testing credentials."
-        )
+    return {
+        "message": "Authentication successful",
+        "username": account.username,
+        "platform": "myMoment"
+    }
