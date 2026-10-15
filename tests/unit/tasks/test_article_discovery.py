@@ -103,8 +103,13 @@ async def test_discovery_stores_no_category_when_the_platform_reports_a_non_nume
     assert comment.article_category is None
 
 
-async def test_discovery_keeps_only_titles_with_the_search_term(db_session, db_engine, fake_platform):
-    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"search_filter": "rotpanda"}})
+@pytest.mark.parametrize(
+    ("search_filter", "kept_ids"), [("rotpanda", ["1"]), (None, ["1", "2"])], ids=["search-term", "no-search-term"]
+)
+async def test_discovery_keeps_only_titles_with_the_search_term(
+    db_session, db_engine, fake_platform, search_filter, kept_ids
+):
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"search_filter": search_filter}})
     await db_session.commit()
     _add_target_article(fake_platform, "1", title="Der Rotpanda")
     _add_target_article(fake_platform, "2", title="Der Eisbär")
@@ -112,20 +117,18 @@ async def test_discovery_keeps_only_titles_with_the_search_term(db_session, db_e
     task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
     await task._discover_articles_async(scenario["process"].id)
 
-    assert [c.mymoment_article_id for c in await _comments_of(db_session, scenario["process"].id)] == ["1"]
-    assert fake_platform.listed_targets == [scenario["process"].target]
+    assert sorted(c.mymoment_article_id for c in await _comments_of(db_session, scenario["process"].id)) == kept_ids
 
 
-async def test_discovery_keeps_all_titles_without_a_search_term(db_session, db_engine, fake_platform):
-    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"search_filter": None}})
+async def test_discovery_does_not_pass_the_search_term_to_the_platform(db_session, db_engine, fake_platform):
+    process = {"target": {"classroom": "home"}, "search_filter": "rotpanda"}
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": process})
     await db_session.commit()
-    _add_target_article(fake_platform, "1", title="Der Rotpanda")
-    _add_target_article(fake_platform, "2", title="Der Eisbär")
 
     task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
     await task._discover_articles_async(scenario["process"].id)
 
-    assert sorted(c.mymoment_article_id for c in await _comments_of(db_session, scenario["process"].id)) == ["1", "2"]
+    assert fake_platform.listed_targets == [{"classroom": "home"}]
 
 
 async def test_discovery_creates_at_most_20_rows_per_login(db_session, db_engine, fake_platform):

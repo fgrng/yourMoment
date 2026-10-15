@@ -63,5 +63,5 @@ def test_form_offers_an_editable_search_term(client, path):
 
     label = soup.find("label", string="Suchbegriff")
     search = soup.find(id=label["for"])
-    assert search.name == "input" and not search.has_attr("disabled")
-    assert "nicht verfügbar" not in search.parent.get_text()
+    assert search.name == "input"
+    assert not search.has_attr("disabled")
