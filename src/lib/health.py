@@ -32,7 +32,7 @@ async def check_database_health() -> Dict[str, Any]:
         return {
             "status": "unhealthy",
             "latency_ms": latency_ms,
-            "error": "Unexpected database response"
+            "error": "Unexpected database response",
         }
     except Exception as exc:
         return {"status": "unhealthy", "error": str(exc)}
@@ -43,9 +43,7 @@ async def _get_redis_client() -> redis.Redis:
     if _redis_client is None:
         settings = get_settings()
         _redis_client = redis.from_url(
-            settings.celery.CELERY_BROKER_URL,
-            encoding="utf-8",
-            decode_responses=True
+            settings.celery.CELERY_BROKER_URL, encoding="utf-8", decode_responses=True
         )
     return _redis_client
 
@@ -61,7 +59,7 @@ async def check_redis_health() -> Dict[str, Any]:
         return {
             "status": "unhealthy",
             "latency_ms": latency_ms,
-            "error": "Redis ping returned falsy response"
+            "error": "Redis ping returned falsy response",
         }
     except Exception as exc:
         return {"status": "unhealthy", "error": str(exc)}
@@ -76,12 +74,12 @@ async def check_celery_health() -> Dict[str, Any]:
             return {
                 "status": "healthy",
                 "latency_ms": latency_ms,
-                "workers": len(responses)
+                "workers": len(responses),
             }
         return {
             "status": "unhealthy",
             "latency_ms": latency_ms,
-            "error": "No Celery workers responded"
+            "error": "No Celery workers responded",
         }
     except CeleryTimeoutError:
         return {"status": "unhealthy", "error": "Celery ping timed out"}
