@@ -37,7 +37,7 @@ tests/
 ## Common Commands
 
 Dependencies live only in `pyproject.toml` (runtime in `[project] dependencies`, tooling in the `dev` dependency group) and are locked in `uv.lock`. Run every command through `uv run`; it uses the project's `.venv` and keeps it in sync with the lockfile.
-The pre-commit hook (`.githooks/pre-commit`) runs `uv run ruff check` on every commit.
+The pre-commit hook (`.githooks/pre-commit`) runs `uv run ruff check` and `uv run ruff format --check` on every commit; fix formatting with `uv run ruff format`.
 
 ```bash
 # Install dependencies (clean env); includes the dev group with pytest and ruff

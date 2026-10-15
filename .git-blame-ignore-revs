@@ -1,0 +1,5 @@
+# Commits, die git blame überspringt. GitHub liest die Datei von selbst;
+# lokal: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Repo mit ruff format umformatieren (#45)
+524afe2b10ae2aefa7c49e8ec3d733acc33e5fbe
