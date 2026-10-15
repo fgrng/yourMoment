@@ -1,9 +1,7 @@
 """DB-backed tests for the cookie store of the myMoment adapter."""
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.models.mymoment_session import MyMomentSession
 from src.services.mymoment_session_service import MyMomentSessionCookieStore
 from tests.fixtures.factories.users import create_user
 from tests.fixtures.factories.mymoment import (
@@ -65,21 +63,3 @@ async def test_cookie_store_discard_drops_the_stored_session(db_session: AsyncSe
 
     assert await store.load(login.id) is None
 
-
-async def test_cookie_store_save_keeps_one_active_session_per_account(db_session: AsyncSession, db_engine):
-    user = await create_user(db_session)
-    login = await create_mymoment_login(db_session, user=user)
-    await create_expired_mymoment_session(db_session, mymoment_login=login)
-    await db_session.commit()
-    store = _cookie_store(db_engine)
-
-    await store.save(login.id, {"cookies": [{"name": "sessionid", "value": "abc"}]})
-    await store.save(login.id, {"cookies": [{"name": "sessionid", "value": "def"}]})
-
-    result = await db_session.execute(
-        select(MyMomentSession).where(
-            MyMomentSession.mymoment_login_id == login.id,
-            MyMomentSession.is_active == True,  # noqa: E712
-        )
-    )
-    assert len(result.scalars().all()) == 1

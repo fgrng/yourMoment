@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 from typing import Awaitable, Callable, Optional, Dict, Any
 
-from sqlalchemy import select, and_
+from sqlalchemy import Select, select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.mymoment_session import MyMomentSession
@@ -22,26 +22,28 @@ async def _new_db_session() -> AsyncSession:
     return sessionmaker()
 
 
-async def _active_session(db_session: AsyncSession, account_id: uuid.UUID) -> Optional[MyMomentSession]:
-    stmt = select(MyMomentSession).where(
-        and_(
-            MyMomentSession.mymoment_login_id == account_id,
-            MyMomentSession.is_active == True,
-            MyMomentSession.expires_at > datetime.utcnow()
-        )
-    ).order_by(MyMomentSession.created_at.desc()).limit(1)
-    result = await db_session.execute(stmt)
-    return result.scalar_one_or_none()
-
-
-async def _deactivate_sessions(db_session: AsyncSession, account_id: uuid.UUID) -> None:
-    stmt = select(MyMomentSession).where(
+def _active_sessions_of(account_id: uuid.UUID) -> Select:
+    return select(MyMomentSession).where(
         and_(
             MyMomentSession.mymoment_login_id == account_id,
             MyMomentSession.is_active == True
         )
     )
+
+
+async def _usable_session(db_session: AsyncSession, account_id: uuid.UUID) -> Optional[MyMomentSession]:
+    stmt = _active_sessions_of(account_id).where(
+        MyMomentSession.expires_at > datetime.utcnow()
+    ).order_by(MyMomentSession.created_at.desc()).limit(1)
     result = await db_session.execute(stmt)
+    record = result.scalar_one_or_none()
+    if record is None or not record.is_usable():
+        return None
+    return record
+
+
+async def _deactivate_sessions(db_session: AsyncSession, account_id: uuid.UUID) -> None:
+    result = await db_session.execute(_active_sessions_of(account_id))
     for record in result.scalars().all():
         record.deactivate()
 
@@ -61,8 +63,8 @@ class MyMomentSessionCookieStore:
         """Return the stored cookie data of the account's usable session, or None."""
         db_session = await self._new_db_session()
         async with db_session:
-            record = await _active_session(db_session, account_id)
-            if record is None or not record.is_usable():
+            record = await _usable_session(db_session, account_id)
+            if record is None:
                 return None
             return record.get_session_data(as_dict=True)
 
@@ -70,8 +72,8 @@ class MyMomentSessionCookieStore:
         """Store cookie data and renew the account's session (replace it if unusable)."""
         db_session = await self._new_db_session()
         async with db_session:
-            record = await _active_session(db_session, account_id)
-            if record is None or not record.is_usable():
+            record = await _usable_session(db_session, account_id)
+            if record is None:
                 await _deactivate_sessions(db_session, account_id)
                 db_session.add(MyMomentSession.create_new_session(
                     mymoment_login_id=account_id,

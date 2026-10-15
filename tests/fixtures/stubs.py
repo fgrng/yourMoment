@@ -101,7 +101,7 @@ class AiohttpStubResponse:
 
 
 class AiohttpStubSession:
-    """Queue-driven `aiohttp.ClientSession` stub for scraper tests.
+    """Queue-driven `aiohttp.ClientSession` stub for adapter tests.
 
     A queued exception is raised instead of answering. With a cookie jar
     (see `as_factory`), `Set-Cookie` headers of responses land in the jar.
