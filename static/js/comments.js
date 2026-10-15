@@ -10,7 +10,8 @@ import {
     safeParseJson,
     extractErrorMessage,
     formatDate,
-    formatProviderLabel
+    formatProviderLabel,
+    formatTarget
 } from './utils.js';
 
 let allComments = [];
@@ -209,6 +210,10 @@ function renderProcessDetails() {
                     <div class="col-md-4">
                         <div class="text-muted small">Letzte Aktivitaet</div>
                         <div class="fw-semibold">${formatLastActivity(monitoringProcess)}</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="text-muted small">Ziel</div>
+                        <div class="fw-semibold">${formatTarget(monitoringProcess.target_display) || 'Kein Ziel'}</div>
                     </div>
                 </div>
 

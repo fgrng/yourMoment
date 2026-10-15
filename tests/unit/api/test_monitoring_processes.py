@@ -5,8 +5,14 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 
-from src.api.monitoring_processes import create_monitoring_process, update_monitoring_process
+from src.api.monitoring_processes import (
+    create_monitoring_process,
+    get_monitoring_process,
+    list_monitoring_processes,
+    update_monitoring_process,
+)
 from src.api.schemas import MonitoringProcessCreate, MonitoringProcessUpdate
+from src.platforms import PlatformUnavailable
 from tests.fixtures.factories.mymoment import create_mymoment_login
 from tests.fixtures.factories.prompts import create_user_prompt_template
 from tests.fixtures.factories.providers import create_llm_provider
@@ -92,3 +98,29 @@ async def test_update_rejects_an_invalid_target_with_422(db_session):
         )
 
     assert error.value.status_code == 422
+
+
+def _shown(response):
+    return [(entry.label, entry.value) for entry in response.target_display]
+
+
+async def test_list_and_detail_show_the_target_with_the_labels_of_the_description(db_session):
+    user = await create_user(db_session)
+    created = await _create(db_session, user, target={"classroom": "4711", "arrangement": "10"})
+
+    listed = await list_monitoring_processes(
+        limit=50, offset=0, is_running=None, current_user=user, session=db_session
+    )
+    detail = await get_monitoring_process(process_id=created.id, current_user=user, session=db_session)
+
+    assert _shown(listed[0]) == _shown(detail) == [("Schreibaufgabe", "10"), ("Klasse", "4711")]
+
+
+async def test_target_is_shown_while_the_platform_is_unreachable(db_session, fake_platform):
+    fake_platform.fail("connect", PlatformUnavailable("myMoment ist nicht erreichbar"))
+    user = await create_user(db_session)
+    created = await _create(db_session, user, target={"classroom": "4711"})
+
+    detail = await get_monitoring_process(process_id=created.id, current_user=user, session=db_session)
+
+    assert _shown(detail) == [("Classroom", "4711")]

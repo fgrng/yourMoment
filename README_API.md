@@ -260,7 +260,7 @@ Die Perspektive von {article_author} ist besonders aufschlussreich.
 }
 ```
 
-`target` is the process's **Ziel** (ADR-0002): keys and rules come from the platform's target description and are checked without a platform connection. For myMoment, `classroom` is required and may not be `alle`; `category` and `arrangement` are optional. An invalid target is answered with 422 (`invalid_target`). `PATCH /{id}` replaces `target` as a whole; `search` filters article titles, `null` or `""` clears it.
+`target` is the process's **Ziel** (ADR-0002): keys and rules come from the platform's target description and are checked without a platform connection. For myMoment, `classroom` is required and may not be `alle`; `category` and `arrangement` are optional. An invalid target is answered with 422 (`invalid_target`). `PATCH /{id}` replaces `target` as a whole; `search` filters article titles, `null` or `""` clears it. Every response also carries `target_display`, the set dimensions as `key`, `label` (from the target description, offline) and the raw `value`, in description order; unset optional dimensions are left out, a key the description does not know is labelled with the raw key. List and detail view show it.
 
 **Process States**:
 - `CREATED` – Configured but not started

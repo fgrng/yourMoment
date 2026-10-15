@@ -4,7 +4,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional, List
 
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, computed_field, field_validator
+from src.platforms import MYMOMENT, TargetEntry, adapter_for_platform, label_target
 from src.validators.password import validate_password
 
 
@@ -182,6 +183,13 @@ class MonitoringProcessResponse(BaseModel):
     hide_comments: bool = Field(..., description="If true, generated comments will be hidden on myMoment")
     created_at: Optional[datetime] = Field(None, description="Creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+
+    @computed_field(description="Ziel for display: dimension labels of the target description and raw values")
+    @property
+    def target_display(self) -> list[TargetEntry]:
+        # Offline, so list and detail view load while the platform is unreachable.
+        # Until accounts know their platform type, every process watches myMoment.
+        return list(label_target(adapter_for_platform(MYMOMENT), self.target))
 
     @field_validator(
         'started_at',
