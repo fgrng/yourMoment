@@ -20,6 +20,7 @@ from src.platforms import (
     StudentRef,
     TargetDimension,
     TargetOption,
+    TargetValue,
     use_adapter,
 )
 
@@ -68,7 +69,14 @@ class FakeConnection:
 
     async def list_targets(self) -> list[TargetOption]:
         self._platform._raise_injected("list_targets")
-        return list(self._platform.targets)
+        return [
+            TargetOption(
+                key=dimension.key,
+                label=dimension.label,
+                values=list(self._platform.target_values.get(dimension.key, [])),
+            )
+            for dimension in self._platform.target_description
+        ]
 
     async def list_articles(self, target: Optional[Mapping[str, str]] = None) -> list[ArticleSummary]:
         self._platform._raise_injected("list_articles")
@@ -129,7 +137,7 @@ class FakePlatform:
         self.articles: dict[str, ArticleContent] = {}
         self.target_description: tuple[TargetDimension, ...] = DEFAULT_TARGET_DESCRIPTION
         self.target_rules: list[Callable[[Mapping[str, str]], None]] = []  # the platform's own target checks
-        self.targets: list[TargetOption] = []  # what `list_targets` describes
+        self.target_values: dict[str, list[TargetValue]] = {}  # what `list_targets` offers per dimension key
         self.listed_targets: list[dict[str, str]] = []  # every target `list_articles` was called with
         self.connected_accounts: list[PlatformAccount] = []
         self.fresh_logins: list[PlatformAccount] = []  # accounts connected without reusing a session

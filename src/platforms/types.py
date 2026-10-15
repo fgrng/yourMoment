@@ -102,7 +102,7 @@ class PlatformConnection(Protocol):
     """An authenticated connection to one platform account."""
 
     async def list_targets(self) -> list[TargetOption]:
-        """Describe the target dimensions this account can choose from, with their values."""
+        """One option per dimension of the target description, in its order, with the values this account sees."""
         ...
 
     async def list_articles(self, target: Optional[Mapping[str, str]] = None) -> list[ArticleSummary]:

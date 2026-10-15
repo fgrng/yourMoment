@@ -31,7 +31,8 @@
       ],
       "covered_parser_methods": [
         "parse_article_list",
-        "parse_classroom_tabs"
+        "parse_classroom_tabs",
+        "parse_arrangement_options"
       ],
       "required_assertions": [
         "at least one article card parsed",

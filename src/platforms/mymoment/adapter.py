@@ -128,13 +128,32 @@ class MyMomentConnection:
         self._csrf_token: Optional[str] = None
 
     async def list_targets(self) -> list[TargetOption]:
-        """The classrooms this account sees, read from the tabs of the article index."""
+        """
+        The values of every target dimension, as this account sees them.
+
+        Categories are fixed; arrangements come from the filter of the article
+        index, classrooms from its tabs. The tab "alle" is no classroom.
+        """
         page = await self._request('GET', f"{self._base_url}/articles/")
         if page.status != 200:
             raise PlatformRejected(f"myMoment answered {page.status} for the article index")
 
-        classrooms = [TargetValue(value=value, label=label) for value, label in parsers.parse_classroom_tabs(page.soup())]
-        return [TargetOption(key='classroom', label='Classroom', values=classrooms)]
+        soup = page.soup()
+        values = {
+            'category': [(str(category_id), name) for category_id, name in parsers.CATEGORY_MAPPING.items()],
+            'arrangement': parsers.parse_arrangement_options(soup),
+            'classroom': [
+                (value, label) for value, label in parsers.parse_classroom_tabs(soup) if value != _ALL_CLASSROOMS
+            ],
+        }
+        return [
+            TargetOption(
+                key=dimension.key,
+                label=dimension.label,
+                values=[TargetValue(value=value, label=label) for value, label in values[dimension.key]],
+            )
+            for dimension in _TARGET_DESCRIPTION
+        ]
 
     async def list_articles(self, target: Optional[Mapping[str, str]] = None) -> list[ArticleSummary]:
         """

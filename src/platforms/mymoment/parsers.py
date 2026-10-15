@@ -68,6 +68,24 @@ def parse_classroom_tabs(soup: BeautifulSoup) -> List[Tuple[str, str]]:
     return tabs
 
 
+def parse_arrangement_options(soup: BeautifulSoup) -> List[Tuple[str, str]]:
+    """
+    Read the arrangements (Schreibaufgaben) of the article index filter as (value, label) pairs.
+
+    The value is the arrangement ID used as `?aufgabe=`; the empty "Alle Aufgaben" entry is skipped.
+    """
+    select = soup.find('select', {'name': 'aufgabe'})
+    if not select:
+        logger.warning("No arrangement filter found on articles page")
+        return []
+
+    return [
+        (option['value'], option.get_text(strip=True))
+        for option in select.find_all('option')
+        if option.get('value')
+    ]
+
+
 def parse_article_list(soup: BeautifulSoup, classroom: str) -> List[Dict[str, Any]]:
     """
     Parse the article index for one classroom tab.

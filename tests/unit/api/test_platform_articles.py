@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from src.api.mymoment_articles import get_article_detail, get_articles, get_targets
-from src.platforms import PlatformAuthError, PlatformRejected, PlatformUnavailable, TargetOption, TargetValue
+from src.platforms import PlatformAuthError, PlatformRejected, PlatformUnavailable, TargetValue
 from tests.fixtures.factories.mymoment import create_mymoment_login
 from tests.fixtures.factories.users import create_user
 
@@ -52,23 +52,32 @@ PLATFORM_ERRORS = pytest.mark.parametrize(
 )
 
 
-async def test_targets_lists_the_options_of_the_platform_account(db_session, fake_platform):
+async def test_targets_describe_every_dimension_of_the_platform_account(db_session, fake_platform):
     user, login = await _stored_login(db_session)
-    fake_platform.targets = [
-        TargetOption(
-            key="classroom",
-            label="Classroom",
-            values=[TargetValue(value="home", label="Meine"), TargetValue(value="82", label="Klasse A")],
-        )
-    ]
 
     response = await get_targets(mymoment_login_id=login.id, current_user=user, session=db_session)
 
-    [option] = response.items
-    assert (option.key, [(v.value, v.label) for v in option.values]) == (
-        "classroom",
-        [("home", "Meine"), ("82", "Klasse A")],
-    )
+    assert [(o.key, o.label, o.required) for o in response.items] == [
+        ("category", "Category", False),
+        ("arrangement", "Arrangement", False),
+        ("classroom", "Classroom", True),
+    ]
+
+
+async def test_targets_offer_the_values_of_each_dimension(db_session, fake_platform):
+    user, login = await _stored_login(db_session)
+    fake_platform.target_values = {
+        "arrangement": [TargetValue(value="12", label="Storymap")],
+        "classroom": [TargetValue(value="home", label="Meine"), TargetValue(value="82", label="Klasse A")],
+    }
+
+    response = await get_targets(mymoment_login_id=login.id, current_user=user, session=db_session)
+
+    assert {o.key: [(v.value, v.label) for v in o.values] for o in response.items} == {
+        "category": [],
+        "arrangement": [("12", "Storymap")],
+        "classroom": [("home", "Meine"), ("82", "Klasse A")],
+    }
 
 
 async def test_targets_are_read_through_the_chosen_platform_account(db_session, fake_platform):

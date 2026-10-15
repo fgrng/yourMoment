@@ -362,22 +362,23 @@ class TargetValueResponse(BaseModel):
     """One value a target dimension can take."""
     model_config = ConfigDict(from_attributes=True)
 
-    value: str = Field(..., description="Value as used in the target (e.g., 'home', 'alle', '38')")
-    label: str = Field(..., description="Label the platform shows (e.g., 'Meine', 'Alle', 'Dummy Klasse 01')")
+    value: str = Field(..., description="Value as used in the target (e.g., 'home', '7', '38')")
+    label: str = Field(..., description="Label the platform shows (e.g., 'Meine', 'Informieren', 'Dummy Klasse 01')")
 
 
 class TargetOptionResponse(BaseModel):
-    """One selectable target dimension of a platform account."""
+    """One dimension of the target description with the values a platform account sees."""
     model_config = ConfigDict(from_attributes=True)
 
     key: str = Field(..., description="Key in the target (e.g., 'classroom')")
     label: str = Field(..., description="Display name of the dimension")
+    required: bool = Field(..., description="Whether every target must name a value of this dimension")
     values: list[TargetValueResponse] = Field(..., description="Selectable values")
 
 
 class TargetListResponse(BaseModel):
-    """Response model for the target options of a platform account."""
-    items: list[TargetOptionResponse] = Field(..., description="Selectable target dimensions")
+    """Response model for the target description of a platform account, with its values."""
+    items: list[TargetOptionResponse] = Field(..., description="Target dimensions in display order")
 
 
 # === Comment Schemas ===

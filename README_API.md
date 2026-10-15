@@ -295,7 +295,7 @@ Die Perspektive von {article_author} ist besonders aufschlussreich.
 **Endpoints**:
 - `GET /index` – List articles (with pagination, filters)
 - `GET /{id}` – Get article details and content
-- `GET /targets` – List the target options of a platform account (myMoment: classrooms)
+- `GET /{login}/targets` – Target description of the account's platform with the values the account sees: per dimension `key`, `label`, `required`, `values` (myMoment: fixed categories, arrangements and classrooms read live; never classroom `alle`). The process form builds its target fields from it.
 
 **Filtering**:
 ```

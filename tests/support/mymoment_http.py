@@ -79,7 +79,7 @@ def queue_article_list(
 
 
 def queue_targets(http: AiohttpStubSession, status: int = 200) -> None:
-    """Queue the article index whose tabs name the classrooms."""
+    """Queue the article index whose filter names the arrangements and whose tabs name the classrooms."""
     http.queue_response(
         "GET",
         f"{MYMOMENT_BASE_URL}/articles/",
