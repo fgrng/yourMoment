@@ -75,6 +75,15 @@ class TargetDimension:
 
 
 @dataclass(frozen=True)
+class TargetEntry:
+    """One set dimension of a stored target for display: its key, the dimension's label and the raw value."""
+
+    key: str
+    label: str
+    value: str
+
+
+@dataclass(frozen=True)
 class TargetValue:
     """One value a target dimension can take, with the label the platform shows."""
 

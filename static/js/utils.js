@@ -43,6 +43,17 @@ export function escapeAttribute(text) {
 // ============================================================================
 
 /**
+ * Format a monitoring process's target, e.g. "Klasse: 4711 · Schreibaufgabe: 10"
+ * @param {Array<{label: string, value: string}>} entries - target_display of the API response
+ * @returns {string} Escaped HTML; unset dimensions are left out
+ */
+export function formatTarget(entries) {
+    return (entries || [])
+        .map(entry => `${escapeHtml(entry.label)}: ${escapeHtml(entry.value)}`)
+        .join(' · ');
+}
+
+/**
  * Format a date string to localized format
  * @param {string|Date} value - Date value to format
  * @param {string} fallback - Fallback text if date is invalid (default: 'Unbekannt')

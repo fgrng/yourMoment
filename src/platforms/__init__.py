@@ -8,7 +8,7 @@ from src.platforms.errors import (
     PlatformUnavailable,
 )
 from src.platforms.registry import MYMOMENT, adapter_for, adapter_for_platform, connect, use_adapter
-from src.platforms.targets import validate_target
+from src.platforms.targets import label_target, validate_target
 from src.platforms.types import (
     ArticleContent,
     ArticleRef,
@@ -19,6 +19,7 @@ from src.platforms.types import (
     PostedComment,
     StudentRef,
     TargetDimension,
+    TargetEntry,
     TargetOption,
     TargetValue,
 )
@@ -39,11 +40,13 @@ __all__ = [
     "PostedComment",
     "StudentRef",
     "TargetDimension",
+    "TargetEntry",
     "TargetOption",
     "TargetValue",
     "adapter_for",
     "adapter_for_platform",
     "connect",
+    "label_target",
     "use_adapter",
     "validate_target",
 ]
