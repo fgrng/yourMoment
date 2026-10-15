@@ -8,7 +8,7 @@ and basic maintenance operations.
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import List, Dict, Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,7 @@ from src.models.ai_comment import AIComment
 from src.models.monitoring_process import MonitoringProcess
 from src.config.database import get_database_manager
 from src.config.settings import get_settings
+from src.utils.datetimes import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ class SchedulingTask(BaseTask):
             process_ids: Optional list of process IDs. If provided, only these
                         processes are checked/dispatched (process-scoped mode).
         """
-        start_time = datetime.utcnow()
+        start_time = utcnow()
 
         # Import automated scheduler task
         from src.tasks.article_discovery import discover_articles
@@ -142,7 +143,7 @@ class SchedulingTask(BaseTask):
                 # Commit any task ID updates
                 await session.commit()
 
-                execution_time = (datetime.utcnow() - start_time).total_seconds()
+                execution_time = (utcnow() - start_time).total_seconds()
 
                 logger.info(
                     f"Pipeline trigger completed: "
@@ -161,7 +162,7 @@ class SchedulingTask(BaseTask):
                     'discovery_metrics': discovery_metrics,
                     'errors': errors,
                     'execution_time_seconds': execution_time,
-                    'timestamp': datetime.utcnow().isoformat()
+                    'timestamp': utcnow().isoformat()
                 }
 
             except Exception as e:
@@ -169,7 +170,7 @@ class SchedulingTask(BaseTask):
                 errors.append(error_msg)
                 logger.error(error_msg)
 
-                execution_time = (datetime.utcnow() - start_time).total_seconds()
+                execution_time = (utcnow() - start_time).total_seconds()
                 return {
                     'trigger_mode': trigger_mode,
                     'processes_checked': 0,
@@ -180,13 +181,8 @@ class SchedulingTask(BaseTask):
                     'discovery_metrics': [],
                     'errors': errors,
                     'execution_time_seconds': execution_time,
-                    'timestamp': datetime.utcnow().isoformat()
+                    'timestamp': utcnow().isoformat()
                 }
-
-    @staticmethod
-    def _utcnow() -> datetime:
-        """Return an aware UTC timestamp for scheduler durability fields."""
-        return datetime.now(timezone.utc)
 
     def _compute_discovery_backoff_seconds(self, empty_streak: int) -> int:
         """Compute exponential discovery backoff with a floor and cap."""
@@ -249,7 +245,7 @@ class SchedulingTask(BaseTask):
             last_discovered_count = None
 
             if task_state in {"SUCCESS", "FAILURE", "REVOKED"}:
-                now_utc = self._utcnow()
+                now_utc = utcnow()
                 discovered_count = self._extract_discovered_count(task_result)
                 last_discovered_count = discovered_count
 
@@ -311,8 +307,8 @@ class SchedulingTask(BaseTask):
         last_discovered_count: Optional[int],
     ) -> Dict[str, Any]:
         """Build scheduler discovery metrics for a single process."""
-        next_eligible_at = MonitoringProcess._normalize_utc(process.next_discovery_at)
-        queued_at = MonitoringProcess._normalize_utc(process.discovery_queued_at)
+        next_eligible_at = process.next_discovery_at
+        queued_at = process.discovery_queued_at
 
         if queued_at is not None:
             lease_until = queued_at + timedelta(seconds=self.DISCOVERY_LEASE_SECONDS)
@@ -403,8 +399,8 @@ class SchedulingTask(BaseTask):
                 )
                 continue
 
-            now_utc = self._utcnow()
-            next_discovery_at = MonitoringProcess._normalize_utc(process.next_discovery_at)
+            now_utc = utcnow()
+            next_discovery_at = process.next_discovery_at
             if next_discovery_at is not None and next_discovery_at > now_utc:
                 reason = 'cooldown_active'
                 skipped.append({
@@ -426,7 +422,7 @@ class SchedulingTask(BaseTask):
                 )
                 continue
 
-            queued_at = MonitoringProcess._normalize_utc(process.discovery_queued_at)
+            queued_at = process.discovery_queued_at
             lease_cutoff = now_utc - timedelta(seconds=self.DISCOVERY_LEASE_SECONDS)
             if queued_at is not None and queued_at > lease_cutoff:
                 reason = 'discovery_lease_active'

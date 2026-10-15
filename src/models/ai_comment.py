@@ -30,7 +30,6 @@ from sqlalchemy import (
     Column,
     String,
     Text,
-    DateTime,
     Integer,
     Boolean,
     UUID,
@@ -41,8 +40,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
-from src.models.base import BaseModel
+from src.models.base import BaseModel, UTCDateTime
 from src.config.settings import get_settings
+from src.utils.datetimes import utcnow
 
 
 class AIComment(BaseModel):
@@ -114,9 +114,9 @@ class AIComment(BaseModel):
     article_raw_html = Column(Text, nullable=True)  # Original HTML (populated in 'prepared' stage)
 
     # Article timestamps
-    article_published_at = Column(DateTime(timezone=True), nullable=True)  # When published on myMoment
-    article_edited_at = Column(DateTime(timezone=True), nullable=True)  # Last edit on myMoment
-    article_scraped_at = Column(DateTime(timezone=True), nullable=False)  # When we captured this snapshot
+    article_published_at = Column(UTCDateTime, nullable=True)  # When published on myMoment
+    article_edited_at = Column(UTCDateTime, nullable=True)  # Last edit on myMoment
+    article_scraped_at = Column(UTCDateTime, nullable=False)  # When we captured this snapshot
 
     # Article metadata (optional)
     article_metadata = Column(JSON, nullable=True)  # Additional metadata as JSON
@@ -147,9 +147,9 @@ class AIComment(BaseModel):
     generation_time_ms = Column(Integer, nullable=True)  # Time taken to generate (milliseconds)
 
     # Timestamps
-    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)  # When comment generated
-    posted_at = Column(DateTime(timezone=True), nullable=True)  # When successfully posted to myMoment
-    failed_at = Column(DateTime(timezone=True), nullable=True)  # When posting failed (if applicable)
+    created_at = Column(UTCDateTime, nullable=False, default=utcnow)  # When comment generated
+    posted_at = Column(UTCDateTime, nullable=True)  # When successfully posted to myMoment
+    failed_at = Column(UTCDateTime, nullable=True)  # When posting failed (if applicable)
 
     # Error tracking
     error_message = Column(Text, nullable=True)  # Error message if posting failed
@@ -344,7 +344,7 @@ class AIComment(BaseModel):
         """
         self.status = "posted"
         self.mymoment_comment_id = mymoment_comment_id
-        self.posted_at = posted_at or datetime.utcnow()
+        self.posted_at = posted_at or utcnow()
         self.error_message = None
 
     def mark_as_failed(
@@ -361,7 +361,7 @@ class AIComment(BaseModel):
         """
         self.status = "failed"
         self.error_message = error_message
-        self.failed_at = failed_at or datetime.utcnow()
+        self.failed_at = failed_at or utcnow()
         self.retry_count += 1
 
     def validate_requirements(self) -> dict:

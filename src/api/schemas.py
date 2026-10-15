@@ -1,7 +1,7 @@
 """Pydantic request and response models shared across the API layer."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, List
 
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
@@ -179,26 +179,6 @@ class MonitoringProcessResponse(BaseModel):
     hide_comments: bool = Field(..., description="If true, generated comments will be hidden on myMoment")
     created_at: Optional[datetime] = Field(None, description="Creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
-
-    @field_validator(
-        'started_at',
-        'stopped_at',
-        'expires_at',
-        'created_at',
-        'updated_at',
-        mode='before'
-    )
-    @classmethod
-    def _ensure_timezone(cls, value: Optional[datetime]) -> Optional[datetime]:
-        """Normalize naive datetimes to UTC for consistent client handling."""
-        if value is None:
-            return value
-        if isinstance(value, str):
-            # Let pydantic handle string parsing after this validator
-            return value
-        if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value
 
 
 class ProcessStartRequest(BaseModel):

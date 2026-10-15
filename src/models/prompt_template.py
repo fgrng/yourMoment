@@ -7,13 +7,13 @@ that are used to generate contextual AI comments on myMoment articles.
 
 import re
 import uuid
-from datetime import datetime
 from typing import Dict, List
 
-from sqlalchemy import Column, String, Text, Boolean, UUID, ForeignKey, CheckConstraint, DateTime
+from sqlalchemy import Column, String, Text, Boolean, UUID, ForeignKey, CheckConstraint
 from sqlalchemy.orm import relationship
 
-from src.models.base import BaseModel
+from src.models.base import BaseModel, UTCDateTime
+from src.utils.datetimes import utcnow
 
 
 class PromptTemplate(BaseModel):
@@ -38,8 +38,8 @@ class PromptTemplate(BaseModel):
     is_active = Column(Boolean, nullable=False, default=True)
 
     # Timestamps
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, nullable=False, default=utcnow)
+    updated_at = Column(UTCDateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
     # Relationships
     user = relationship("User", back_populates="prompt_templates")

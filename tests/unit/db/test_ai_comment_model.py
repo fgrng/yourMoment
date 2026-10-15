@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
 from src.models.ai_comment import AIComment
 from src.config.settings import get_settings
+from src.utils.datetimes import utcnow
 from tests.fixtures.assertions import assert_ai_comment_state
 from tests.fixtures.factories import (
     create_discovered_ai_comment,
@@ -40,7 +40,7 @@ async def _create_comment_bundle(db_session):
         mymoment_logins=[login],
         prompt_templates=[prompt],
         status="running",
-        started_at=datetime.utcnow(),
+        started_at=utcnow(),
     )
     return {
         "user": user,
@@ -164,7 +164,7 @@ async def test_mark_as_posted_and_failed_update_comment_state_and_timestamps(db_
 
     comment.error_message = "old error"
 
-    before_post = datetime.utcnow()
+    before_post = utcnow()
     comment.mark_as_posted("comment-123")
     assert comment.status == "posted"
     assert comment.mymoment_comment_id == "comment-123"
@@ -172,7 +172,7 @@ async def test_mark_as_posted_and_failed_update_comment_state_and_timestamps(db_
     assert comment.posted_at >= before_post
     assert comment.error_message is None
 
-    before_failure = datetime.utcnow()
+    before_failure = utcnow()
     comment.mark_as_failed("network timeout")
     assert comment.status == "failed"
     assert comment.error_message == "network timeout"

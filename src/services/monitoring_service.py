@@ -8,7 +8,6 @@ scheduling, and duration enforcement capabilities.
 
 import uuid
 import logging
-from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from enum import Enum
 
@@ -23,6 +22,7 @@ from src.models.mymoment_login import MyMomentLogin
 from src.models.prompt_template import PromptTemplate
 from src.models.llm_provider import LLMProviderConfiguration
 from src.models.user import User
+from src.utils.datetimes import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +164,7 @@ class MonitoringService:
         """Apply the canonical stop transition to a loaded process instance."""
         revoked_tasks = self._revoke_process_tasks(process)
 
-        now_utc = datetime.now(timezone.utc)
+        now_utc = utcnow()
         process.status = ProcessStatus.STOPPED
         process.stopped_at = now_utc
         process.last_activity_at = now_utc
@@ -450,7 +450,7 @@ class MonitoringService:
                         self.db_session.add(process_prompt)
 
             # Update timestamp
-            process.updated_at = datetime.now(timezone.utc)
+            process.updated_at = utcnow()
 
             await self.db_session.flush()
 
@@ -535,7 +535,7 @@ class MonitoringService:
 
             # Update process status to running
             # The scheduler (trigger_monitoring_pipeline) will pick this up and spawn tasks
-            now_utc = datetime.now(timezone.utc)
+            now_utc = utcnow()
             process.status = ProcessStatus.RUNNING
             process.started_at = now_utc
             process.last_activity_at = now_utc
@@ -879,8 +879,8 @@ class MonitoringService:
         if process.status == ProcessStatus.RUNNING:
             process.status = ProcessStatus.STOPPED
         if not process.stopped_at:
-            process.stopped_at = datetime.now(timezone.utc)
-        process.last_activity_at = datetime.now(timezone.utc)
+            process.stopped_at = utcnow()
+        process.last_activity_at = utcnow()
 
         for association in process.monitoring_process_logins or []:
             association.is_active = False

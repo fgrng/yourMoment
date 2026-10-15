@@ -9,7 +9,7 @@ generation service for AI-powered myMoment commenting.
 import re
 import uuid
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 
@@ -25,6 +25,7 @@ from src.services.prompt_placeholders import (
     PlaceholderInfo,
     SUPPORTED_PLACEHOLDERS as GLOBAL_SUPPORTED_PLACEHOLDERS,
 )
+from src.utils.datetimes import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -429,7 +430,7 @@ class PromptService:
 
             # Soft delete template and deactivate associations
             template.is_active = False
-            template.updated_at = datetime.utcnow()
+            template.updated_at = utcnow()
 
             for association in template.monitoring_process_prompts or []:
                 association.is_active = False
@@ -1033,7 +1034,7 @@ class PromptService:
             Number of templates cleaned up
         """
         try:
-            cutoff_date = datetime.utcnow() - timedelta(days=days_inactive)
+            cutoff_date = utcnow() - timedelta(days=days_inactive)
 
             # Find old inactive user templates
             stmt = select(PromptTemplate).where(

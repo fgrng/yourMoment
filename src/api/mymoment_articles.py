@@ -1,7 +1,6 @@
 """Article browsing endpoints: targets, article lists and previews, live from the platform."""
 
 import uuid
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Path, Query
@@ -27,6 +26,7 @@ from src.platforms import (
     connect,
 )
 from src.platforms.accounts import load_platform_account
+from src.utils.datetimes import utcnow
 import logging
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ async def get_articles(
     except PlatformError as e:
         raise _platform_error(e, "list articles") from e
 
-    scraped_at = datetime.utcnow()
+    scraped_at = utcnow()
     article_responses = [
         ArticleResponse(
             id=summary.ref.id,
@@ -170,7 +170,7 @@ async def get_article_detail(
         author=article.author,
         published_at=article.published_at,
         edited_at=article.edited_at.isoformat() if article.edited_at else None,
-        scraped_at=datetime.utcnow(),
+        scraped_at=utcnow(),
         mymoment_url=article.ref.url,
         visibility=article.extra.get("visibility", "Unknown"),
         ai_comments_count=0,  # Not stored yet

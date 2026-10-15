@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 import pytest
 
+from src.utils.datetimes import utcnow
 from tests.fixtures.assertions import assert_session_data_round_trip
 from tests.fixtures.factories import (
     create_expired_mymoment_session,
@@ -77,7 +76,7 @@ async def test_touch_renew_update_and_deactivate_helpers_manage_lifecycle(db_ses
 
     previous_expiry = session_record.expires_at
 
-    before_touch = datetime.utcnow()
+    before_touch = utcnow()
     session_record.touch()
     assert session_record.last_accessed >= before_touch
 

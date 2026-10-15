@@ -7,7 +7,6 @@ according to FR-002 (encrypted API key storage) and multi-provider support requi
 
 import uuid
 import logging
-from datetime import datetime
 from typing import List, Optional, Dict, Any, Union
 
 import litellm
@@ -26,6 +25,7 @@ from src.services.llm_types import (
     GenerationResult,
     LLMGenerationConfig
 )
+from src.utils.datetimes import utcnow
 
 logger = logging.getLogger(__name__)
 llm_summary_logger = logging.getLogger("yourmoment.llm")
@@ -155,9 +155,9 @@ async def generate_completion_standalone(
         )
         _log_llm_event("llm_request_start", **request_context)
 
-        start_time = datetime.utcnow()
+        start_time = utcnow()
         response = await litellm.acompletion(**params)
-        generation_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+        generation_time_ms = int((utcnow() - start_time).total_seconds() * 1000)
 
         message = response.choices[0].message
         usage = getattr(response, "usage", None)
@@ -525,7 +525,7 @@ class LLMProviderService:
                 if field in updatable_fields:
                     setattr(provider, field, value)
 
-            provider.updated_at = datetime.utcnow()
+            provider.updated_at = utcnow()
 
             await self.db_session.commit()
             await self.db_session.refresh(provider)

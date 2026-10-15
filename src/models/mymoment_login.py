@@ -6,14 +6,14 @@ Implements FR-017 (encrypted credential storage) and multi-login architecture.
 """
 
 import uuid
-from datetime import datetime
 
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, func
+from sqlalchemy import Column, String, Boolean, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
-from src.models.base import Base
+from src.models.base import Base, UTCDateTime
 from src.config.encryption import encrypt_mymoment_credentials, decrypt_mymoment_credentials
+from src.utils.datetimes import utcnow
 
 
 class MyMomentLogin(Base):
@@ -85,20 +85,20 @@ class MyMomentLogin(Base):
 
     # Timestamp fields
     created_at = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         server_default=func.now(),
         nullable=False,
         doc="Credential creation timestamp"
     )
 
     last_used = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         nullable=True,
         doc="Last time these credentials were used for login"
     )
 
     updated_at = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
@@ -162,7 +162,7 @@ class MyMomentLogin(Base):
         )
         self.username_encrypted = encrypted_username
         self.password_encrypted = encrypted_password
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utcnow()
 
     def get_credentials(self) -> tuple[str, str]:
         """
@@ -257,7 +257,7 @@ class MyMomentLogin(Base):
 
         Should be called whenever these credentials are used for login.
         """
-        self.last_used = datetime.utcnow()
+        self.last_used = utcnow()
 
     def deactivate(self) -> None:
         """
@@ -267,7 +267,7 @@ class MyMomentLogin(Base):
         Deactivated logins won't be used for new sessions.
         """
         self.is_active = False
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utcnow()
 
     def activate(self) -> None:
         """
@@ -276,7 +276,7 @@ class MyMomentLogin(Base):
         This method sets is_active to True and updates the timestamp.
         """
         self.is_active = True
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utcnow()
 
     def has_active_sessions(self) -> bool:
         """

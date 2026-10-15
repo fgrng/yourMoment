@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 import pytest
 
+from src.utils.datetimes import utcnow
 from tests.fixtures.assertions import assert_api_key_round_trip
 from tests.fixtures.factories import create_llm_provider, create_user
 
@@ -88,7 +87,7 @@ async def test_lifecycle_and_update_configuration_helpers_keep_api_key_safe(db_s
         api_key="sk-original",
     )
 
-    before_used = datetime.utcnow()
+    before_used = utcnow()
     provider.mark_as_used()
     assert provider.last_used is not None
     assert provider.last_used >= before_used

@@ -17,6 +17,8 @@ from typing import Any, Dict, Optional, Protocol
 from aiohttp import CookieJar
 from yarl import URL
 
+from src.utils.datetimes import utcnow
+
 logger = logging.getLogger(__name__)
 
 
@@ -53,7 +55,7 @@ def serialize_cookie_jar(jar: CookieJar, csrf_token: Optional[str] = None) -> Di
     return {
         'cookies': cookies,
         'csrf_token': csrf_token,
-        'saved_at': datetime.utcnow().isoformat()
+        'saved_at': utcnow().isoformat()
     }
 
 

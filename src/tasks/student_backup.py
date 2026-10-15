@@ -13,7 +13,6 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Dict, Any, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +37,7 @@ from src.services.student_backup_service import (
     StudentBackupDisabledError,
     StudentBackupValidationError,
 )
+from src.utils.datetimes import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ class StudentBackupTask(BaseTask):
            b. Fetch each article's content
            c. Create ArticleVersion if content changed
         """
-        start_time = datetime.utcnow()
+        start_time = utcnow()
         stats = {
             "students_processed": 0,
             "articles_found": 0,
@@ -181,7 +181,7 @@ class StudentBackupTask(BaseTask):
             stats["errors"].append(error_msg)
             stats["status"] = "failed"
 
-        stats["execution_time_seconds"] = (datetime.utcnow() - start_time).total_seconds()
+        stats["execution_time_seconds"] = (utcnow() - start_time).total_seconds()
         logger.info(
             f"Student backup completed: {stats['students_processed']} students, "
             f"{stats['versions_created']} new versions, "
@@ -243,7 +243,7 @@ class StudentBackupTask(BaseTask):
         Returns:
             Backup result dictionary
         """
-        start_time = datetime.utcnow()
+        start_time = utcnow()
         stats = {
             "tracked_student_id": tracked_student_id,
             "articles_found": 0,
@@ -285,7 +285,7 @@ class StudentBackupTask(BaseTask):
             stats["errors"].append(error_msg)
             stats["status"] = "failed"
 
-        stats["execution_time_seconds"] = (datetime.utcnow() - start_time).total_seconds()
+        stats["execution_time_seconds"] = (utcnow() - start_time).total_seconds()
         return stats
 
 

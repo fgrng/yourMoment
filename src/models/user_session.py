@@ -6,12 +6,13 @@ client information for privacy and simplicity.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 
-from sqlalchemy import Column, String, DateTime, Boolean, UUID, ForeignKey, Index, func
+from sqlalchemy import Column, String, Boolean, UUID, ForeignKey, Index, func
 from sqlalchemy.orm import relationship
 
-from src.models.base import Base
+from src.models.base import Base, UTCDateTime
+from src.utils.datetimes import utcnow
 
 
 class UserSession(Base):
@@ -27,9 +28,9 @@ class UserSession(Base):
     token_hash = Column(String(255), nullable=False, unique=True)  # Hashed JWT token
 
     # Session timing
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    last_activity = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at = Column(UTCDateTime, nullable=False)
+    last_activity = Column(UTCDateTime, nullable=False, default=utcnow)
+    created_at = Column(UTCDateTime, server_default=func.now(), nullable=False)
 
     # Status
     is_active = Column(Boolean, nullable=False, default=True)
@@ -57,7 +58,7 @@ class UserSession(Base):
     @property
     def is_expired(self) -> bool:
         """Check if the session has expired."""
-        return datetime.utcnow() >= self.expires_at
+        return utcnow() >= self.expires_at
 
     @property
     def is_valid(self) -> bool:
@@ -69,16 +70,16 @@ class UserSession(Base):
         """Get the time remaining until session expiry."""
         if self.is_expired:
             return timedelta(0)
-        return self.expires_at - datetime.utcnow()
+        return self.expires_at - utcnow()
 
     @property
     def time_since_last_activity(self) -> timedelta:
         """Get the time elapsed since last activity."""
-        return datetime.utcnow() - self.last_activity
+        return utcnow() - self.last_activity
 
     def update_last_activity(self) -> None:
         """Update the last activity timestamp to now."""
-        self.last_activity = datetime.utcnow()
+        self.last_activity = utcnow()
 
     def extend_session(self, additional_time: timedelta) -> None:
         """
@@ -87,7 +88,7 @@ class UserSession(Base):
         Args:
             additional_time: Additional time to add to the current expiry
         """
-        self.expires_at = max(self.expires_at, datetime.utcnow()) + additional_time
+        self.expires_at = max(self.expires_at, utcnow()) + additional_time
         self.update_last_activity()
 
     def revoke(self) -> None:
@@ -112,7 +113,7 @@ class UserSession(Base):
         Returns:
             New UserSession instance
         """
-        now = datetime.utcnow()
+        now = utcnow()
         return cls(
             user_id=user_id,
             token_hash=token_hash,

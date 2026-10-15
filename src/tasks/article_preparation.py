@@ -10,7 +10,6 @@ This module implements Task 2 of the refactored monitoring pipeline:
 import asyncio
 import logging
 import uuid
-from datetime import datetime
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
 
@@ -32,6 +31,7 @@ from src.platforms import (
 from src.platforms.accounts import load_platform_account
 from src.config.database import get_database_manager
 from src.utils.ids import as_int
+from src.utils.datetimes import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ class ArticlePreparationTask(BaseTask):
                     "article_content": content.body_text,
                     "article_raw_html": content.body_html,
                     "article_title": content.title,
-                    "article_scraped_at": datetime.utcnow(),
+                    "article_scraped_at": utcnow(),
                     "status": "prepared",
                     "error_message": None,
                     "failed_at": None,
@@ -197,7 +197,7 @@ class ArticlePreparationTask(BaseTask):
                     .values(
                         status="failed",
                         error_message=error_message,
-                        failed_at=datetime.utcnow(),
+                        failed_at=utcnow(),
                     )
                 )
 
@@ -223,7 +223,7 @@ class ArticlePreparationTask(BaseTask):
 
     async def _prepare_single_article_async(self, ai_comment_id: uuid.UUID) -> Dict[str, Any]:
         """Prepare one article by fetching content and moving discovered -> prepared."""
-        start_time = datetime.utcnow()
+        start_time = utcnow()
         snapshot = await self._read_article_snapshot(ai_comment_id)
         if not snapshot:
             return {
@@ -250,7 +250,7 @@ class ArticlePreparationTask(BaseTask):
                 "ai_comment_id": str(ai_comment_id),
                 "status": "skipped",
                 "reason": skip_reason,
-                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+                "execution_time_seconds": (utcnow() - start_time).total_seconds(),
             }
 
         try:
@@ -268,7 +268,7 @@ class ArticlePreparationTask(BaseTask):
             return {
                 "ai_comment_id": str(ai_comment_id),
                 "status": "prepared" if updated else "skipped",
-                "execution_time_seconds": (datetime.utcnow() - start_time).total_seconds(),
+                "execution_time_seconds": (utcnow() - start_time).total_seconds(),
             }
 
         except Exception as exc:

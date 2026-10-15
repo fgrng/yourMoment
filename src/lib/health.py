@@ -1,5 +1,4 @@
 import asyncio
-from datetime import datetime, timezone
 from time import perf_counter
 from typing import Any, Dict, Optional
 
@@ -10,9 +9,10 @@ from sqlalchemy import text
 from src.config.database import get_database_manager
 from src.config.settings import get_settings
 from src.tasks.worker import celery_app
+from src.utils.datetimes import utcnow
 
 
-APP_START_TIME = datetime.now(timezone.utc)
+APP_START_TIME = utcnow()
 _redis_client: Optional[redis.Redis] = None
 
 
@@ -90,7 +90,7 @@ async def check_celery_health() -> Dict[str, Any]:
 
 
 def get_uptime_seconds() -> float:
-    return (datetime.now(timezone.utc) - APP_START_TIME).total_seconds()
+    return (utcnow() - APP_START_TIME).total_seconds()
 
 
 def get_start_time_iso() -> str:

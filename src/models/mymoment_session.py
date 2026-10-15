@@ -6,15 +6,16 @@ Implements session lifecycle, TTL cleanup, and encrypted session data storage.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Dict, Any, Union
 
-from sqlalchemy import Column, Boolean, DateTime, ForeignKey, func, Text
+from sqlalchemy import Column, Boolean, ForeignKey, func, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
-from src.models.base import Base
+from src.models.base import Base, UTCDateTime
 from src.config.encryption import encrypt_session_data, decrypt_session_data
+from src.utils.datetimes import utcnow
 
 
 class MyMomentSession(Base):
@@ -56,7 +57,7 @@ class MyMomentSession(Base):
 
     # Session lifecycle fields
     expires_at = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         nullable=False,
         doc="Session expiration timestamp"
     )
@@ -70,21 +71,21 @@ class MyMomentSession(Base):
 
     # Timestamp fields
     created_at = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         server_default=func.now(),
         nullable=False,
         doc="Session creation timestamp"
     )
 
     last_accessed = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         server_default=func.now(),
         nullable=False,
         doc="Last time session was accessed/used"
     )
 
     updated_at = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
@@ -121,7 +122,7 @@ class MyMomentSession(Base):
         Returns:
             New MyMomentSession instance
         """
-        expires_at = datetime.utcnow() + timedelta(hours=duration_hours)
+        expires_at = utcnow() + timedelta(hours=duration_hours)
 
         session = cls(
             mymoment_login_id=mymoment_login_id,
@@ -145,7 +146,7 @@ class MyMomentSession(Base):
         """
         encrypted_data = encrypt_session_data(session_data)
         self.session_data_encrypted = encrypted_data
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utcnow()
 
     def get_session_data(self, as_dict: bool = True) -> Union[str, Dict[str, Any]]:
         """
@@ -210,15 +211,15 @@ class MyMomentSession(Base):
         Returns:
             True if session is expired, False otherwise
         """
-        return datetime.utcnow() > self.expires_at
+        return utcnow() > self.expires_at
 
     def renew_session(self, duration_hours: int = 24) -> None:
         """
         Renew session with new expiration from current time.
         """
-        self.expires_at = datetime.utcnow() + timedelta(hours=duration_hours)
+        self.expires_at = utcnow() + timedelta(hours=duration_hours)
         self.is_active = True
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utcnow()
 
     def touch(self) -> None:
         """
@@ -226,7 +227,7 @@ class MyMomentSession(Base):
 
         Should be called whenever the session is used for myMoment requests.
         """
-        self.last_accessed = datetime.utcnow()
+        self.last_accessed = utcnow()
 
     def deactivate(self) -> None:
         """
@@ -236,7 +237,7 @@ class MyMomentSession(Base):
         Deactivated sessions won't be used for new requests.
         """
         self.is_active = False
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utcnow()
 
     def activate(self) -> None:
         """
@@ -247,7 +248,7 @@ class MyMomentSession(Base):
         """
         if not self.is_expired():
             self.is_active = True
-            self.updated_at = datetime.utcnow()
+            self.updated_at = utcnow()
 
     def is_usable(self) -> bool:
         """
@@ -264,4 +265,4 @@ class MyMomentSession(Base):
         """
         if self.is_expired():
             return 0.0
-        return (self.expires_at - datetime.utcnow()).total_seconds() / 3600.0
+        return (self.expires_at - utcnow()).total_seconds() / 3600.0

@@ -6,15 +6,15 @@ Implements FR-002 (encrypted API key storage) and multi-provider support.
 """
 
 import uuid
-from datetime import datetime
 from typing import Dict, Any
 
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, func
+from sqlalchemy import Column, String, Integer, Float, Boolean, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
-from src.models.base import Base
+from src.models.base import Base, UTCDateTime
 from src.config.encryption import encrypt_api_key, decrypt_api_key
+from src.utils.datetimes import utcnow
 
 
 class LLMProviderConfiguration(Base):
@@ -90,14 +90,14 @@ class LLMProviderConfiguration(Base):
 
     # Timestamp fields
     created_at = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         server_default=func.now(),
         nullable=False,
         doc="Configuration creation timestamp"
     )
 
     updated_at = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
@@ -105,7 +105,7 @@ class LLMProviderConfiguration(Base):
     )
 
     last_used = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         nullable=True,
         doc="Last time this provider was used for generation"
     )
@@ -136,7 +136,7 @@ class LLMProviderConfiguration(Base):
             Plaintext API key is never stored in database.
         """
         self.api_key_encrypted = encrypt_api_key(api_key)
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utcnow()
 
     def get_api_key(self) -> str:
         """
@@ -219,7 +219,7 @@ class LLMProviderConfiguration(Base):
 
         Should be called whenever this provider is used for generation.
         """
-        self.last_used = datetime.utcnow()
+        self.last_used = utcnow()
 
     def update_configuration(self, **kwargs) -> None:
         """
@@ -235,7 +235,7 @@ class LLMProviderConfiguration(Base):
             if field in updatable_fields and hasattr(self, field):
                 setattr(self, field, value)
 
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utcnow()
 
     def deactivate(self) -> None:
         """
@@ -244,14 +244,14 @@ class LLMProviderConfiguration(Base):
         Deactivated providers won't be used for new generation requests.
         """
         self.is_active = False
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utcnow()
 
     def activate(self) -> None:
         """
         Activate this provider configuration.
         """
         self.is_active = True
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utcnow()
 
     def get_default_max_tokens(self) -> int:
         """

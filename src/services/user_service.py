@@ -7,7 +7,6 @@ that can be shared across all services for consistent user handling.
 
 import uuid
 from typing import Optional, List, Dict, Any
-from datetime import datetime
 
 from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +18,7 @@ from src.services.base_service import (
     ServiceValidationError,
     ServiceAccessError,
 )
+from src.utils.datetimes import utcnow
 
 
 class UserServiceError(ServiceValidationError):
@@ -343,7 +343,7 @@ class UserService(BaseService):
             "email": user.email,
             "is_active": user.is_active,
             "is_verified": user.is_verified,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": utcnow().isoformat()
         }
 
     async def ensure_user_access(

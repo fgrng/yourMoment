@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 import pytest
 
+from src.utils.datetimes import utcnow
 from tests.fixtures.assertions import assert_mymoment_credentials_round_trip
 from tests.fixtures.factories import (
     create_monitoring_process,
@@ -57,17 +56,17 @@ async def test_lifecycle_helpers_update_timestamps_and_usage_flags(db_session):
     user = await create_user(db_session)
     login = await create_mymoment_login(db_session, user=user)
 
-    before_used = datetime.utcnow()
+    before_used = utcnow()
     login.mark_as_used()
     assert login.last_used is not None
     assert login.last_used >= before_used
 
-    before_deactivate = datetime.utcnow()
+    before_deactivate = utcnow()
     login.deactivate()
     assert login.is_active is False
     assert login.updated_at >= before_deactivate
 
-    before_activate = datetime.utcnow()
+    before_activate = utcnow()
     login.activate()
     assert login.is_active is True
     assert login.updated_at >= before_activate

@@ -7,7 +7,6 @@ Creates and configures the FastAPI application with all routers and middleware.
 import os
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
@@ -41,6 +40,7 @@ from src.lib.health import (
     get_start_time_iso,
     get_uptime_seconds,
 )
+from src.utils.datetimes import utcnow
 
 
 @asynccontextmanager
@@ -165,7 +165,7 @@ def create_app() -> FastAPI:
             "status": overall_status,
             "service": "yourMoment API",
             "version": os.getenv("APP_VERSION", "0.1.0"),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": utcnow().isoformat(),
             "uptime_seconds": round(get_uptime_seconds(), 2),
             "started_at": get_start_time_iso(),
             "checks": checks,

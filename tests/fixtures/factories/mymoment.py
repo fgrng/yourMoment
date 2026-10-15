@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.mymoment_login import MyMomentLogin
 from src.models.mymoment_session import MyMomentSession
+from src.utils.datetimes import utcnow
 
 from tests.fixtures.factories._shared import next_sequence, require_owner
 
@@ -94,6 +95,6 @@ async def create_expired_mymoment_session(
         session,
         mymoment_login=mymoment_login,
         mymoment_login_id=mymoment_login_id,
-        expires_at=overrides.pop("expires_at", datetime.utcnow() - timedelta(hours=1)),
+        expires_at=overrides.pop("expires_at", utcnow() - timedelta(hours=1)),
         **overrides,
     )

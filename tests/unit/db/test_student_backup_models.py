@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 import pytest
 
+from src.utils.datetimes import utcnow
 from tests.fixtures.factories import (
     create_article_version,
     create_mymoment_login,
@@ -35,7 +34,7 @@ async def test_tracked_student_to_dict_and_lifecycle_helpers_are_safe(db_session
     assert payload["updated_at"] is not None
     assert tracked_student.dashboard_url.endswith(f"/{tracked_student.mymoment_student_id}/")
 
-    before_backup = datetime.utcnow()
+    before_backup = utcnow()
     tracked_student.mark_backup_completed()
     assert tracked_student.last_backup_at is not None
     assert tracked_student.last_backup_at >= before_backup

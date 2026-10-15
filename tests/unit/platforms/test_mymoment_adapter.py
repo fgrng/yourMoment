@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -622,7 +622,7 @@ async def test_list_student_articles_returns_dashboard_metadata(adapter, http, a
         f"{MYMOMENT_BASE_URL}/article/2695/",
         "Mein Ausflug in den Zoo",
         "9",
-        datetime(2026, 1, 28, 9, 24),
+        datetime(2026, 1, 28, 8, 24, tzinfo=UTC),
         {"categories": "Unterhalten", "status": "Publiziert", "visibility": "Beispielklasse A (Testschule)"},
     )
 
@@ -668,6 +668,23 @@ async def test_list_student_articles_keeps_an_article_whose_date_cannot_be_read(
         [article] = await connection.list_student_articles(StudentRef(id="1042"))
 
     assert (article.ref.id, article.edited_at) == ("2695", None)
+
+
+@pytest.mark.parametrize(
+    ("edited", "expected"),
+    [
+        ("14.07.2026 um 09:30 Uhr", "2026-07-14T07:30:00+00:00"),
+        ("14.01.2026 um 09:30 Uhr", "2026-01-14T08:30:00+00:00"),
+    ],
+)
+async def test_list_student_articles_reads_the_date_as_zurich_time_in_utc(adapter, http, account, edited, expected):
+    queue_login(http)
+    queue_student_dashboard(http, "1042", body=_dashboard_row(edited=edited))
+
+    async with adapter.connect(account) as connection:
+        [article] = await connection.list_student_articles(StudentRef(id="1042"))
+
+    assert article.edited_at.isoformat() == expected
 
 
 @pytest.mark.parametrize("status", [403, 404])

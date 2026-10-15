@@ -7,12 +7,12 @@ Each tracked student is associated with a user (who tracks them) and an admin lo
 """
 
 import uuid
-from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Text, func, UUID
+from sqlalchemy import Column, String, Integer, Boolean, ForeignKey, Text, func, UUID
 from sqlalchemy.orm import relationship
 
-from src.models.base import Base
+from src.models.base import Base, UTCDateTime
+from src.utils.datetimes import utcnow
 
 
 class TrackedStudent(Base):
@@ -89,14 +89,14 @@ class TrackedStudent(Base):
 
     # Timestamp fields
     created_at = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         server_default=func.now(),
         nullable=False,
         doc="When tracking was created"
     )
 
     updated_at = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
@@ -104,7 +104,7 @@ class TrackedStudent(Base):
     )
 
     last_backup_at = Column(
-        DateTime(timezone=True),
+        UTCDateTime,
         nullable=True,
         doc="When the last successful backup was performed"
     )
@@ -158,17 +158,17 @@ class TrackedStudent(Base):
 
     def mark_backup_completed(self) -> None:
         """Mark the last backup timestamp as now."""
-        self.last_backup_at = datetime.utcnow()
+        self.last_backup_at = utcnow()
 
     def deactivate(self) -> None:
         """Deactivate this tracking."""
         self.is_active = False
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utcnow()
 
     def activate(self) -> None:
         """Activate this tracking."""
         self.is_active = True
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utcnow()
 
     def get_article_count(self) -> int:
         """

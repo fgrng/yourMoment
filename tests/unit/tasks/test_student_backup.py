@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -62,7 +62,7 @@ def _add_student_article(fake_platform, student, article_id="4711", **overrides)
         title="Mein Ausflug in den Zoo",
         body_text="Wir waren im Zoo.",
         body_html="<p>Wir waren im Zoo.</p>",
-        edited_at=datetime(2026, 1, 28, 9, 24),
+        edited_at=datetime(2026, 1, 28, 9, 24, tzinfo=UTC),
         extra={"status": "Publiziert", "visibility": "Beispielklasse A", "categories": "Unterhalten"},
         student=str(student.mymoment_student_id),
     )
@@ -125,7 +125,7 @@ async def test_backup_single_student_stores_a_new_article_with_its_absolute_url(
         "Publiziert",
         "Beispielklasse A",
         "Unterhalten",
-        datetime(2026, 1, 28, 9, 24),
+        datetime(2026, 1, 28, 9, 24, tzinfo=UTC),
     )
 
 

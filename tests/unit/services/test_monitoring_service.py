@@ -1,5 +1,5 @@
 import pytest
-from datetime import timezone
+from datetime import datetime
 from unittest.mock import patch
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -133,10 +133,7 @@ async def test_start_process_triggers_process_scoped_scheduler_delay(db_session:
         assert process.status == ProcessStatus.RUNNING
         assert process.started_at is not None
         assert process.last_activity_at is not None
-        from datetime import datetime
-        result_dt = datetime.fromisoformat(result["started_at"])
-        expected_dt = process.started_at.replace(tzinfo=timezone.utc) if process.started_at.tzinfo is None else process.started_at
-        assert result_dt.replace(tzinfo=timezone.utc) == expected_dt.astimezone(timezone.utc)
+        assert datetime.fromisoformat(result["started_at"]) == process.started_at
         mock_delay.assert_called_once_with(process_ids=[str(process.id)])
         assert mock_delay.call_args.args == ()
 

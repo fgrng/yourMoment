@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Iterable
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.monitoring_process import MonitoringProcess
 from src.models.monitoring_process_login import MonitoringProcessLogin
 from src.models.monitoring_process_prompt import MonitoringProcessPrompt
+from src.utils.datetimes import utcnow
 
 from tests.fixtures.factories._shared import ensure_same_user, next_sequence, require_owner
 
@@ -93,7 +93,7 @@ async def create_monitoring_process(
         status=overrides.pop("status", "created"),
         started_at=overrides.pop("started_at", None),
         stopped_at=overrides.pop("stopped_at", None),
-        last_activity_at=overrides.pop("last_activity_at", datetime.utcnow()),
+        last_activity_at=overrides.pop("last_activity_at", utcnow()),
         is_active=overrides.pop("is_active", True),
         **overrides,
     )

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.settings import get_settings
+from src.utils.datetimes import utcnow
 
 from tests.fixtures.factories import (
     create_article_version,
@@ -72,7 +73,7 @@ async def _base_monitoring_bundle(
             "process",
             {
                 "status": "running",
-                "started_at": datetime.utcnow(),
+                "started_at": utcnow(),
                 "generate_only": False,
                 "hide_comments": False,
             },
@@ -219,7 +220,7 @@ async def _scenario_expired_mymoment_session(
     expired_session = scenario["mymoment_session"]
     expired_session.expires_at = expired_overrides.get(
         "expires_at",
-        datetime.utcnow() - timedelta(hours=1),
+        utcnow() - timedelta(hours=1),
     )
     expired_session.is_active = expired_overrides.get("is_active", True)
     await session.flush()

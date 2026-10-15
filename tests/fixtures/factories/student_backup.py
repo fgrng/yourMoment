@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.article_version import ArticleVersion
 from src.models.tracked_student import TrackedStudent
+from src.utils.datetimes import utcnow
 
 from tests.fixtures.factories._shared import ensure_same_user, next_sequence, require_owner
 
@@ -79,8 +79,8 @@ async def create_article_version(
         article_visibility=overrides.pop("article_visibility", "Beispielklasse A (Testschule)"),
         article_category=overrides.pop("article_category", "Informieren"),
         article_task=overrides.pop("article_task", "Fixture task"),
-        article_last_modified=overrides.pop("article_last_modified", datetime.utcnow()),
-        scraped_at=overrides.pop("scraped_at", datetime.utcnow()),
+        article_last_modified=overrides.pop("article_last_modified", utcnow()),
+        scraped_at=overrides.pop("scraped_at", utcnow()),
         extra_metadata=overrides.pop("extra_metadata", {"source": "fixture"}),
         is_active=overrides.pop("is_active", True),
         **overrides,

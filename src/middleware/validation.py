@@ -10,12 +10,13 @@ import logging
 import re
 import urllib.parse
 import uuid
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+
+from src.utils.datetimes import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -313,7 +314,7 @@ class RequestValidationMiddleware:
                 "message": "Request validation failed",
                 "detail": errors,
                 "error_id": str(uuid.uuid4()),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": utcnow().isoformat()
             }
         )
 
@@ -325,6 +326,6 @@ class RequestValidationMiddleware:
                 "error": "validation_middleware_error",
                 "message": "Request validation middleware error",
                 "error_id": str(uuid.uuid4()),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": utcnow().isoformat()
             }
         )
