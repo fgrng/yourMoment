@@ -9,7 +9,6 @@ import {
     fetchOptions,
     safeParseJson,
     extractErrorMessage,
-    formatDateTime,
     formatProviderLabel,
     formatDuration
 } from './utils.js';
