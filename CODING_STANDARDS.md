@@ -99,3 +99,4 @@ Every `datetime` in application code is UTC with `tzinfo` set.
 - Current time: `utcnow()` from `src/utils/datetimes.py`. Ruff's `DTZ` rules reject naive constructors such as `datetime.utcnow()`.
 - Model columns use `UTCDateTime` from `src/models/base.py`, never plain `DateTime`. It rejects naive values on write and returns aware UTC values on read, so code does not normalise "naive means UTC" by hand.
 - Times shown by a platform as local wall-clock time are converted to UTC in the adapter (myMoment: `Europe/Zurich`); the platform interface only returns aware datetimes.
+- Times are shown to users in `APP_TIMEZONE` (default `Europe/Zurich`), converted only for display: in templates with the Jinja filter `format_datetime`, in JavaScript with `formatDateTime` from `static/js/utils.js`. No `strftime` or `toLocaleString` on times elsewhere. API responses and logs stay UTC (ISO 8601 with offset).

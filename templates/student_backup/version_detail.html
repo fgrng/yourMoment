@@ -81,7 +81,7 @@
     const articleLink = document.getElementById('articleLink');
 
     async function loadVersion() {
-        const { fetchOptions } = window.YM.utils;
+        const { fetchOptions, formatDateTime } = window.YM.utils;
         try {
             const response = await fetch(`/api/v1/student-backup/versions/${versionId}`, fetchOptions('GET'));
 
@@ -123,10 +123,10 @@
                     <dd>${version.article_visibility || '-'}</dd>
 
                     <dt>Gesichert am</dt>
-                    <dd>${new Date(version.scraped_at).toLocaleString('de-DE')}</dd>
+                    <dd>${formatDateTime(version.scraped_at)}</dd>
 
                     <dt>Geändert auf myMoment</dt>
-                    <dd>${version.article_last_modified ? new Date(version.article_last_modified).toLocaleString('de-DE') : '-'}</dd>
+                    <dd>${formatDateTime(version.article_last_modified, '-')}</dd>
 
                     <dt>Content-Hash</dt>
                     <dd><code class="small">${version.content_hash ? version.content_hash.substring(0, 16) + '...' : '-'}</code></dd>

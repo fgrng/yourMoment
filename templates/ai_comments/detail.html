@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     const commentId = {{ comment_id | tojson }};
 
     const {
-        formatDate,
+        formatDateTime,
         fetchOptions,
         showContentState,
         showEmptyState,
@@ -259,9 +259,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             visibilityEl.innerHTML = '<span class="badge bg-success"><i class="bi bi-eye me-1"></i>Sichtbar</span>';
         }
 
-        createdAtEl.textContent = formatDate(comment.created_at, 'Unbekannt');
-        postedAtEl.textContent = formatDate(comment.posted_at, 'Noch nicht veroeffentlicht');
-        failedAtEl.textContent = formatDate(comment.failed_at, 'Nicht fehlgeschlagen');
+        createdAtEl.textContent = formatDateTime(comment.created_at, 'Unbekannt');
+        postedAtEl.textContent = formatDateTime(comment.posted_at, 'Noch nicht veroeffentlicht');
+        failedAtEl.textContent = formatDateTime(comment.failed_at, 'Nicht fehlgeschlagen');
         externalIdEl.textContent = comment.mymoment_comment_id || 'Noch keine externe ID';
         errorEl.textContent = comment.error_message || '—';
 
@@ -292,9 +292,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         articleTitleEl.textContent = comment.article_title || 'Unbekannter Artikel';
         articleAuthorEl.textContent = comment.article_author || 'Unbekannte*r Autor*in';
-        articleScrapedAtEl.textContent = formatDate(comment.article_scraped_at, 'Unbekannt');
-        articlePublishedAtEl.textContent = formatDate(comment.article_published_at, 'Nicht erfasst');
-        articleEditedAtEl.textContent = formatDate(comment.article_edited_at, 'Nicht erfasst');
+        articleScrapedAtEl.textContent = formatDateTime(comment.article_scraped_at, 'Unbekannt');
+        articlePublishedAtEl.textContent = formatDateTime(comment.article_published_at, 'Nicht erfasst');
+        articleEditedAtEl.textContent = formatDateTime(comment.article_edited_at, 'Nicht erfasst');
         articleMetaEl.textContent = formatArticleMeta(comment);
         articleContentEl.textContent = comment.article_content || 'Kein Artikelinhalt erfasst.';
         articleRawHtmlEl.textContent = comment.article_raw_html || 'Kein Roh-HTML erfasst.';

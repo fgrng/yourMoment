@@ -9,7 +9,7 @@ import {
     fetchOptions,
     safeParseJson,
     extractErrorMessage,
-    formatDate,
+    formatDateTime,
     formatProviderLabel
 } from './utils.js';
 
@@ -364,7 +364,7 @@ function renderComments(comments) {
                             ${loginMeta}
                         </div>
                     </div>
-                    <small class="text-muted text-end">${formatDate(comment.created_at, 'Unbekannt')}</small>
+                    <small class="text-muted text-end">${formatDateTime(comment.created_at, 'Unbekannt')}</small>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-3">Autor: ${escapeHtml(comment.article_author || 'Unbekannt')}</p>
@@ -466,15 +466,15 @@ function buildGenerationMeta(comment) {
 
 function buildPostingMeta(comment) {
     if (comment.status === 'posted') {
-        return `Veroeffentlicht: ${formatDate(comment.posted_at, 'Unbekannt')}`;
+        return `Veroeffentlicht: ${formatDateTime(comment.posted_at, 'Unbekannt')}`;
     }
     if (comment.status === 'posting') {
         return 'Veroeffentlichung laeuft';
     }
     if (comment.status === 'failed') {
-        return `Fehlgeschlagen: ${formatDate(comment.failed_at, 'Unbekannt')}`;
+        return `Fehlgeschlagen: ${formatDateTime(comment.failed_at, 'Unbekannt')}`;
     }
-    return `Artikel-Snapshot: ${formatDate(comment.article_scraped_at, 'Unbekannt')}`;
+    return `Artikel-Snapshot: ${formatDateTime(comment.article_scraped_at, 'Unbekannt')}`;
 }
 
 async function handlePostComment(event) {
@@ -521,10 +521,10 @@ async function assertOk(response, message) {
 
 function formatLastActivity(process) {
     if (process.stopped_at) {
-        return `Gestoppt: ${formatDate(process.stopped_at, 'Nicht verfuegbar')}`;
+        return `Gestoppt: ${formatDateTime(process.stopped_at, 'Nicht verfuegbar')}`;
     }
     if (process.started_at) {
-        return `Gestartet: ${formatDate(process.started_at, 'Nicht verfuegbar')}`;
+        return `Gestartet: ${formatDateTime(process.started_at, 'Nicht verfuegbar')}`;
     }
-    return `Erstellt: ${formatDate(process.created_at, 'Nicht verfuegbar')}`;
+    return `Erstellt: ${formatDateTime(process.created_at, 'Nicht verfuegbar')}`;
 }

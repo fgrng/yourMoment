@@ -13,6 +13,7 @@ Settings are validated using Pydantic for type safety.
 import os
 from pathlib import Path
 from typing import Literal, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -45,6 +46,11 @@ class AppSettings(BaseSettings):
     BASE_URL: str = Field(
         default="http://localhost:8000",
         description="Base URL for the application"
+    )
+
+    APP_TIMEZONE: str = Field(
+        default="Europe/Zurich",
+        description="IANA time zone in which times are shown to users"
     )
 
     # Server configuration
@@ -81,6 +87,16 @@ class AppSettings(BaseSettings):
         environment = info.data.get("ENVIRONMENT", "development")
         if environment == "production" and v == "insecure-dev-key-change-in-production":
             raise ValueError("SECRET_KEY must be set to a secure value in production")
+        return v
+
+    @field_validator("APP_TIMEZONE")
+    @classmethod
+    def validate_app_timezone(cls, v: str) -> str:
+        """Ensure APP_TIMEZONE names a known IANA time zone."""
+        try:
+            ZoneInfo(v)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"APP_TIMEZONE '{v}' is not a known IANA time zone") from exc
         return v
 
     model_config = SettingsConfigDict(

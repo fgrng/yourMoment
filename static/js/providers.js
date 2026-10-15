@@ -5,7 +5,7 @@
 
 import {
     escapeHtml,
-    formatDate,
+    formatDateTime,
     formatProviderLabel,
     fetchOptions,
     showLoadingState,
@@ -116,7 +116,7 @@ function renderProviders(items) {
                             ${provider.is_active ? 'Aktiv' : 'Inaktiv'}
                         </span>
                     </div>
-                    <small class="text-muted text-end">${formatDate(provider.created_at)}</small>
+                    <small class="text-muted text-end">${formatDateTime(provider.created_at)}</small>
                 </div>
                 <div class="card-body">
                     <div class="mb-2">
