@@ -2,7 +2,7 @@
 yourMoment services package.
 
 This package contains all business logic services for the yourMoment application,
-including authentication, credential management, LLM integration, web scraping,
+including authentication, credential management, LLM integration,
 monitoring, and prompt template management.
 """
 
@@ -12,9 +12,7 @@ from .mymoment_credentials_service import (
     MyMomentCredentialsService,
     MyMomentCredentialsServiceError
 )
-from .mymoment_session_service import MyMomentSessionService
 from .llm_service import LLMProviderService, LLMProviderError
-from .scraper_service import ScraperService, ScrapingError, SessionContext
 from .monitoring_service import MonitoringService
 from .prompt_service import (
     PromptService,
@@ -45,17 +43,9 @@ __all__ = [
     "MyMomentCredentialsService",
     "MyMomentCredentialsServiceError",
 
-    # MyMoment sessions
-    "MyMomentSessionService",
-
     # LLM providers
     "LLMProviderService",
     "LLMProviderError",
-
-    # Web scraping
-    "ScraperService",
-    "ScrapingError",
-    "SessionContext",
 
     # Monitoring
     "MonitoringService",

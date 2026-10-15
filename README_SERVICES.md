@@ -179,55 +179,18 @@ await session.commit()
 
 ---
 
-#### `MyMomentSessionService` (`mymoment_session_service.py`)
+#### `MyMomentSessionCookieStore` (`mymoment_session_service.py`)
 
-**Purpose**: Manage active myMoment platform sessions
+**Purpose**: Cookie store of the myMoment adapter (see `src/platforms/mymoment/`)
 
-**Key Methods:**
-- `create_session(login_id, session_data)` – Store session cookies/metadata
-- `get_session(session_id)` – Fetch active session
-- `get_sessions_by_login(login_id)` – List sessions for credential
-- `refresh_session(session_id, new_data)` – Update session expiration/cookies
-- `terminate_session(session_id)` – Close session
+**Methods:**
+- `load(account_id)` – Return the stored cookie jar of the account's usable session, or `None`
+- `save(account_id, data)` – Store the cookie jar and renew the session (replaces an unusable one)
+- `discard(account_id)` – Deactivate the account's sessions after myMoment rejected the credentials
 
-**Session Data:**
-- Encrypted session cookies
-- Expiration timestamps
-- Last activity tracking
-- Login credential association
+Each call opens its own short-lived DB session, so no DB connection is held while the adapter talks HTTP. Cookie data is stored encrypted in `MyMomentSession` rows.
 
----
-
-#### `ScraperService` (`scraper_service.py`)
-
-**Purpose**: Web scraping and myMoment platform interaction
-
-**Key Methods:**
-- `authenticate(username, password)` – Login to myMoment
-- `fetch_articles(session, filters)` – Retrieve articles from tabs
-- `fetch_article_details(session, article_id)` – Get full article content
-- `post_comment(session, article_id, comment_text)` – Submit comment
-- `fetch_tabs()` – Get available article categories/tabs
-- `validate_session(session)` – Check if session still authenticated
-
-**Configuration:**
-- Rate limiting (requests per second)
-- Timeout settings
-- Retry attempts and delays
-- User agent management
-
-**Context Management:**
-```python
-async with ScraperService() as scraper:
-    session = await scraper.authenticate(username, password)
-    articles = await scraper.fetch_articles(session, filters)
-    # Session automatically closed
-```
-
-**Exceptions:**
-- `ScrapingError` – General scraping failure
-- `SessionError` – Session invalid or expired
-- `AuthenticationError` – Login failed
+Login, cookie reuse, rate limiting and HTML parsing live in the myMoment adapter. Tasks and routers talk to platforms only through `src.platforms.connect` (ADR-0001).
 
 ---
 
@@ -347,9 +310,9 @@ MonitoringService ──────────────┐
     ↓                           ↓
 MyMomentCredentialsService  PromptService
     ↓                           ↓
-MyMomentSessionService      LLMProviderService
-    ↓                           ↓
-ScraperService ←────────────────┘
+platforms.connect()         LLMProviderService
+    ↓
+MyMomentAdapter → MyMomentSessionCookieStore
 ```
 
 ### Service Interactions
@@ -363,12 +326,11 @@ MonitoringService.start_process()
   → Dispatches Celery task
 
 Celery Task
-  → MyMomentSessionService.create_session()
-  → ScraperService.authenticate()
-  → ScraperService.fetch_articles()
+  → async with connect(account) as conn
+  → conn.list_articles(target) / conn.fetch_article(ref)
   → llm_service.generate_completion_standalone()
   → comment_service.validate_comment()
-  → ScraperService.post_comment()
+  → conn.post_comment(ref, text)
 ```
 
 ## Error Handling
@@ -392,9 +354,10 @@ BaseServiceError
     ├── UserAccessError
     └── TemplateAccessError
 
-ScrapingError (independent hierarchy)
-├── SessionError
-└── AuthenticationError
+PlatformError (src/platforms, independent hierarchy)
+├── PlatformAuthError
+├── PlatformUnavailable
+└── PlatformRejected
 ```
 
 ### Exception Handling Pattern
@@ -482,19 +445,10 @@ api_key = provider.api_key  # Returns encrypted blob
 ### Context Manager Usage
 
 ```python
-# ✅ Correct: Context manager for resources
-async with ScraperService() as scraper:
-    session = await scraper.authenticate(user, pass)
-    articles = await scraper.fetch_articles(session)
-    # Session automatically closed
-
-# ✅ Also correct: Manual cleanup
-scraper = ScraperService()
-try:
-    session = await scraper.authenticate(user, pass)
-    articles = await scraper.fetch_articles(session)
-finally:
-    await scraper.close_session(session)
+# ✅ Correct: one platform connection per `async with`
+async with connect(account) as conn:
+    articles = await conn.list_articles(target)
+    # Connection automatically closed
 ```
 
 ## Testing Services

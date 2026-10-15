@@ -1,8 +1,8 @@
 """Cookie persistence for the myMoment adapter.
 
 The adapter loads and saves the cookie jar of a platform account through a
-`CookieStore`. The serialized format matches what the ScraperService stored,
-so existing sessions stay usable.
+`CookieStore`. The serialized format is the one already stored in the
+MyMomentSession rows, so existing sessions stay usable.
 """
 
 from __future__ import annotations
