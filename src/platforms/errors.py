@@ -15,3 +15,7 @@ class PlatformUnavailable(PlatformError):
 
 class PlatformRejected(PlatformError):
     """The platform refuses the action (e.g. article deleted). Do not retry."""
+
+
+class InvalidTarget(ValueError):
+    """A target does not match its platform's target description; the message is shown to the user."""

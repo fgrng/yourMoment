@@ -9,7 +9,7 @@ scheduling, and duration enforcement capabilities.
 import uuid
 import logging
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Mapping, Optional
 from enum import Enum
 
 from sqlalchemy import select, and_, or_, func
@@ -23,6 +23,7 @@ from src.models.mymoment_login import MyMomentLogin
 from src.models.prompt_template import PromptTemplate
 from src.models.llm_provider import LLMProviderConfiguration
 from src.models.user import User
+from src.platforms import MYMOMENT, InvalidTarget, adapter_for_platform, validate_target
 
 logger = logging.getLogger(__name__)
 
@@ -185,12 +186,9 @@ class MonitoringService:
         self,
         user_id: uuid.UUID,
         name: str,
+        target: Mapping[str, str],
         description: Optional[str] = None,
-        category_filter: Optional[int] = None,
-        task_filter: Optional[int] = None,
         search_filter: Optional[str] = None,
-        tab_filter: Optional[str] = None,
-        sort_option: Optional[str] = None,
         max_duration_minutes: int = 60,
         login_ids: Optional[List[uuid.UUID]] = None,
         prompt_template_ids: Optional[List[uuid.UUID]] = None,
@@ -205,12 +203,9 @@ class MonitoringService:
         Args:
             user_id: User creating the process
             name: Process name
+            target: The process target, checked against the platform's target description
             description: Optional process description
-            category_filter: Optional myMoment category filter (by category ID)
-            task_filter: Optional myMoment task filter (by task ID)
-            search_filter: Optional search terms
-            tab_filter: Optional tab filter (new, popular, etc.)
-            sort_option: Optional sort criteria
+            search_filter: Optional search term, filters article titles
             max_duration_minutes: Maximum duration in minutes (FR-008)
             login_ids: List of myMoment login IDs to associate
             prompt_template_ids: List of prompt template IDs to associate
@@ -220,10 +215,13 @@ class MonitoringService:
             Created MonitoringProcess instance
 
         Raises:
+            InvalidTarget: If the target does not match the platform's target description
             ProcessValidationError: If validation fails
             ProcessOperationError: If creation fails
         """
         try:
+            validated_target = self._validate_target(target)
+
             # Validate user exists and is active
             user_stmt = select(User).where(
                 and_(User.id == user_id, User.is_active == True)
@@ -260,11 +258,8 @@ class MonitoringService:
                 user_id=user_id,
                 name=name,
                 description=description,
-                category_filter=category_filter,
-                task_filter=task_filter,
-                search_filter=search_filter,
-                tab_filter=tab_filter,
-                sort_option=sort_option,
+                target=validated_target,
+                search_filter=search_filter or None,
                 max_duration_minutes=max_duration_minutes,
                 llm_provider_id=validated_llm_provider_id,
                 status=ProcessStatus.CREATED,
@@ -307,7 +302,7 @@ class MonitoringService:
         except Exception as e:
             await self.db_session.rollback()
             logger.error(f"Failed to create monitoring process for user {user_id}: {e}")
-            if isinstance(e, (ProcessValidationError, ProcessOperationError)):
+            if isinstance(e, (InvalidTarget, ProcessValidationError, ProcessOperationError)):
                 raise
             raise ProcessOperationError(f"Process creation failed: {e}")
 
@@ -317,11 +312,8 @@ class MonitoringService:
         user_id: uuid.UUID,
         name: Optional[str] = None,
         description: Optional[str] = None,
-        category_filter: Optional[int] = None,
-        task_filter: Optional[int] = None,
+        target: Optional[Mapping[str, str]] = None,
         search_filter: Optional[str] = None,
-        tab_filter: Optional[str] = None,
-        sort_option: Optional[str] = None,
         max_duration_minutes: Optional[int] = None,
         login_ids: Optional[List[uuid.UUID]] = None,
         prompt_template_ids: Optional[List[uuid.UUID]] = None,
@@ -337,11 +329,8 @@ class MonitoringService:
             user_id: User ID for ownership validation
             name: New process name (optional)
             description: New process description (optional)
-            category_filter: New category filter (optional)
-            task_filter: New task filter (optional)
-            search_filter: New search filter (optional)
-            tab_filter: New tab filter (optional)
-            sort_option: New sort option (optional)
+            target: New target, replaces the stored one as a whole (optional)
+            search_filter: New search term; an empty string clears it (optional)
             max_duration_minutes: New max duration (optional)
             login_ids: New list of login IDs (optional)
             prompt_template_ids: New list of prompt template IDs (optional)
@@ -356,6 +345,9 @@ class MonitoringService:
             ProcessOperationError: If update fails
         """
         try:
+            # Checked first so an invalid target leaves the process untouched
+            validated_target = self._validate_target(target) if target is not None else None
+
             # Get existing process with ownership validation
             process = await self._get_process_with_associations(process_id, user_id)
 
@@ -377,17 +369,10 @@ class MonitoringService:
             if hide_comments is not None:
                 process.hide_comments = hide_comments
 
-            # Update filter fields
-            if category_filter is not None:
-                process.category_filter = category_filter
-            if task_filter is not None:
-                process.task_filter = task_filter
+            if validated_target is not None:
+                process.target = validated_target
             if search_filter is not None:
-                process.search_filter = search_filter
-            if tab_filter is not None:
-                process.tab_filter = tab_filter
-            if sort_option is not None:
-                process.sort_option = sort_option
+                process.search_filter = search_filter or None
 
             # Update LLM provider if provided
             if llm_provider_id is not None:
@@ -459,7 +444,7 @@ class MonitoringService:
             # Return fresh instance with all associations
             return await self._get_process_with_associations(process_id, user_id)
 
-        except ProcessValidationError:
+        except (InvalidTarget, ProcessValidationError):
             # Validation errors don't need rollback, just re-raise
             raise
         except ProcessOperationError:
@@ -668,12 +653,8 @@ class MonitoringService:
                 'last_activity_at': process.last_activity_at.isoformat() if process.last_activity_at else None,
                 'max_duration_minutes': process.max_duration_minutes,
                 'duration_exceeded': process.duration_exceeded,
-                'filters': {
-                    'category_filter': process.category_filter,
-                    'search_filter': process.search_filter,
-                    'tab_filter': process.tab_filter,
-                    'sort_option': process.sort_option
-                },
+                'target': process.target,
+                'search_filter': process.search_filter,
                 'associations': {
                     'login_count': len(process.get_associated_logins()),
                     'prompt_count': len(process.get_associated_prompts())
@@ -994,6 +975,14 @@ class MonitoringService:
             )
 
         return valid_ids
+
+    @staticmethod
+    def _validate_target(target: Mapping[str, str]) -> dict[str, str]:
+        """Check the target against the platform's description, offline.
+
+        Until the schema knows platform types, every process watches myMoment.
+        """
+        return validate_target(adapter_for_platform(MYMOMENT), target)
 
     async def _validate_llm_provider(
         self,

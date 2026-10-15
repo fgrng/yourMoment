@@ -17,9 +17,10 @@ from urllib.parse import urlencode, urljoin
 import aiohttp
 from bs4 import BeautifulSoup
 
-from src.platforms.errors import PlatformAuthError, PlatformRejected, PlatformUnavailable
+from src.platforms.errors import InvalidTarget, PlatformAuthError, PlatformRejected, PlatformUnavailable
 from src.platforms.mymoment import parsers
 from src.platforms.mymoment.cookies import CookieStore, restore_cookie_jar, serialize_cookie_jar
+from src.platforms.targets import check_target_shape
 from src.platforms.types import (
     ArticleContent,
     ArticleRef,
@@ -27,6 +28,7 @@ from src.platforms.types import (
     PlatformAccount,
     PostedComment,
     StudentRef,
+    TargetDimension,
     TargetOption,
     TargetValue,
 )
@@ -46,8 +48,12 @@ _HEADERS = {
 }
 _REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 _MAX_REDIRECTS = 5
-_TARGET_KEYS = {'category', 'arrangement', 'classroom'}
-_DEFAULT_CLASSROOM = 'alle'
+_TARGET_DESCRIPTION = (
+    TargetDimension(key='category', label='Kategorie'),
+    TargetDimension(key='arrangement', label='Schreibaufgabe'),
+    TargetDimension(key='classroom', label='Klasse', required=True),
+)
+_ALL_CLASSROOMS = 'alle'
 
 
 @dataclass(frozen=True)
@@ -75,6 +81,14 @@ class MyMomentAdapter:
         self._rate_limit_delay = rate_limit_delay
         self._timeout = timeout
         self._http_session_factory = http_session_factory
+
+    def describe_target(self) -> tuple[TargetDimension, ...]:
+        return _TARGET_DESCRIPTION
+
+    def check_target(self, target: Mapping[str, str]) -> None:
+        """A process must name its classroom: "alle" would watch every classroom the account sees."""
+        if target.get('classroom') == _ALL_CLASSROOMS:
+            raise InvalidTarget("Klasse „alle“ ist nicht erlaubt; bitte eine einzelne Klasse wählen")
 
     @asynccontextmanager
     async def connect(
@@ -114,13 +128,32 @@ class MyMomentConnection:
         self._csrf_token: Optional[str] = None
 
     async def list_targets(self) -> list[TargetOption]:
-        """The classrooms this account sees, read from the tabs of the article index."""
+        """
+        The values of every target dimension, as this account sees them.
+
+        Categories are fixed; arrangements come from the filter of the article
+        index, classrooms from its tabs. The tab "alle" is no classroom.
+        """
         page = await self._request('GET', f"{self._base_url}/articles/")
         if page.status != 200:
             raise PlatformRejected(f"myMoment answered {page.status} for the article index")
 
-        classrooms = [TargetValue(value=value, label=label) for value, label in parsers.parse_classroom_tabs(page.soup())]
-        return [TargetOption(key='classroom', label='Classroom', values=classrooms)]
+        soup = page.soup()
+        values = {
+            'category': [(str(category_id), name) for category_id, name in parsers.CATEGORY_MAPPING.items()],
+            'arrangement': parsers.parse_arrangement_options(soup),
+            'classroom': [
+                (value, label) for value, label in parsers.parse_classroom_tabs(soup) if value != _ALL_CLASSROOMS
+            ],
+        }
+        return [
+            TargetOption(
+                key=dimension.key,
+                label=dimension.label,
+                values=[TargetValue(value=value, label=label) for value, label in values[dimension.key]],
+            )
+            for dimension in _TARGET_DESCRIPTION
+        ]
 
     async def list_articles(self, target: Optional[Mapping[str, str]] = None) -> list[ArticleSummary]:
         """
@@ -131,7 +164,7 @@ class MyMomentConnection:
         Where a view does not show them, the filter value is what myMoment matched.
         """
         target = _validate_target(target or {})
-        classroom = target.get('classroom', _DEFAULT_CLASSROOM)
+        classroom = target.get('classroom', _ALL_CLASSROOMS)
         params = {'tab': classroom}
         if 'category' in target:
             params['kategorie'] = target['category']
@@ -397,12 +430,14 @@ class MyMomentConnection:
 
 
 def _validate_target(target: Mapping[str, str]) -> dict[str, str]:
-    """Reject targets myMoment cannot apply: unknown keys or malformed values."""
-    unknown = set(target) - _TARGET_KEYS
-    if unknown:
-        raise PlatformRejected(f"Unknown myMoment target keys: {sorted(unknown)}")
-    if not all(isinstance(value, str) for value in target.values()):
-        raise PlatformRejected(f"myMoment target values must be strings: {dict(target)}")
+    """Reject targets myMoment cannot apply: unknown keys or malformed values.
+
+    Without a classroom myMoment lists every classroom, so the target need not be complete.
+    """
+    try:
+        check_target_shape(_TARGET_DESCRIPTION, target, complete=False)
+    except InvalidTarget as e:
+        raise PlatformRejected(str(e)) from e
 
     classroom = target.get('classroom')
     if classroom is not None and classroom not in ('home', 'alle') and not is_number(classroom):

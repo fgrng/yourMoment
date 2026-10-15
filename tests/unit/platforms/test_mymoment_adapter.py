@@ -9,12 +9,16 @@ from datetime import datetime
 import pytest
 
 from src.platforms import (
+    MYMOMENT,
     ArticleRef,
+    InvalidTarget,
     PlatformAccount,
     PlatformAuthError,
     PlatformRejected,
     PlatformUnavailable,
     StudentRef,
+    adapter_for_platform,
+    validate_target,
 )
 from src.platforms.mymoment.adapter import MyMomentAdapter
 from tests.fixtures.stubs import AiohttpStubResponse, AiohttpStubSession
@@ -499,6 +503,20 @@ async def test_list_targets_raises_rejected_when_the_index_is_missing(adapter, h
             await connection.list_targets()
 
 
+async def test_list_targets_without_arrangement_filter_offers_no_arrangements(adapter, http, account):
+    queue_login(http)
+    http.queue_response(
+        "GET",
+        f"{MYMOMENT_BASE_URL}/articles/",
+        AiohttpStubResponse(status=200, body="<html><body><p>Keine Filter</p></body></html>"),
+    )
+
+    async with adapter.connect(account) as connection:
+        targets = await connection.list_targets()
+
+    assert {t.key: t.values for t in targets}["arrangement"] == []
+
+
 COMMENT_URL = f"{MYMOMENT_BASE_URL}/article/3170/comment/"
 
 
@@ -701,3 +719,23 @@ def _dashboard_row(category_cell: str = "<li>Unterhalten</li>", edited: str = "2
       <td>{edited}</td>
     </tr></tbody></table></div>
     """
+
+
+def test_target_labels_are_german(adapter):
+    assert [d.label for d in adapter.describe_target()] == ["Kategorie", "Schreibaufgabe", "Klasse"]
+
+
+def test_target_with_classroom_alle_is_rejected(adapter):
+    with pytest.raises(InvalidTarget, match="alle"):
+        validate_target(adapter, {"classroom": "alle"})
+
+
+def test_target_of_the_mymoment_platform_is_described_without_network():
+    adapter = adapter_for_platform(MYMOMENT)
+
+    assert [d.key for d in adapter.describe_target()] == ["category", "arrangement", "classroom"]
+
+
+def test_unknown_platform_has_no_adapter():
+    with pytest.raises(ValueError, match="wordpress"):
+        adapter_for_platform("wordpress")

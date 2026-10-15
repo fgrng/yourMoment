@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, List
 import uuid
 
-from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text, UUID, ForeignKey
+from sqlalchemy import JSON, Column, String, Boolean, DateTime, Integer, Text, UUID, ForeignKey
 from sqlalchemy.orm import relationship
 
 from src.models.base import BaseModel
@@ -40,11 +40,8 @@ class MonitoringProcess(BaseModel):
     hide_comments = Column(Boolean, nullable=False, default=False)  # Whether generated comments should be hidden
 
     # Monitoring criteria
-    category_filter = Column(Integer, nullable=True)  # myMoment category ID
-    task_filter = Column(Integer, nullable=True)  # myMoment task/Aufgabe ID
-    search_filter = Column(String(200), nullable=True)  # Search terms
-    tab_filter = Column(String(50), nullable=True)  # myMoment tab / class id
-    sort_option = Column(String(50), nullable=True)  # Sort criteria
+    target = Column(JSON, nullable=False, default=dict)  # Ziel: platform key -> value (ADR-0002)
+    search_filter = Column(String(200), nullable=True)  # Title search term, platform-neutral
 
     # Process control
     max_duration_minutes = Column(Integer, nullable=False, default=60)  # FR-008: Duration limits
@@ -148,22 +145,6 @@ class MonitoringProcess(BaseModel):
     def mymoment_login_ids(self) -> List[uuid.UUID]:
         """Get list of myMoment login IDs associated with this process."""
         return [mpl.mymoment_login_id for mpl in self.monitoring_process_logins if mpl.is_active]
-
-    @property
-    def target_filters(self) -> dict:
-        """Get target filters as a dictionary for API responses."""
-        filters = {}
-        if self.category_filter is not None:
-            filters['category'] = self.category_filter
-        if self.task_filter is not None:
-            filters['task'] = self.task_filter
-        if self.search_filter:
-            filters['search'] = self.search_filter
-        if self.tab_filter:
-            filters['tab'] = self.tab_filter
-        if self.sort_option:
-            filters['sort'] = self.sort_option
-        return filters if filters else None
 
     def get_associated_logins(self) -> List["MyMomentLogin"]:
         """Get all myMomentLogin credentials associated with this process."""
