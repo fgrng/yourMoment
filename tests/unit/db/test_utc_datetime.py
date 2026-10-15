@@ -35,7 +35,8 @@ async def test_saving_a_naive_value_fails(db_session):
     user = await create_user(db_session)
 
     with pytest.raises(StatementError):
-        await create_monitoring_process(db_session, user=user, started_at=datetime(2026, 7, 14, 7, 30))  # noqa: DTZ001
+        naive = datetime(2026, 7, 14, 7, 30)  # noqa: DTZ001
+        await create_monitoring_process(db_session, user=user, started_at=naive)
 
 
 async def test_value_in_another_timezone_is_saved_as_the_same_utc_instant(db_session):

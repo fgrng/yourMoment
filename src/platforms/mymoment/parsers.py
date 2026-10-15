@@ -214,7 +214,8 @@ def parse_student_articles(soup: BeautifulSoup) -> List[Dict[str, Any]]:
 def _parse_german_datetime(value: str) -> Optional[datetime]:
     """Parse "28.01.2026 um 09:24 Uhr" (myMoment local time) as UTC; None if the text has another form."""
     try:
-        local = datetime.strptime(value.replace(' um ', ' ').replace(' Uhr', ''), '%d.%m.%Y %H:%M')  # noqa: DTZ007
+        text = value.replace(' um ', ' ').replace(' Uhr', '')
+        local = datetime.strptime(text, '%d.%m.%Y %H:%M')  # noqa: DTZ007
     except ValueError:
         logger.debug(f"Could not parse myMoment date '{value}'")
         return None
