@@ -1,7 +1,7 @@
 """convert platform local times to UTC
 
-Revision ID: 2026101501
-Revises: 2026070601
+Revision ID: 2026101502
+Revises: 2026101501
 Create Date: 2026-10-15 00:00:00.000000
 
 myMoment shows times as Europe/Zurich wall-clock time without an offset.
@@ -19,8 +19,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "2026101501"
-down_revision = "2026070601"
+revision = "2026101502"
+down_revision = "2026101501"
 branch_labels = None
 depends_on = None
 

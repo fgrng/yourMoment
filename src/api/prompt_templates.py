@@ -168,11 +168,11 @@ async def get_prompt_templates(
         service = PromptService(session)
 
         # Convert enum to string if provided
-        category_filter = category.value if category else None
+        category_value = category.value if category else None
 
         templates = await service.list_templates(
             user_id=current_user.id,
-            category=category_filter,
+            category=category_value,
             limit=limit,
             active_only=True  # Only return active templates by default
         )

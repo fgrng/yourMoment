@@ -21,6 +21,7 @@ from src.api.error_utils import http_error
 from src.api.auth import get_current_user
 from src.config.database import get_session
 from src.models.user import User
+from src.platforms import InvalidTarget
 import logging
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,10 @@ logger = logging.getLogger(__name__)
 # Initialize router
 router = APIRouter(prefix="/monitoring-processes", tags=["Monitoring"])
 
+
+def _invalid_target_error(error: InvalidTarget) -> HTTPException:
+    """The target does not match the platform's target description; the message names what to fix."""
+    return http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid_target", str(error))
 
 
 @router.post("/create", status_code=status.HTTP_201_CREATED, response_model=MonitoringProcessResponse)
@@ -45,38 +50,12 @@ async def create_monitoring_process(
     try:
         service = MonitoringService(session)
 
-        target_filters = process_data.target_filters or {}
-        category_filter = target_filters.get("category")
-        if category_filter is None:
-            categories = target_filters.get("categories")
-            if isinstance(categories, list) and categories:
-                category_filter = categories[0]
-
-        task_filter = target_filters.get("task")
-        if task_filter is None:
-            tasks = target_filters.get("tasks")
-            if isinstance(tasks, list) and tasks:
-                task_filter = tasks[0]
-
-        tab_filter = target_filters.get("tab")
-        if tab_filter is None:
-            tabs = target_filters.get("tabs")
-            if isinstance(tabs, list) and tabs:
-                tab_filter = tabs[0]
-
-        # Validate that tab_filter is not "alle"
-        if tab_filter == "alle":
-            raise ProcessValidationError("Tab filter cannot be 'alle'. Please select a specific tab or class.")
-
         process = await service.create_process(
             user_id=current_user.id,
             name=process_data.name,
             description=process_data.description,
-            category_filter=category_filter,
-            task_filter=task_filter,
-            search_filter=target_filters.get("search"),
-            tab_filter=tab_filter,
-            sort_option=target_filters.get("sort"),
+            target=process_data.target,
+            search_filter=process_data.search,
             max_duration_minutes=process_data.max_duration_minutes,
             login_ids=process_data.mymoment_login_ids,
             prompt_template_ids=process_data.prompt_template_ids,
@@ -90,6 +69,8 @@ async def create_monitoring_process(
         # Convert to response format using model properties
         return MonitoringProcessResponse.model_validate(process)
 
+    except InvalidTarget as e:
+        raise _invalid_target_error(e)
     except ProcessValidationError as e:
         logger.warning(f"Process validation failed for user {current_user.id}: {e}")
         raise HTTPException(
@@ -222,30 +203,6 @@ async def update_monitoring_process(
     try:
         service = MonitoringService(session)
 
-        # Extract target filters from request
-        target_filters = process_data.target_filters or {}
-        category_filter = target_filters.get("category")
-        if category_filter is None:
-            categories = target_filters.get("categories")
-            if isinstance(categories, list) and categories:
-                category_filter = categories[0]
-
-        task_filter = target_filters.get("task")
-        if task_filter is None:
-            tasks = target_filters.get("tasks")
-            if isinstance(tasks, list) and tasks:
-                task_filter = tasks[0]
-
-        tab_filter = target_filters.get("tab")
-        if tab_filter is None:
-            tabs = target_filters.get("tabs")
-            if isinstance(tabs, list) and tabs:
-                tab_filter = tabs[0]
-
-        # Validate that tab_filter is not "alle"
-        if tab_filter == "alle":
-            raise ProcessValidationError("Tab filter cannot be 'alle'. Please select a specific tab or class.")
-
         # Build update kwargs with only provided fields
         update_kwargs = {}
         if process_data.name is not None:
@@ -265,18 +222,11 @@ async def update_monitoring_process(
         if process_data.hide_comments is not None:
             update_kwargs['hide_comments'] = process_data.hide_comments
 
-        # Add filter fields if provided
-        if category_filter is not None:
-            update_kwargs['category_filter'] = category_filter
-        if task_filter is not None:
-            update_kwargs['task_filter'] = task_filter
-        if process_data.target_filters is not None:
-            if 'search' in target_filters:
-                update_kwargs['search_filter'] = target_filters['search']
-            if tab_filter is not None:
-                update_kwargs['tab_filter'] = tab_filter
-            if 'sort' in target_filters:
-                update_kwargs['sort_option'] = target_filters['sort']
+        if process_data.target is not None:
+            update_kwargs['target'] = process_data.target
+        # An explicit null or empty search term clears it
+        if 'search' in process_data.model_fields_set:
+            update_kwargs['search_filter'] = process_data.search or ""
 
         # Update the process
         updated_process = await service.update_process(
@@ -289,6 +239,8 @@ async def update_monitoring_process(
 
         return MonitoringProcessResponse.model_validate(updated_process)
 
+    except InvalidTarget as e:
+        raise _invalid_target_error(e)
     except ProcessValidationError as e:
         logger.warning(f"Process validation failed for update {process_id}: {e}")
         raise http_error(

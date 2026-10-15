@@ -13,7 +13,7 @@ from alembic.operations import Operations
 
 pytestmark = pytest.mark.database
 
-MIGRATION = Path(__file__).parents[3] / "migrations" / "versions" / "2026101501_platform_local_times_to_utc.py"
+MIGRATION = Path(__file__).parents[3] / "migrations" / "versions" / "2026101502_platform_local_times_to_utc.py"
 
 
 def _migration():

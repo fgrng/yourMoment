@@ -10,7 +10,8 @@ import {
     safeParseJson,
     extractErrorMessage,
     formatProviderLabel,
-    formatDuration
+    formatDuration,
+    formatTarget
 } from './utils.js';
 
 let processes = [];
@@ -267,6 +268,10 @@ function renderProcesses(list) {
                                 ? '<span class="badge bg-secondary ms-1"><i class="bi bi-eye-slash"></i> Versteckt</span>'
                                 : ''}
                         </span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>Ziel:</strong>
+                        <div class="small">${formatTarget(process.target_display) || '<span class="text-muted">Kein Ziel</span>'}</div>
                     </div>
                     <div class="mb-2">
                         <strong>LLM-Anbieter:</strong>

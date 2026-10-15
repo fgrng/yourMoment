@@ -43,6 +43,17 @@ export function escapeAttribute(text) {
 // ============================================================================
 
 /**
+ * Format a monitoring process's target, e.g. "Klasse: 4711 · Schreibaufgabe: 10"
+ * @param {Array<{label: string, value: string}>} entries - target_display of the API response
+ * @returns {string} Escaped HTML; unset dimensions are left out
+ */
+export function formatTarget(entries) {
+    return (entries || [])
+        .map(entry => `${escapeHtml(entry.label)}: ${escapeHtml(entry.value)}`)
+        .join(' · ');
+}
+
+/**
  * Time zone in which times are shown (APP_TIMEZONE, from the base template)
  * @returns {string} IANA time zone name
  */

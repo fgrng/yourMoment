@@ -13,6 +13,7 @@ from sqlalchemy import select, and_
 
 from src.api.auth import get_optional_user, get_current_web_user
 from src.models.user import User
+from src.platforms import MYMOMENT, adapter_for_platform
 from src.config.database import get_session
 from src.config.settings import get_settings
 from src.services.auth_service import AuthService, AuthServiceValidationError, AuthServiceError
@@ -254,6 +255,14 @@ async def processes(request: Request, user: User = Depends(get_current_web_user)
     })
 
 
+def _target_description():
+    """The form's target fields; offline, so the form opens while the platform is unreachable.
+
+    Until accounts know their platform type, every process watches myMoment.
+    """
+    return adapter_for_platform(MYMOMENT).describe_target()
+
+
 @router.get("/processes/new", response_class=HTMLResponse)
 async def new_process(request: Request, user: User = Depends(get_current_web_user)):
     """Create new monitoring process page."""
@@ -262,7 +271,8 @@ async def new_process(request: Request, user: User = Depends(get_current_web_use
         "user": user,
         "current_user": user,
         "is_authenticated": True,
-        "process_id": None
+        "process_id": None,
+        "target_description": _target_description()
     })
 
 
@@ -274,7 +284,8 @@ async def edit_process(request: Request, process_id: str, user: User = Depends(g
         "user": user,
         "current_user": user,
         "is_authenticated": True,
-        "process_id": process_id
+        "process_id": process_id,
+        "target_description": _target_description()
     })
 
 

@@ -6,6 +6,7 @@ from datetime import timedelta
 
 import pytest
 
+from src.models.monitoring_process import MonitoringProcess
 from src.utils.datetimes import utcnow
 from tests.fixtures.factories import (
     create_llm_provider,
@@ -34,11 +35,8 @@ async def _create_process_bundle(db_session):
         mymoment_logins=[login_primary, login_secondary],
         prompt_templates=[prompt_primary, prompt_secondary],
         prompt_weights={prompt_secondary.id: 2.5},
-        category_filter=7,
-        task_filter=13,
+        target={"category": "7", "arrangement": "13", "classroom": "class-a"},
         search_filter="revision",
-        tab_filter="class-a",
-        sort_option="recent",
     )
     await db_session.refresh(process, ["monitoring_process_logins", "monitoring_process_prompts"])
     return {
@@ -98,7 +96,20 @@ async def test_duration_exceeded_and_expires_at_handle_running_datetimes(db_sess
     assert overdue_process.duration_exceeded is True
 
 
-async def test_target_filters_and_association_helpers_only_expose_active_links(db_session):
+async def test_target_and_search_term_are_stored_and_loaded(db_session):
+    bundle = await _create_process_bundle(db_session)
+    process_id = bundle["process"].id
+    db_session.expunge_all()
+
+    stored = await db_session.get(MonitoringProcess, process_id)
+
+    assert (stored.target, stored.search_filter) == (
+        {"category": "7", "arrangement": "13", "classroom": "class-a"},
+        "revision",
+    )
+
+
+async def test_association_helpers_only_expose_active_links(db_session):
     bundle = await _create_process_bundle(db_session)
     process = bundle["process"]
     login_primary, login_secondary = bundle["logins"]
@@ -109,13 +120,6 @@ async def test_target_filters_and_association_helpers_only_expose_active_links(d
     prompt_link_map = {p.prompt_template_id: p for p in process.monitoring_process_prompts}
     prompt_link_secondary = prompt_link_map[prompt_secondary.id]
 
-    assert process.target_filters == {
-        "category": 7,
-        "task": 13,
-        "search": "revision",
-        "tab": "class-a",
-        "sort": "recent",
-    }
     assert login_link_primary.is_valid_association is True
     assert prompt_link_secondary.effective_weight == 2.5
 

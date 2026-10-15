@@ -2,9 +2,10 @@
 
 import uuid
 from datetime import datetime
-from typing import Optional, List
+from typing import Any, Optional, List
 
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, computed_field, field_validator
+from src.platforms import MYMOMENT, TargetEntry, adapter_for_platform, label_target
 from src.validators.password import validate_password
 
 
@@ -138,7 +139,8 @@ class MonitoringProcessCreate(BaseModel):
     description: Optional[str] = Field(None, max_length=500, description="Process description")
     max_duration_minutes: int = Field(..., ge=1, le=1440, description="Maximum duration in minutes (1-1440)")
     llm_provider_id: uuid.UUID = Field(..., description="LLM provider to use for comment generation")
-    target_filters: Optional[dict] = Field(None, description="Article filtering configuration")
+    target: dict[str, Any] = Field(..., description="Ziel: platform key -> value, checked against the platform's target description")
+    search: Optional[str] = Field(None, max_length=200, description="Search term, filters article titles")
     prompt_template_ids: list[uuid.UUID] = Field(..., min_items=1, description="List of prompt template IDs to use")
     mymoment_login_ids: list[uuid.UUID] = Field(..., min_items=1, description="List of myMoment login IDs to use")
     generate_only: bool = Field(default=True, description="If true, only generate comments; if false, also post to myMoment")
@@ -151,7 +153,8 @@ class MonitoringProcessUpdate(BaseModel):
     description: Optional[str] = Field(None, max_length=500, description="Process description")
     max_duration_minutes: Optional[int] = Field(None, ge=1, le=1440, description="Maximum duration in minutes (1-1440)")
     llm_provider_id: Optional[uuid.UUID] = Field(None, description="LLM provider to use for comment generation")
-    target_filters: Optional[dict] = Field(None, description="Article filtering configuration")
+    target: Optional[dict[str, Any]] = Field(None, description="Ziel; replaces the stored one as a whole")
+    search: Optional[str] = Field(None, max_length=200, description="Search term; null or empty clears it")
     prompt_template_ids: Optional[list[uuid.UUID]] = Field(None, min_items=1, description="List of prompt template IDs to use")
     mymoment_login_ids: Optional[list[uuid.UUID]] = Field(None, min_items=1, description="List of myMoment login IDs to use")
     generate_only: Optional[bool] = Field(None, description="If true, only generate comments; if false, also post to myMoment")
@@ -172,13 +175,21 @@ class MonitoringProcessResponse(BaseModel):
     stopped_at: Optional[datetime] = Field(None, description="When process was stopped")
     expires_at: Optional[datetime] = Field(None, description="When process will automatically stop")
     llm_provider_id: Optional[uuid.UUID] = Field(None, description="LLM provider used for comment generation")
-    target_filters: Optional[dict] = Field(None, description="Article filtering configuration")
+    target: dict[str, str] = Field(..., description="Ziel: platform key -> value")
+    search: Optional[str] = Field(None, validation_alias="search_filter", description="Search term, filters article titles")
     prompt_template_ids: list[uuid.UUID] = Field(..., description="List of prompt template IDs")
     mymoment_login_ids: list[uuid.UUID] = Field(..., description="List of myMoment login IDs")
     generate_only: bool = Field(..., description="If true, only generate comments; if false, also post to myMoment")
     hide_comments: bool = Field(..., description="If true, generated comments will be hidden on myMoment")
     created_at: Optional[datetime] = Field(None, description="Creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+
+    @computed_field(description="Ziel for display: dimension labels of the target description and raw values")
+    @property
+    def target_display(self) -> list[TargetEntry]:
+        # Offline, so list and detail view load while the platform is unreachable.
+        # Until accounts know their platform type, every process watches myMoment.
+        return list(label_target(adapter_for_platform(MYMOMENT), self.target))
 
 
 class ProcessStartRequest(BaseModel):
@@ -339,22 +350,23 @@ class TargetValueResponse(BaseModel):
     """One value a target dimension can take."""
     model_config = ConfigDict(from_attributes=True)
 
-    value: str = Field(..., description="Value as used in the target (e.g., 'home', 'alle', '38')")
-    label: str = Field(..., description="Label the platform shows (e.g., 'Meine', 'Alle', 'Dummy Klasse 01')")
+    value: str = Field(..., description="Value as used in the target (e.g., 'home', '7', '38')")
+    label: str = Field(..., description="Label the platform shows (e.g., 'Meine', 'Informieren', 'Dummy Klasse 01')")
 
 
 class TargetOptionResponse(BaseModel):
-    """One selectable target dimension of a platform account."""
+    """One dimension of the target description with the values a platform account sees."""
     model_config = ConfigDict(from_attributes=True)
 
     key: str = Field(..., description="Key in the target (e.g., 'classroom')")
     label: str = Field(..., description="Display name of the dimension")
+    required: bool = Field(..., description="Whether every target must name a value of this dimension")
     values: list[TargetValueResponse] = Field(..., description="Selectable values")
 
 
 class TargetListResponse(BaseModel):
-    """Response model for the target options of a platform account."""
-    items: list[TargetOptionResponse] = Field(..., description="Selectable target dimensions")
+    """Response model for the target description of a platform account, with its values."""
+    items: list[TargetOptionResponse] = Field(..., description="Target dimensions in display order")
 
 
 # === Comment Schemas ===

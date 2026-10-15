@@ -76,47 +76,30 @@
                     </div>
 
                     <div class="mt-3">
-                        <label class="form-label">Filter für myMoment Artikel</label>
+                        <label class="form-label">
+                            Ziel des Prozesses
+                            <span id="targetLoadingIndicator" class="spinner-border spinner-border-sm ms-2" style="display: none;" role="status">
+                                <span class="visually-hidden">Wird geladen …</span>
+                            </span>
+                        </label>
                         <div class="row g-2">
+                            {% for dimension in target_description %}
                             <div class="col-md-3">
-                                <label for="tabFilter" class="form-label small">
-                                    Tab
-                                    <span id="tabLoadingIndicator" class="spinner-border spinner-border-sm ms-2" style="display: none;" role="status">
-                                        <span class="visually-hidden">Wird geladen …</span>
-                                    </span>
+                                <label for="target-{{ dimension.key }}" class="form-label small">
+                                    {{- dimension.label }}{% if dimension.required %} <span class="text-danger">*</span>{% endif %}
                                 </label>
-                                <select id="tabFilter" class="form-select" disabled>
-                                    <option value="">Wähle Zugangsdaten aus</option>
-                                </select>
-                                <div class="form-text" id="tabFilterHelp">Wähle myMoment-Zugangsdaten, um verfügbare Klasse zu laden</div>
-                            </div>
-                            <div class="col-md-3">
-                                <label for="categoryFilter" class="form-label small">Kategorie</label>
-                                <select id="categoryFilter" class="form-select">
-                                    <option value="">Alle Kategorien</option>
-                                    <option value="4">Anleiten</option>
-                                    <option value="14">Berichten</option>
-                                    <option value="5">Erklären</option>
-                                    <option value="6">Fragen</option>
-                                    <option value="7">Informieren</option>
-                                    <option value="8">Überzeugen</option>
-                                    <option value="9">Unterhalten</option>
+                                <select id="target-{{ dimension.key }}" class="form-select" data-target-key="{{ dimension.key }}" data-target-label="{{ dimension.label }}" data-target-required="{{ 'true' if dimension.required else 'false' }}">
+                                    <option value="">{{ 'Bitte auswählen' if dimension.required else 'Alle' }}</option>
                                 </select>
                             </div>
-                            <div class="col-md-3">
-                                <label for="taskFilter" class="form-label small">Schreibaufgabe</label>
-                                <select id="taskFilter" class="form-select">
-                                    <option value="">Alle Aufgaben</option>
-                                    <option value="4">Fiktionaler Dialog zwischen zwei Gegenständen</option>
-                                    <option value="10">Wo ist Hugo? (Anleitung schreiben)</option>
-                                </select>
-                            </div>
+                            {% endfor %}
                             <div class="col-md-3">
                                 <label for="searchFilter" class="form-label small">Suchbegriff</label>
-                                <input type="text" id="searchFilter" class="form-control" placeholder="Stichwörter" disabled>
-                                <div class="form-text">Optionale Filter, um Artikel mit bestimmten Titeln auf myMoment anzusteuern (derzeit nicht verfügbar)</div>
+                                <input type="text" id="searchFilter" class="form-control" placeholder="Stichwörter" maxlength="200">
+                                <div class="form-text">Optional: nur Artikel, deren Titel den Begriff enthält (Groß-/Kleinschreibung egal)</div>
                             </div>
                         </div>
+                        <div class="form-text" id="targetHelp">Wähle myMoment-Zugangsdaten, um die verfügbaren Werte zu laden</div>
                     </div>
 
                     <hr>
@@ -201,19 +184,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     const providerSelect = document.getElementById('llmProvider');
     const promptSelect = document.getElementById('promptTemplates');
     const loginSelect = document.getElementById('loginIds');
-    const categoryFilter = document.getElementById('categoryFilter');
-    const taskFilter = document.getElementById('taskFilter');
-    const tabFilter = document.getElementById('tabFilter');
-    const tabLoadingIndicator = document.getElementById('tabLoadingIndicator');
-    const tabFilterHelp = document.getElementById('tabFilterHelp');
+    const targetSelects = Array.from(document.querySelectorAll('[data-target-key]'));
+    const targetLoadingIndicator = document.getElementById('targetLoadingIndicator');
+    const targetHelp = document.getElementById('targetHelp');
     const searchFilter = document.getElementById('searchFilter');
     const submitBtn = document.getElementById('submitBtn');
     const loadingState = document.getElementById('loadingState');
     const formContainer = document.getElementById('formContainer');
     const defaultSubmitLabel = submitBtn.innerHTML;
-
-    let currentTabValue = null;
-    let loadedTabs = [];
 
     try {
         await loadSupportingData();
@@ -234,16 +212,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         const selectedCredentials = Array.from(loginSelect.selectedOptions).map(opt => opt.value);
 
         if (selectedCredentials.length > 0) {
-            // Use the first selected credential to load tabs
-            const firstCredentialId = selectedCredentials[0];
-            await loadTabsForCredential(firstCredentialId);
+            // The first selected credential fills the fields of the target
+            await loadTargetValues(selectedCredentials[0]);
         } else {
-            // Reset tab selector if no credentials selected
-            tabFilter.disabled = true;
-            tabFilter.innerHTML = '<option value="">Wähle zuerst Zugangsdaten aus</option>';
-            tabFilterHelp.textContent = 'Wähle myMoment-Zugangsdaten, um verfügbare Tabs zu laden';
-            currentTabValue = null;
-            loadedTabs = [];
+            targetHelp.textContent = 'Wähle myMoment-Zugangsdaten, um die verfügbaren Werte zu laden';
         }
     });
 
@@ -329,20 +301,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         maxDurationInput.value = process.max_duration_minutes || '';
         providerSelect.value = process.llm_provider_id || '';
 
-        // Parse target_filters
-        const filters = process.target_filters || {};
-        if (filters.category) {
-            categoryFilter.value = filters.category;
-        }
-        if (filters.task) {
-            taskFilter.value = filters.task;
-        }
-        if (filters.search) {
-            searchFilter.value = filters.search;
-        }
-
-        // Store the tab value to restore after loading tabs
-        currentTabValue = filters.tab || null;
+        // Show the stored target until the live values arrive; it stays if loading them fails
+        const target = process.target || {};
+        targetSelects.forEach(select => fillTargetSelect(select, [], target[select.dataset.targetKey] || ''));
+        searchFilter.value = process.search || '';
 
         selectValues(promptSelect, process.prompt_template_ids || []);
         selectValues(loginSelect, process.mymoment_login_ids || []);
@@ -355,24 +317,14 @@ document.addEventListener('DOMContentLoaded', async function() {
         const hideCommentsCheckbox = document.getElementById('hideCommentsCheckbox');
         hideCommentsCheckbox.checked = process.hide_comments !== undefined ? process.hide_comments : false;
 
-        // Pre-populate tab selector with current value if exists
-        if (currentTabValue) {
-            tabFilter.innerHTML = `<option value="${currentTabValue}" selected>Aktuell: ${currentTabValue}</option>`;
-            tabFilter.disabled = false;
-            tabFilterHelp.textContent = 'Verfügbare Tabs werden geladen …';
-        }
-
         // Show form immediately
         loadingState.style.display = 'none';
         formContainer.style.display = 'flex';
 
-        // Load tabs asynchronously in the background (non-blocking)
+        // Load the target values in the background (non-blocking)
         const selectedCredentials = process.mymoment_login_ids || [];
         if (selectedCredentials.length > 0) {
-            loadTabsForCredential(selectedCredentials[0]).catch(error => {
-                console.error('Error loading tabs in background:', error);
-                tabFilterHelp.textContent = 'Tabs konnten nicht geladen werden. Du kannst trotzdem mit dem aktuellen Wert speichern.';
-            });
+            loadTargetValues(selectedCredentials[0]);
         }
     }
 
@@ -433,24 +385,18 @@ document.addEventListener('DOMContentLoaded', async function() {
             return null;
         }
 
-        // Build target filters
-        const targetFilters = {};
-        const category = categoryFilter.value.trim();
-        if (category) {
-            targetFilters.category = parseInt(category, 10);
-        }
-        const task = taskFilter.value.trim();
-        if (task) {
-            targetFilters.task = parseInt(task, 10);
-        }
-        const tab = tabFilter.value;
-        if (tab) {
-            targetFilters.tab = tab;
+        // Build the target from its fields: an empty optional field means "all" and gives no key
+        const target = {};
+        for (const select of targetSelects) {
+            const value = select.value.trim();
+            if (value) {
+                target[select.dataset.targetKey] = value;
+            } else if (select.dataset.targetRequired === 'true') {
+                showAlert(`Bitte „${select.dataset.targetLabel}“ auswählen.`, 'warning');
+                return null;
+            }
         }
         const search = searchFilter.value.trim();
-        if (search) {
-            targetFilters.search = search;
-        }
 
         const generateOnly = document.getElementById('generateOnlyCheckbox').checked;
         const hideComments = document.getElementById('hideCommentsCheckbox').checked;
@@ -462,7 +408,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             llm_provider_id: providerId,
             prompt_template_ids: promptIds,
             mymoment_login_ids: loginIds,
-            target_filters: targetFilters,
+            target,
+            search: search || null,
             generate_only: generateOnly,
             hide_comments: hideComments
         };
@@ -522,76 +469,40 @@ document.addEventListener('DOMContentLoaded', async function() {
         submitBtn.innerHTML = defaultSubmitLabel;
     }
 
-    async function loadTabsForCredential(credentialId) {
-        // Show loading indicator (but keep form enabled)
-        tabLoadingIndicator.style.display = 'inline-block';
-        const previousValue = tabFilter.value || currentTabValue;
-
-        // Keep the current selection visible while loading
-        if (previousValue && tabFilter.options.length === 1) {
-            // We already have a pre-populated value, just update help text
-            tabFilterHelp.textContent = 'Verfügbare Tabs werden geladen …';
-        } else {
-            tabFilter.disabled = true;
-            tabFilter.innerHTML = '<option value="">Tabs werden geladen …</option>';
-            tabFilterHelp.textContent = 'Verfügbare Tabs werden von myMoment abgerufen …';
-        }
+    async function loadTargetValues(credentialId) {
+        targetLoadingIndicator.style.display = 'inline-block';
+        targetHelp.textContent = 'Verfügbare Werte werden von myMoment abgerufen …';
 
         try {
             const response = await fetch(`/api/v1/mymoment-articles/${credentialId}/targets`, fetchOptions());
-
             if (!response.ok) {
-                throw new Error(`Tabs konnten nicht geladen werden (HTTP ${response.status})`);
+                throw new Error(`Werte konnten nicht geladen werden (HTTP ${response.status})`);
             }
 
             const data = await response.json();
-            const classrooms = (data.items || []).find(option => option.key === 'classroom');
-            loadedTabs = (classrooms ? classrooms.values : []).map(v => ({ id: v.value, name: v.label }));
-
-            // Populate tab selector
-            loadedTabs.forEach(tab => {
-                const option = document.createElement('option');
-                option.value = tab.id;
-                option.textContent = tab.name;
-                if (option.value == "alle") {
-                    option.disabled = true;
-                }
-                tabFilter.appendChild(option);
+            const valuesByKey = Object.fromEntries((data.items || []).map(item => [item.key, item.values]));
+            targetSelects.forEach(select => {
+                fillTargetSelect(select, valuesByKey[select.dataset.targetKey] || [], select.value, 'nicht mehr verfügbar');
             });
-
-            // Restore previous selection if it exists in the new tabs
-            if (previousValue) {
-                const tabExists = loadedTabs.some(tab => tab.id === previousValue);
-                if (tabExists) {
-                    tabFilter.value = previousValue;
-                } else if (previousValue) {
-                    // Tab no longer available, but preserve it as an option
-                    const option = document.createElement('option');
-                    option.value = previousValue;
-                    option.textContent = `${previousValue} (nicht mehr verfügbar)`;
-                    option.selected = true;
-                    tabFilter.appendChild(option);
-                }
-            }
-
-            tabFilter.disabled = false;
-            tabFilterHelp.textContent = `${loadedTabs.length} Tab${loadedTabs.length !== 1 ? 's' : ''} verfügbar`;
-
+            targetHelp.textContent = 'Ein leeres Feld ohne * beobachtet alle Werte.';
         } catch (error) {
-            console.error('Error loading tabs:', error);
-
-            // If we had a pre-populated value, keep it
-            if (previousValue) {
-                tabFilter.innerHTML = `<option value="${previousValue}" selected>${previousValue} (Aktualisierung fehlgeschlagen)</option>`;
-                tabFilter.disabled = false;
-            } else {
-                tabFilter.innerHTML = '<option value="">Tabs konnten nicht geladen werden</option>';
-            }
-
-            tabFilterHelp.innerHTML = '<span class="text-danger">Tabs konnten nicht geladen werden. Du kannst trotzdem mit dem aktuellen Wert speichern.</span>';
+            // The fields keep their current values, so the process can still be saved
+            console.error('Error loading target values:', error);
+            targetHelp.innerHTML = '<span class="text-danger">Werte konnten nicht geladen werden. Du kannst trotzdem mit den aktuellen Werten speichern.</span>';
         } finally {
-            tabLoadingIndicator.style.display = 'none';
+            targetLoadingIndicator.style.display = 'none';
         }
+    }
+
+    // Placeholder, then the offered values; a current value the platform no longer offers stays selectable
+    function fillTargetSelect(select, values, currentValue, missingNote) {
+        select.replaceChildren(select.options[0]);
+        values.forEach(value => select.appendChild(new Option(value.label, value.value)));
+        if (currentValue && !values.some(value => value.value === currentValue)) {
+            const label = missingNote ? `${currentValue} (${missingNote})` : currentValue;
+            select.appendChild(new Option(label, currentValue));
+        }
+        select.value = currentValue;
     }
 
     function formatProviderLabel(providerName) {

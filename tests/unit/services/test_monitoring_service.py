@@ -8,6 +8,7 @@ from src.services.monitoring_service import (
     ProcessStatus,
     ProcessValidationError,
 )
+from src.platforms import InvalidTarget, PlatformUnavailable
 from tests.fixtures.factories.users import create_user
 from tests.fixtures.factories.mymoment import create_mymoment_login
 from tests.fixtures.factories.prompts import create_user_prompt_template
@@ -39,6 +40,7 @@ async def test_create_process(db_session: AsyncSession):
     process = await service.create_process(
         user_id=user.id,
         name="Test Process",
+        target={"classroom": "4711"},
         login_ids=[login.id],
         prompt_template_ids=[prompt.id],
         llm_provider_id=provider.id
@@ -62,7 +64,7 @@ async def test_create_process_limit_exceeded(db_session: AsyncSession):
     await create_monitoring_process(db_session, user=user, status=ProcessStatus.RUNNING)
     
     with pytest.raises(ProcessValidationError, match="maximum concurrent process limit"):
-        await service.create_process(user_id=user.id, name="Too Many")
+        await service.create_process(user_id=user.id, name="Too Many", target={"classroom": "4711"})
 
 @pytest.mark.asyncio
 async def test_update_process(db_session: AsyncSession):
@@ -177,3 +179,98 @@ async def test_get_pipeline_status(db_session: AsyncSession):
     assert status["posted"] == 1
     assert status["failed"] == 2
     assert status["total"] == 7
+
+
+# --- Target (ADR-0002): checked against the myMoment description, no connection ---
+
+CLASSROOM_ONLY = {"classroom": "4711"}
+
+
+async def _create_with_target(db_session, target, **kwargs):
+    user = await create_user(db_session)
+    service = MonitoringService(db_session)
+    process = await service.create_process(user_id=user.id, name="Ziel", target=target, **kwargs)
+    return service, user, process
+
+
+@pytest.mark.asyncio
+async def test_create_process_stores_target_and_search(db_session: AsyncSession):
+    target = {"classroom": "4711", "category": "7", "arrangement": "12"}
+
+    _, _, process = await _create_with_target(db_session, target, search_filter="Rotpanda")
+
+    assert (process.target, process.search_filter) == (target, "Rotpanda")
+
+
+@pytest.mark.asyncio
+async def test_create_process_stores_an_empty_search_term_as_none(db_session: AsyncSession):
+    _, _, process = await _create_with_target(db_session, CLASSROOM_ONLY, search_filter="")
+
+    assert process.search_filter is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("target", "message"),
+    [
+        ({"classroom": "4711", "tab": "4711"}, "Unbekannte Angaben im Ziel: tab"),
+        ({"category": "7"}, "classroom"),
+        ({"classroom": "alle"}, "alle"),
+        ({"classroom": "4711", "category": ""}, "category"),
+    ],
+    ids=["unknown-key", "missing-classroom", "classroom-alle", "empty-value"],
+)
+async def test_create_process_rejects_an_invalid_target(db_session: AsyncSession, target, message):
+    user = await create_user(db_session)
+
+    with pytest.raises(InvalidTarget, match=message):
+        await MonitoringService(db_session).create_process(user_id=user.id, name="Ziel", target=target)
+
+
+@pytest.mark.asyncio
+async def test_create_process_saves_without_a_platform_connection(db_session: AsyncSession, fake_platform):
+    fake_platform.fail("connect", PlatformUnavailable("myMoment down"))
+
+    _, _, process = await _create_with_target(db_session, CLASSROOM_ONLY)
+
+    assert (process.target, fake_platform.connected_accounts) == (CLASSROOM_ONLY, [])
+
+
+@pytest.mark.asyncio
+async def test_update_process_replaces_the_target_as_a_whole(db_session: AsyncSession):
+    service, user, process = await _create_with_target(
+        db_session, {"classroom": "4711", "category": "7", "arrangement": "12"}
+    )
+
+    updated = await service.update_process(process.id, user_id=user.id, target={"classroom": "82"})
+
+    assert updated.target == {"classroom": "82"}
+
+
+@pytest.mark.asyncio
+async def test_update_process_without_target_keeps_it(db_session: AsyncSession):
+    service, user, process = await _create_with_target(db_session, {"classroom": "4711", "category": "7"})
+
+    updated = await service.update_process(process.id, user_id=user.id, name="Neu")
+
+    assert updated.target == {"classroom": "4711", "category": "7"}
+
+
+@pytest.mark.asyncio
+async def test_update_process_rejects_an_invalid_target_and_keeps_the_stored_one(db_session: AsyncSession):
+    service, user, process = await _create_with_target(db_session, CLASSROOM_ONLY)
+
+    with pytest.raises(InvalidTarget, match="alle"):
+        await service.update_process(process.id, user_id=user.id, target={"classroom": "alle"})
+
+    status = await service.get_process_status(process.id, user.id)
+    assert status["target"] == CLASSROOM_ONLY
+
+
+@pytest.mark.asyncio
+async def test_update_process_clears_the_search_term(db_session: AsyncSession):
+    service, user, process = await _create_with_target(db_session, CLASSROOM_ONLY, search_filter="Rotpanda")
+
+    updated = await service.update_process(process.id, user_id=user.id, search_filter="")
+
+    assert updated.search_filter is None

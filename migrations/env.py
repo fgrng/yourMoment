@@ -28,6 +28,12 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 target_metadata = Base.metadata
 
+
+def _database_url() -> str:
+    """The URL a caller set on the Alembic config, else the one from the settings."""
+    return config.attributes.get("database_url") or get_alembic_database_url()
+
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -45,7 +51,7 @@ def run_migrations_offline() -> None:
     Calls to context.execute() here emit the given string to the
     script output.
     """
-    url = get_alembic_database_url()
+    url = _database_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -68,7 +74,7 @@ def do_run_migrations(connection: Connection) -> None:
 async def run_async_migrations() -> None:
     """Run migrations in async mode."""
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = get_alembic_database_url()
+    configuration["sqlalchemy.url"] = _database_url()
 
     connectable = async_engine_from_config(
         configuration,
@@ -91,7 +97,7 @@ def run_migrations_online() -> None:
     # Always use sync engine for migrations
     from sqlalchemy import create_engine
 
-    database_url = get_alembic_database_url()
+    database_url = _database_url()
 
     connectable = create_engine(
         database_url,

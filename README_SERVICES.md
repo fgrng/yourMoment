@@ -126,7 +126,8 @@ await session.commit()
 **Purpose**: Complete lifecycle management for monitoring processes
 
 **Key Methods:**
-- `create_process(user_id, name, config)` – Create monitoring process with credentials/prompts
+- `create_process(user_id, name, target, ...)` – Create monitoring process with credentials/prompts; the target is checked offline via `validate_target` (raises `InvalidTarget`)
+- `update_process(process_id, user_id, target=..., ...)` – A given target replaces the stored one as a whole
 - `get_process(process_id, user_id)` – Fetch process with ownership check
 - `list_processes(user_id, filters, limit)` – List user's processes
 - `start_process(process_id, user_id)` – Initiate monitoring (dispatches Celery task)
@@ -191,6 +192,8 @@ await session.commit()
 Each call opens its own short-lived DB session, so no DB connection is held while the adapter talks HTTP. Cookie data is stored encrypted in `MyMomentSession` rows.
 
 Login, cookie reuse, rate limiting and HTML parsing live in the myMoment adapter. Tasks and routers talk to platforms only through `src.platforms.connect` (ADR-0001).
+
+Each adapter describes its target offline (`describe_target()`: dimensions with key, label, required flag; myMoment: `category`, `arrangement`, `classroom` required). `src.platforms.validate_target(adapter, target)` is the one check of a target: known keys, required keys present, non-empty string values, then the adapter's own rules (`check_target`; myMoment rejects classroom "alle"). It raises `InvalidTarget` and needs no connection; `adapter_for_platform(MYMOMENT)` returns the adapter for it (ADR-0002). Over a connection, `list_targets()` returns one option per dimension of the description with its current values (myMoment: categories from the adapter's fixed list, arrangements from the filter of the article index, classrooms from its tabs without "alle"). For display, `label_target(adapter, target)` returns the set dimensions as `TargetEntry(key, label, value)` in description order, unknown keys last with the raw key as label; also offline.
 
 ---
 
@@ -358,6 +361,8 @@ PlatformError (src/platforms, independent hierarchy)
 ├── PlatformAuthError
 ├── PlatformUnavailable
 └── PlatformRejected
+
+InvalidTarget (src/platforms, ValueError): a target does not match its platform's target description
 ```
 
 ### Exception Handling Pattern

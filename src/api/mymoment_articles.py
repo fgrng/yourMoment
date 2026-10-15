@@ -12,6 +12,7 @@ from src.api.schemas import (
     ArticleListResponse,
     TargetListResponse,
     TargetOptionResponse,
+    TargetValueResponse,
 )
 from src.api.auth import get_current_user
 from src.config.database import get_session
@@ -23,6 +24,7 @@ from src.platforms import (
     PlatformError,
     PlatformRejected,
     PlatformUnavailable,
+    adapter_for,
     connect,
 )
 from src.platforms.accounts import load_platform_account
@@ -119,21 +121,30 @@ async def get_targets(
     session: AsyncSession = Depends(get_session)
 ):
     """
-    Describe the target dimensions a platform account can choose from.
+    The target description of a platform account's platform, with the values the account sees.
 
-    For myMoment these are the classrooms: "home" (own articles), "alle"
-    and one entry per classroom of the account.
+    The form builds the fields of a target from it. For myMoment these are
+    category, arrangement and classroom; "alle" is never offered as classroom.
     """
     account = await _platform_account(mymoment_login_id, current_user.id, session)
 
     logger.info(f"User {current_user.id} listing targets for login {mymoment_login_id}")
     try:
         async with connect(account) as platform:
-            options = await platform.list_targets()
+            options = {option.key: option for option in await platform.list_targets()}
     except PlatformError as e:
         raise _platform_error(e, "list targets") from e
 
-    return TargetListResponse(items=[TargetOptionResponse.model_validate(option) for option in options])
+    return TargetListResponse(items=[
+        TargetOptionResponse(
+            key=dimension.key,
+            label=dimension.label,
+            required=dimension.required,
+            values=[TargetValueResponse.model_validate(value) for value in options[dimension.key].values]
+            if dimension.key in options else [],
+        )
+        for dimension in adapter_for(account).describe_target()
+    ])
 
 
 @router.get("/{mymoment_login_id}/article/{mymoment_article_id}", response_model=ArticleDetailResponse)

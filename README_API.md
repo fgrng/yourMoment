@@ -255,12 +255,12 @@ Die Perspektive von {article_author} ist besonders aufschlussreich.
   "prompt_template_ids": ["uuid3"],
   "llm_provider_id": "uuid4",
   "max_duration_minutes": 120,
-  "article_filters": {
-    "tabs": ["technology", "science"],
-    "keywords": ["AI", "machine learning"]
-  }
+  "target": {"classroom": "4711", "category": "7", "arrangement": "12"},
+  "search": "Rotpanda"
 }
 ```
+
+`target` is the process's **Ziel** (ADR-0002): keys and rules come from the platform's target description and are checked without a platform connection. For myMoment, `classroom` is required and may not be `alle`; `category` and `arrangement` are optional. An invalid target is answered with 422 (`invalid_target`). `PATCH /{id}` replaces `target` as a whole; `search` filters article titles, `null` or `""` clears it. Every response also carries `target_display`, the set dimensions as `key`, `label` (from the target description, offline) and the raw `value`, in description order; unset optional dimensions are left out, a key the description does not know is labelled with the raw key. List and detail view show it.
 
 **Process States**:
 - `CREATED` – Configured but not started
@@ -295,7 +295,7 @@ Die Perspektive von {article_author} ist besonders aufschlussreich.
 **Endpoints**:
 - `GET /index` – List articles (with pagination, filters)
 - `GET /{id}` – Get article details and content
-- `GET /targets` – List the target options of a platform account (myMoment: classrooms)
+- `GET /{login}/targets` – Target description of the account's platform with the values the account sees: per dimension `key`, `label`, `required`, `values` (myMoment: fixed categories, arrangements and classrooms read live; never classroom `alle`). The process form builds its target fields from it.
 
 **Filtering**:
 ```

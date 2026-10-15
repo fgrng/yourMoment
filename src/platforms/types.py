@@ -66,6 +66,24 @@ class ArticleSummary:
 
 
 @dataclass(frozen=True)
+class TargetDimension:
+    """One dimension of a platform's target: its key in the target mapping, a label and whether it is required."""
+
+    key: str
+    label: str
+    required: bool = False
+
+
+@dataclass(frozen=True)
+class TargetEntry:
+    """One set dimension of a stored target for display: its key, the dimension's label and the raw value."""
+
+    key: str
+    label: str
+    value: str
+
+
+@dataclass(frozen=True)
 class TargetValue:
     """One value a target dimension can take, with the label the platform shows."""
 
@@ -93,7 +111,7 @@ class PlatformConnection(Protocol):
     """An authenticated connection to one platform account."""
 
     async def list_targets(self) -> list[TargetOption]:
-        """Describe the target dimensions this account can choose from, with their values."""
+        """One option per dimension of the target description, in its order, with the values this account sees."""
         ...
 
     async def list_articles(self, target: Optional[Mapping[str, str]] = None) -> list[ArticleSummary]:
@@ -114,7 +132,19 @@ class PlatformConnection(Protocol):
 
 
 class PlatformAdapter(Protocol):
-    """Speaks to one platform type; `connect` opens and closes a connection."""
+    """Speaks to one platform type; `connect` opens and closes a connection.
+
+    `describe_target` and `check_target` work without a connection, so a
+    target can be checked while the platform is unreachable.
+    """
+
+    def describe_target(self) -> tuple[TargetDimension, ...]:
+        """The dimensions of this platform's target, in display order."""
+        ...
+
+    def check_target(self, target: Mapping[str, str]) -> None:
+        """Apply the platform's own rules to a target that matches the description; raise InvalidTarget."""
+        ...
 
     def connect(
         self, account: PlatformAccount, *, fresh_login: bool = False

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 import pytest
@@ -32,6 +33,16 @@ def _add_target_article(fake_platform, article_id, **kwargs):
     kwargs.setdefault("title", f"Sample Story {article_id}")
     kwargs.setdefault("category", "7")
     return fake_platform.add_article(article_id, extra={"classroom": "home"}, **kwargs)
+
+
+async def _run_discovery_task(task, process_id):
+    """Run the Celery entrypoint; any retry fails the test."""
+
+    def _retry(*, exc, countdown):
+        raise AssertionError(f"retry() should not have been called for {exc!r}")
+
+    task.retry = _retry
+    return await asyncio.to_thread(article_discovery.discover_articles.run.__func__, task, str(process_id))
 
 
 async def _comments_of(db_session, process_id):
@@ -75,7 +86,8 @@ async def test_discovery_creates_rows_and_skips_duplicates(db_session, db_engine
 
 async def test_discovery_creates_rows_only_for_the_process_target(db_session, db_engine, fake_platform):
     # Process target: classroom "home", category 7, arrangement 10
-    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"task_filter": 10}})
+    target = {"classroom": "home", "category": "7", "arrangement": "10"}
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"target": target}})
     await db_session.commit()
     fake_platform.add_article("1", title="Sample", category="7", extra={"classroom": "home", "arrangement": "10"})
     fake_platform.add_article("2", title="Sample", category="9", extra={"classroom": "home", "arrangement": "10"})
@@ -91,7 +103,7 @@ async def test_discovery_creates_rows_only_for_the_process_target(db_session, db
 async def test_discovery_stores_no_category_when_the_platform_reports_a_non_numeric_one(
     db_session, db_engine, fake_platform
 ):
-    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"category_filter": None}})
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"target": {"classroom": "home"}}})
     await db_session.commit()
     _add_target_article(fake_platform, "1", category="²")
 
@@ -102,8 +114,13 @@ async def test_discovery_stores_no_category_when_the_platform_reports_a_non_nume
     assert comment.article_category is None
 
 
-async def test_discovery_keeps_only_titles_with_the_search_term(db_session, db_engine, fake_platform):
-    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"search_filter": "rotpanda"}})
+@pytest.mark.parametrize(
+    ("search_filter", "kept_ids"), [("rotpanda", ["1"]), (None, ["1", "2"])], ids=["search-term", "no-search-term"]
+)
+async def test_discovery_keeps_only_titles_with_the_search_term(
+    db_session, db_engine, fake_platform, search_filter, kept_ids
+):
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"search_filter": search_filter}})
     await db_session.commit()
     _add_target_article(fake_platform, "1", title="Der Rotpanda")
     _add_target_article(fake_platform, "2", title="Der Eisbär")
@@ -111,7 +128,18 @@ async def test_discovery_keeps_only_titles_with_the_search_term(db_session, db_e
     task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
     await task._discover_articles_async(scenario["process"].id)
 
-    assert [c.mymoment_article_id for c in await _comments_of(db_session, scenario["process"].id)] == ["1"]
+    assert sorted(c.mymoment_article_id for c in await _comments_of(db_session, scenario["process"].id)) == kept_ids
+
+
+async def test_discovery_does_not_pass_the_search_term_to_the_platform(db_session, db_engine, fake_platform):
+    process = {"target": {"classroom": "home"}, "search_filter": "rotpanda"}
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": process})
+    await db_session.commit()
+
+    task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
+    await _run_discovery_task(task, scenario["process"].id)
+
+    assert fake_platform.listed_targets == [{"classroom": "home"}]
 
 
 async def test_discovery_creates_at_most_20_rows_per_login(db_session, db_engine, fake_platform):
@@ -126,8 +154,20 @@ async def test_discovery_creates_at_most_20_rows_per_login(db_session, db_engine
     assert result["discovered"] == 20
 
 
+async def test_discovery_passes_the_stored_target_unchanged_to_the_platform(db_session, db_engine, fake_platform):
+    target = {"classroom": "4711", "category": "7", "arrangement": "10"}
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"target": target}})
+    await db_session.commit()
+
+    task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
+    await _run_discovery_task(task, scenario["process"].id)
+
+    assert fake_platform.listed_targets == [target]
+
+
 async def test_discovery_without_classroom_does_not_contact_the_platform(db_session, db_engine, fake_platform):
-    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"tab_filter": None}})
+    # A process migrated from an empty tab_filter column has no classroom in its target
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"target": {"category": "7"}}})
     await db_session.commit()
     _add_target_article(fake_platform, "1")
 
