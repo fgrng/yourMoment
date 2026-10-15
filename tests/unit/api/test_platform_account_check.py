@@ -27,7 +27,6 @@ async def _check(db_session, user, login):
         credentials_id=login.id,
         current_user=user,
         service=MyMomentCredentialsService(db_session),
-        db=db_session,
     )
 
 

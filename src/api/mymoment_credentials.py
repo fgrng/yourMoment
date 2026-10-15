@@ -16,7 +16,7 @@ from src.api.schemas import (
 from src.config.database import get_session
 from src.models.user import User
 from src.platforms import PlatformAuthError, PlatformUnavailable, connect
-from src.platforms.accounts import load_platform_account
+from src.platforms.accounts import platform_account_from_login
 from src.services.mymoment_credentials_service import (
     MyMomentCredentialsService,
     MyMomentCredentialsServiceError,
@@ -390,8 +390,7 @@ async def validate_credentials(
 async def test_credentials(
     credentials_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    service: MyMomentCredentialsService = Depends(get_credentials_service),
-    db: AsyncSession = Depends(get_session)
+    service: MyMomentCredentialsService = Depends(get_credentials_service)
 ):
     """
     Test myMoment credentials by connecting to the platform.
@@ -413,9 +412,7 @@ async def test_credentials(
             normalized_error or "Credentials could not be validated."
         )
 
-    account = await load_platform_account(db, credentials_id, current_user.id)
-    if account is None:
-        _raise_not_found()
+    account = platform_account_from_login(credentials)
 
     try:
         async with connect(account):

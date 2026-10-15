@@ -91,7 +91,7 @@ class MyMomentSessionService(BaseService):
 
         # Deactivate existing sessions if requested (default behavior)
         if deactivate_existing:
-            await self._deactivate_login_sessions(mymoment_login_id)
+            await self.deactivate_login_sessions(mymoment_login_id)
 
         # Create new session
         try:
@@ -310,9 +310,9 @@ class MyMomentSessionService(BaseService):
 
         return await self._update_session_with_operation(session_id, operation, check_usable=False)
 
-    async def _deactivate_login_sessions(self, mymoment_login_id: uuid.UUID) -> int:
+    async def deactivate_login_sessions(self, mymoment_login_id: uuid.UUID) -> int:
         """
-        Internal method to deactivate all sessions for a login.
+        Deactivate all sessions for a login.
 
         Args:
             mymoment_login_id: MyMoment login ID
@@ -383,4 +383,4 @@ class MyMomentSessionCookieStore:
         """Deactivate the account's stored sessions so their cookies are not reused."""
         db_session = await self._new_db_session()
         async with db_session:
-            await MyMomentSessionService(db_session)._deactivate_login_sessions(account_id)
+            await MyMomentSessionService(db_session).deactivate_login_sessions(account_id)

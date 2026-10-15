@@ -245,6 +245,20 @@ async def test_failed_cookie_save_keeps_the_connection_usable(http, account):
     assert content.title == "Beispieldialog"
 
 
+class _FailingDiscardCookieStore(InMemoryCookieStore):
+    async def discard(self, account_id):
+        raise RuntimeError("database is locked")
+
+
+async def test_failed_cookie_discard_still_reports_rejected_credentials(http, account):
+    adapter = MyMomentAdapter(cookie_store=_FailingDiscardCookieStore(), http_session_factory=http.as_factory())
+    queue_login(http, succeed=False)
+
+    with pytest.raises(PlatformAuthError):
+        async with adapter.connect(account):
+            pass
+
+
 async def test_login_page_without_csrf_token_raises_unavailable(adapter, http, account):
     http.queue_response("GET", LOGIN_URL, AiohttpStubResponse(status=200, body="<html><body>Wartung</body></html>"))
 
