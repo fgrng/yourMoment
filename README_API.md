@@ -255,12 +255,12 @@ Die Perspektive von {article_author} ist besonders aufschlussreich.
   "prompt_template_ids": ["uuid3"],
   "llm_provider_id": "uuid4",
   "max_duration_minutes": 120,
-  "article_filters": {
-    "tabs": ["technology", "science"],
-    "keywords": ["AI", "machine learning"]
-  }
+  "target": {"classroom": "4711", "category": "7", "arrangement": "12"},
+  "search": "Rotpanda"
 }
 ```
+
+`target` is the process's **Ziel** (ADR-0002): keys and rules come from the platform's target description and are checked without a platform connection. For myMoment, `classroom` is required and may not be `alle`; `category` and `arrangement` are optional. An invalid target is answered with 422 (`invalid_target`). `PATCH /{id}` replaces `target` as a whole; `search` filters article titles, `null` or `""` clears it.
 
 **Process States**:
 - `CREATED` – Configured but not started

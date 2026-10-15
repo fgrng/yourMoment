@@ -75,7 +75,8 @@ async def test_discovery_creates_rows_and_skips_duplicates(db_session, db_engine
 
 async def test_discovery_creates_rows_only_for_the_process_target(db_session, db_engine, fake_platform):
     # Process target: classroom "home", category 7, arrangement 10
-    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"task_filter": 10}})
+    target = {"classroom": "home", "category": "7", "arrangement": "10"}
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"target": target}})
     await db_session.commit()
     fake_platform.add_article("1", title="Sample", category="7", extra={"classroom": "home", "arrangement": "10"})
     fake_platform.add_article("2", title="Sample", category="9", extra={"classroom": "home", "arrangement": "10"})
@@ -91,7 +92,7 @@ async def test_discovery_creates_rows_only_for_the_process_target(db_session, db
 async def test_discovery_stores_no_category_when_the_platform_reports_a_non_numeric_one(
     db_session, db_engine, fake_platform
 ):
-    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"category_filter": None}})
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"target": {"classroom": "home"}}})
     await db_session.commit()
     _add_target_article(fake_platform, "1", category="²")
 
@@ -126,15 +127,15 @@ async def test_discovery_creates_at_most_20_rows_per_login(db_session, db_engine
     assert result["discovered"] == 20
 
 
-async def test_discovery_without_classroom_does_not_contact_the_platform(db_session, db_engine, fake_platform):
-    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"tab_filter": None}})
+async def test_discovery_passes_the_stored_target_unchanged_to_the_platform(db_session, db_engine, fake_platform):
+    target = {"classroom": "4711", "category": "7", "arrangement": "10"}
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"target": target}})
     await db_session.commit()
-    _add_target_article(fake_platform, "1")
 
     task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
-    result = await task._discover_articles_async(scenario["process"].id)
+    await task._discover_articles_async(scenario["process"].id)
 
-    assert (result["discovered"], fake_platform.connected_accounts) == (0, [])
+    assert fake_platform.listed_targets == [target]
 
 
 async def test_discovery_connects_with_the_decrypted_platform_account(db_session, db_engine, fake_platform):

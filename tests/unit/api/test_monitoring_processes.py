@@ -1,0 +1,94 @@
+"""Creating and editing a monitoring process through the router: the target and the search term."""
+
+from __future__ import annotations
+
+import pytest
+from fastapi import HTTPException
+
+from src.api.monitoring_processes import create_monitoring_process, update_monitoring_process
+from src.api.schemas import MonitoringProcessCreate, MonitoringProcessUpdate
+from tests.fixtures.factories.mymoment import create_mymoment_login
+from tests.fixtures.factories.prompts import create_user_prompt_template
+from tests.fixtures.factories.providers import create_llm_provider
+from tests.fixtures.factories.users import create_user
+
+
+pytestmark = [pytest.mark.unit, pytest.mark.database]
+
+
+async def _create(db_session, user, **fields):
+    provider = await create_llm_provider(db_session, user=user)
+    prompt = await create_user_prompt_template(db_session, user=user)
+    login = await create_mymoment_login(db_session, user=user)
+    data = MonitoringProcessCreate(
+        name="Klasse 4711",
+        max_duration_minutes=60,
+        llm_provider_id=provider.id,
+        prompt_template_ids=[prompt.id],
+        mymoment_login_ids=[login.id],
+        **fields,
+    )
+    return await create_monitoring_process(process_data=data, current_user=user, session=db_session)
+
+
+async def test_create_returns_target_and_search(db_session):
+    user = await create_user(db_session)
+
+    response = await _create(db_session, user, target={"classroom": "4711", "category": "7"}, search="Rotpanda")
+
+    assert (response.target, response.search) == ({"classroom": "4711", "category": "7"}, "Rotpanda")
+
+
+async def test_create_rejects_an_invalid_target_with_422(db_session):
+    user = await create_user(db_session)
+
+    with pytest.raises(HTTPException) as error:
+        await _create(db_session, user, target={"category": "7"})
+
+    assert error.value.status_code == 422
+    assert "classroom" in error.value.detail["message"]
+
+
+async def test_update_replaces_the_target_and_clears_the_search(db_session):
+    user = await create_user(db_session)
+    created = await _create(
+        db_session, user, target={"classroom": "4711", "arrangement": "12"}, search="Rotpanda"
+    )
+
+    response = await update_monitoring_process(
+        process_id=created.id,
+        process_data=MonitoringProcessUpdate(target={"classroom": "4711"}, search=None),
+        current_user=user,
+        session=db_session,
+    )
+
+    assert (response.target, response.search) == ({"classroom": "4711"}, None)
+
+
+async def test_update_without_target_and_search_keeps_both(db_session):
+    user = await create_user(db_session)
+    created = await _create(db_session, user, target={"classroom": "4711"}, search="Rotpanda")
+
+    response = await update_monitoring_process(
+        process_id=created.id,
+        process_data=MonitoringProcessUpdate(name="Neu"),
+        current_user=user,
+        session=db_session,
+    )
+
+    assert (response.name, response.target, response.search) == ("Neu", {"classroom": "4711"}, "Rotpanda")
+
+
+async def test_update_rejects_an_invalid_target_with_422(db_session):
+    user = await create_user(db_session)
+    created = await _create(db_session, user, target={"classroom": "4711"})
+
+    with pytest.raises(HTTPException) as error:
+        await update_monitoring_process(
+            process_id=created.id,
+            process_data=MonitoringProcessUpdate(target={"classroom": "alle"}),
+            current_user=user,
+            session=db_session,
+        )
+
+    assert error.value.status_code == 422

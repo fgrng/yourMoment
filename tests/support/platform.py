@@ -73,6 +73,7 @@ class FakeConnection:
     async def list_articles(self, target: Optional[Mapping[str, str]] = None) -> list[ArticleSummary]:
         self._platform._raise_injected("list_articles")
         target = dict(target or {})
+        self._platform.listed_targets.append(target)
         unknown = set(target) - {dimension.key for dimension in self._platform.target_description}
         if unknown:
             raise PlatformRejected(f"unknown target keys: {sorted(unknown)}")
@@ -129,6 +130,7 @@ class FakePlatform:
         self.target_description: tuple[TargetDimension, ...] = DEFAULT_TARGET_DESCRIPTION
         self.target_rules: list[Callable[[Mapping[str, str]], None]] = []  # the platform's own target checks
         self.targets: list[TargetOption] = []  # what `list_targets` describes
+        self.listed_targets: list[dict[str, str]] = []  # every target `list_articles` was called with
         self.connected_accounts: list[PlatformAccount] = []
         self.fresh_logins: list[PlatformAccount] = []  # accounts connected without reusing a session
         self.posted_comments: list[FakePostedComment] = []

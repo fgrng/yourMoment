@@ -126,7 +126,8 @@ await session.commit()
 **Purpose**: Complete lifecycle management for monitoring processes
 
 **Key Methods:**
-- `create_process(user_id, name, config)` – Create monitoring process with credentials/prompts
+- `create_process(user_id, name, target, ...)` – Create monitoring process with credentials/prompts; the target is checked offline via `validate_target` (raises `InvalidTarget`)
+- `update_process(process_id, user_id, target=..., ...)` – A given target replaces the stored one as a whole
 - `get_process(process_id, user_id)` – Fetch process with ownership check
 - `list_processes(user_id, filters, limit)` – List user's processes
 - `start_process(process_id, user_id)` – Initiate monitoring (dispatches Celery task)

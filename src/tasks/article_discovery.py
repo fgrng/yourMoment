@@ -43,9 +43,7 @@ class ProcessConfig:
     login_ids: List[uuid.UUID]
     prompt_ids: List[uuid.UUID]
     llm_provider_id: Optional[uuid.UUID]
-    tab_filter: Optional[str]
-    category_filter: Optional[int] = None
-    task_filter: Optional[int] = None
+    target: Dict[str, str]
     search_filter: Optional[str] = None
     hide_comments: bool = False
     generate_only: bool = False
@@ -134,9 +132,7 @@ class ArticleDiscoveryTask(BaseTask):
                 login_ids=login_ids,
                 prompt_ids=prompt_ids,
                 llm_provider_id=llm_provider_id,
-                tab_filter=process.tab_filter,
-                category_filter=process.category_filter,
-                task_filter=process.task_filter,
+                target=dict(process.target),
                 search_filter=process.search_filter,
                 hide_comments=process.hide_comments,
                 generate_only=process.generate_only,
@@ -165,11 +161,6 @@ class ArticleDiscoveryTask(BaseTask):
         Returns:
             Article summaries matching target and search term, at most ARTICLES_PER_LOGIN
         """
-        # The classroom must be set explicitly, there is no default
-        if not config_snapshot.tab_filter:
-            logger.warning(f"No tab filter specified for process {config_snapshot.process_id}, skipping article discovery")
-            return []
-
         session = await self.get_async_session()
         async with session:
             account = await load_platform_account(session, login_id, config_snapshot.user_id)
@@ -178,7 +169,7 @@ class ArticleDiscoveryTask(BaseTask):
             return []
 
         async with connect(account) as platform:
-            articles = await platform.list_articles(_target_of(config_snapshot))
+            articles = await platform.list_articles(config_snapshot.target)
 
         # The search term is a title filter of the process, not part of the target
         search = (config_snapshot.search_filter or "").lower()
@@ -389,16 +380,6 @@ class ArticleDiscoveryTask(BaseTask):
                 'execution_time_seconds': execution_time,
                 'status': 'failed'
             }
-
-
-def _target_of(config: ProcessConfig) -> Dict[str, str]:
-    """Translate the process filter columns into the platform target."""
-    target = {"classroom": config.tab_filter}
-    if config.category_filter is not None:
-        target["category"] = str(config.category_filter)
-    if config.task_filter is not None:
-        target["arrangement"] = str(config.task_filter)
-    return target
 
 
 def _dispatch_processing_chains(

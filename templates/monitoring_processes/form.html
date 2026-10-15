@@ -329,20 +329,14 @@ document.addEventListener('DOMContentLoaded', async function() {
         maxDurationInput.value = process.max_duration_minutes || '';
         providerSelect.value = process.llm_provider_id || '';
 
-        // Parse target_filters
-        const filters = process.target_filters || {};
-        if (filters.category) {
-            categoryFilter.value = filters.category;
-        }
-        if (filters.task) {
-            taskFilter.value = filters.task;
-        }
-        if (filters.search) {
-            searchFilter.value = filters.search;
-        }
+        // The target replaces category, arrangement and classroom as a whole
+        const target = process.target || {};
+        categoryFilter.value = target.category || '';
+        taskFilter.value = target.arrangement || '';
+        searchFilter.value = process.search || '';
 
-        // Store the tab value to restore after loading tabs
-        currentTabValue = filters.tab || null;
+        // Store the classroom to restore after loading tabs
+        currentTabValue = target.classroom || null;
 
         selectValues(promptSelect, process.prompt_template_ids || []);
         selectValues(loginSelect, process.mymoment_login_ids || []);
@@ -433,24 +427,22 @@ document.addEventListener('DOMContentLoaded', async function() {
             return null;
         }
 
-        // Build target filters
-        const targetFilters = {};
+        // Build the target: empty fields mean "all" and give no key
+        const classroom = tabFilter.value;
+        if (!classroom) {
+            showAlert('Bitte eine Klasse auswählen.', 'warning');
+            return null;
+        }
+        const target = { classroom };
         const category = categoryFilter.value.trim();
         if (category) {
-            targetFilters.category = parseInt(category, 10);
+            target.category = category;
         }
-        const task = taskFilter.value.trim();
-        if (task) {
-            targetFilters.task = parseInt(task, 10);
-        }
-        const tab = tabFilter.value;
-        if (tab) {
-            targetFilters.tab = tab;
+        const arrangement = taskFilter.value.trim();
+        if (arrangement) {
+            target.arrangement = arrangement;
         }
         const search = searchFilter.value.trim();
-        if (search) {
-            targetFilters.search = search;
-        }
 
         const generateOnly = document.getElementById('generateOnlyCheckbox').checked;
         const hideComments = document.getElementById('hideCommentsCheckbox').checked;
@@ -462,7 +454,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             llm_provider_id: providerId,
             prompt_template_ids: promptIds,
             mymoment_login_ids: loginIds,
-            target_filters: targetFilters,
+            target,
+            search: search || null,
             generate_only: generateOnly,
             hide_comments: hideComments
         };

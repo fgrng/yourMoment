@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import Any, Optional, List
 
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 from src.validators.password import validate_password
@@ -138,7 +138,8 @@ class MonitoringProcessCreate(BaseModel):
     description: Optional[str] = Field(None, max_length=500, description="Process description")
     max_duration_minutes: int = Field(..., ge=1, le=1440, description="Maximum duration in minutes (1-1440)")
     llm_provider_id: uuid.UUID = Field(..., description="LLM provider to use for comment generation")
-    target_filters: Optional[dict] = Field(None, description="Article filtering configuration")
+    target: dict[str, Any] = Field(..., description="Ziel: platform key -> value, checked against the platform's target description")
+    search: Optional[str] = Field(None, max_length=200, description="Search term, filters article titles")
     prompt_template_ids: list[uuid.UUID] = Field(..., min_items=1, description="List of prompt template IDs to use")
     mymoment_login_ids: list[uuid.UUID] = Field(..., min_items=1, description="List of myMoment login IDs to use")
     generate_only: bool = Field(default=True, description="If true, only generate comments; if false, also post to myMoment")
@@ -151,7 +152,8 @@ class MonitoringProcessUpdate(BaseModel):
     description: Optional[str] = Field(None, max_length=500, description="Process description")
     max_duration_minutes: Optional[int] = Field(None, ge=1, le=1440, description="Maximum duration in minutes (1-1440)")
     llm_provider_id: Optional[uuid.UUID] = Field(None, description="LLM provider to use for comment generation")
-    target_filters: Optional[dict] = Field(None, description="Article filtering configuration")
+    target: Optional[dict[str, Any]] = Field(None, description="Ziel; replaces the stored one as a whole")
+    search: Optional[str] = Field(None, max_length=200, description="Search term; null or empty clears it")
     prompt_template_ids: Optional[list[uuid.UUID]] = Field(None, min_items=1, description="List of prompt template IDs to use")
     mymoment_login_ids: Optional[list[uuid.UUID]] = Field(None, min_items=1, description="List of myMoment login IDs to use")
     generate_only: Optional[bool] = Field(None, description="If true, only generate comments; if false, also post to myMoment")
@@ -172,7 +174,8 @@ class MonitoringProcessResponse(BaseModel):
     stopped_at: Optional[datetime] = Field(None, description="When process was stopped")
     expires_at: Optional[datetime] = Field(None, description="When process will automatically stop")
     llm_provider_id: Optional[uuid.UUID] = Field(None, description="LLM provider used for comment generation")
-    target_filters: Optional[dict] = Field(None, description="Article filtering configuration")
+    target: dict[str, str] = Field(..., description="Ziel: platform key -> value")
+    search: Optional[str] = Field(None, validation_alias="search_filter", description="Search term, filters article titles")
     prompt_template_ids: list[uuid.UUID] = Field(..., description="List of prompt template IDs")
     mymoment_login_ids: list[uuid.UUID] = Field(..., description="List of myMoment login IDs")
     generate_only: bool = Field(..., description="If true, only generate comments; if false, also post to myMoment")
