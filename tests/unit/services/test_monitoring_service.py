@@ -206,6 +206,13 @@ async def test_create_process_stores_target_and_search(db_session: AsyncSession)
 
 
 @pytest.mark.asyncio
+async def test_create_process_stores_an_empty_search_term_as_none(db_session: AsyncSession):
+    _, _, process = await _create_with_target(db_session, CLASSROOM_ONLY, search_filter="")
+
+    assert process.search_filter is None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("target", "message"),
     [

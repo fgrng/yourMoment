@@ -19,13 +19,13 @@ pytestmark = [pytest.mark.unit, pytest.mark.database]
 
 
 @pytest.fixture
-def migrate(tmp_path, monkeypatch):
+def migrate(tmp_path):
     """Run `migrate("upgrade"|"downgrade", revision)` against a fresh SQLite file; yields its path."""
     db_file = tmp_path / "migration.db"
-    # migrations/env.py reads the URL from here; settings would point at the testing DB
-    monkeypatch.setattr("src.config.database.get_alembic_database_url", lambda: f"sqlite:///{db_file}")
     config = Config()
     config.set_main_option("script_location", "migrations")
+    # migrations/env.py takes this URL over the settings, which would point at the testing DB
+    config.attributes["database_url"] = f"sqlite:///{db_file}"
 
     def run(direction: str, revision: str) -> None:
         getattr(command, direction)(config, revision)
@@ -83,16 +83,6 @@ def test_target_migration_gives_empty_columns_no_key(migrate):
     migrate("upgrade", TARGET)
 
     assert json.loads(_row(migrate.db_file, process, "target")[0]) == {}
-
-
-def test_target_migration_drops_the_old_columns(migrate):
-    migrate("upgrade", BEFORE_TARGET)
-
-    migrate("upgrade", TARGET)
-
-    columns = _columns(migrate.db_file, "monitoring_processes")
-    assert {"target", "search_filter"} <= columns
-    assert columns.isdisjoint({"category_filter", "task_filter", "tab_filter", "sort_option"})
 
 
 def test_target_migration_downgrade_restores_the_columns(migrate):

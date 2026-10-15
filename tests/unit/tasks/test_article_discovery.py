@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 import pytest
@@ -32,6 +33,16 @@ def _add_target_article(fake_platform, article_id, **kwargs):
     kwargs.setdefault("title", f"Sample Story {article_id}")
     kwargs.setdefault("category", "7")
     return fake_platform.add_article(article_id, extra={"classroom": "home"}, **kwargs)
+
+
+async def _run_discovery_task(task, process_id):
+    """Run the Celery entrypoint; any retry fails the test."""
+
+    def _retry(*, exc, countdown):
+        raise AssertionError(f"retry() should not have been called for {exc!r}")
+
+    task.retry = _retry
+    return await asyncio.to_thread(article_discovery.discover_articles.run.__func__, task, str(process_id))
 
 
 async def _comments_of(db_session, process_id):
@@ -126,7 +137,7 @@ async def test_discovery_does_not_pass_the_search_term_to_the_platform(db_sessio
     await db_session.commit()
 
     task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
-    await task._discover_articles_async(scenario["process"].id)
+    await _run_discovery_task(task, scenario["process"].id)
 
     assert fake_platform.listed_targets == [{"classroom": "home"}]
 
@@ -149,7 +160,7 @@ async def test_discovery_passes_the_stored_target_unchanged_to_the_platform(db_s
     await db_session.commit()
 
     task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
-    await task._discover_articles_async(scenario["process"].id)
+    await _run_discovery_task(task, scenario["process"].id)
 
     assert fake_platform.listed_targets == [target]
 

@@ -20,6 +20,7 @@ from bs4 import BeautifulSoup
 from src.platforms.errors import InvalidTarget, PlatformAuthError, PlatformRejected, PlatformUnavailable
 from src.platforms.mymoment import parsers
 from src.platforms.mymoment.cookies import CookieStore, restore_cookie_jar, serialize_cookie_jar
+from src.platforms.targets import check_target_shape
 from src.platforms.types import (
     ArticleContent,
     ArticleRef,
@@ -52,7 +53,6 @@ _TARGET_DESCRIPTION = (
     TargetDimension(key='arrangement', label='Schreibaufgabe'),
     TargetDimension(key='classroom', label='Klasse', required=True),
 )
-_TARGET_KEYS = {dimension.key for dimension in _TARGET_DESCRIPTION}
 _ALL_CLASSROOMS = 'alle'
 
 
@@ -430,12 +430,14 @@ class MyMomentConnection:
 
 
 def _validate_target(target: Mapping[str, str]) -> dict[str, str]:
-    """Reject targets myMoment cannot apply: unknown keys or malformed values."""
-    unknown = set(target) - _TARGET_KEYS
-    if unknown:
-        raise PlatformRejected(f"Unknown myMoment target keys: {sorted(unknown)}")
-    if not all(isinstance(value, str) for value in target.values()):
-        raise PlatformRejected(f"myMoment target values must be strings: {dict(target)}")
+    """Reject targets myMoment cannot apply: unknown keys or malformed values.
+
+    Without a classroom myMoment lists every classroom, so the target need not be complete.
+    """
+    try:
+        check_target_shape(_TARGET_DESCRIPTION, target, complete=False)
+    except InvalidTarget as e:
+        raise PlatformRejected(str(e)) from e
 
     classroom = target.get('classroom')
     if classroom is not None and classroom not in ('home', 'alle') and not is_number(classroom):
