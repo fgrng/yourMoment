@@ -14,16 +14,22 @@ pytestmark = [pytest.mark.unit]
 @pytest.fixture
 def wordpress_like() -> FakePlatform:
     platform = FakePlatform()
-    platform.target_description = (TargetDimension(key="site_category", label="Kategorie", required=True),)
+    platform.target_description = (
+        TargetDimension(key="site_category", label="Kategorie", required=True),
+    )
     return platform
 
 
 def test_configured_description_is_what_the_fake_describes(wordpress_like):
-    assert [(d.key, d.required) for d in wordpress_like.describe_target()] == [("site_category", True)]
+    assert [(d.key, d.required) for d in wordpress_like.describe_target()] == [
+        ("site_category", True)
+    ]
 
 
 def test_target_matching_the_configured_description_is_accepted(wordpress_like):
-    assert validate_target(wordpress_like, {"site_category": "news"}) == {"site_category": "news"}
+    assert validate_target(wordpress_like, {"site_category": "news"}) == {
+        "site_category": "news"
+    }
 
 
 def test_key_of_the_default_description_is_unknown_to_a_configured_one(wordpress_like):

@@ -23,61 +23,44 @@ class AppSettings(BaseSettings):
 
     # Environment
     ENVIRONMENT: Literal["development", "testing", "production"] = Field(
-        default="development",
-        description="Application environment"
+        default="development", description="Application environment"
     )
 
-    DEBUG: bool = Field(
-        default=False,
-        description="Enable debug mode"
-    )
+    DEBUG: bool = Field(default=False, description="Enable debug mode")
 
     # Application metadata
-    APP_NAME: str = Field(
-        default="yourMoment",
-        description="Application name"
-    )
+    APP_NAME: str = Field(default="yourMoment", description="Application name")
 
-    APP_VERSION: str = Field(
-        default="0.1.0",
-        description="Application version"
-    )
+    APP_VERSION: str = Field(default="0.1.0", description="Application version")
 
     BASE_URL: str = Field(
-        default="http://localhost:8000",
-        description="Base URL for the application"
+        default="http://localhost:8000", description="Base URL for the application"
     )
 
     APP_TIMEZONE: str = Field(
         default="Europe/Zurich",
-        description="IANA time zone in which times are shown to users"
+        description="IANA time zone in which times are shown to users",
     )
 
     # Server configuration
-    HOST: str = Field(
-        default="0.0.0.0",
-        description="Server host"
-    )
+    HOST: str = Field(default="0.0.0.0", description="Server host")
 
-    PORT: int = Field(
-        default=8000,
-        description="Server port"
-    )
+    PORT: int = Field(default=8000, description="Server port")
 
     # Security
     SECRET_KEY: str = Field(
         default="insecure-dev-key-change-in-production",
-        description="Application secret key"
+        description="Application secret key",
     )
 
     ALLOWED_HOSTS: str = Field(
         default="localhost,127.0.0.1",
-        description="Comma-separated list of allowed hosts"
+        description="Comma-separated list of allowed hosts",
     )
 
     CORS_ORIGINS: str = Field(
         default="http://localhost:3000,http://localhost:8000",
-        description="Comma-separated CORS origins"
+        description="Comma-separated CORS origins",
     )
 
     @field_validator("SECRET_KEY")
@@ -96,14 +79,13 @@ class AppSettings(BaseSettings):
         try:
             ZoneInfo(v)
         except (ZoneInfoNotFoundError, ValueError) as exc:
-            raise ValueError(f"APP_TIMEZONE '{v}' is not a known IANA time zone") from exc
+            raise ValueError(
+                f"APP_TIMEZONE '{v}' is not a known IANA time zone"
+            ) from exc
         return v
 
     model_config = SettingsConfigDict(
-        env_prefix="",
-        case_sensitive=False,
-        env_file=".env",
-        extra="ignore"
+        env_prefix="", case_sensitive=False, env_file=".env", extra="ignore"
     )
 
 
@@ -111,20 +93,13 @@ class DatabaseSettings(BaseSettings):
     """Database configuration settings."""
 
     DB_SQLITE_FILE: str = Field(
-        default="yourmoment.db",
-        description="SQLite database file path"
+        default="yourmoment.db", description="SQLite database file path"
     )
 
-    DB_ECHO: bool = Field(
-        default=False,
-        description="Enable SQL query logging"
-    )
+    DB_ECHO: bool = Field(default=False, description="Enable SQL query logging")
 
     model_config = SettingsConfigDict(
-        env_prefix="",
-        case_sensitive=False,
-        env_file=".env",
-        extra="ignore"
+        env_prefix="", case_sensitive=False, env_file=".env", extra="ignore"
     )
 
 
@@ -133,29 +108,22 @@ class SecuritySettings(BaseSettings):
 
     # Encryption
     YOURMOMENT_ENCRYPTION_KEY: Optional[str] = Field(
-        default=None,
-        description="Fernet encryption key for sensitive data"
+        default=None, description="Fernet encryption key for sensitive data"
     )
 
     YOURMOMENT_KEY_FILE: str = Field(
-        default=".encryption_key",
-        description="File path for encryption key storage"
+        default=".encryption_key", description="File path for encryption key storage"
     )
 
     # JWT Authentication
     JWT_SECRET: str = Field(
-        default="default-development-secret",
-        description="JWT token secret"
+        default="default-development-secret", description="JWT token secret"
     )
 
-    JWT_ALGORITHM: str = Field(
-        default="HS256",
-        description="JWT algorithm"
-    )
+    JWT_ALGORITHM: str = Field(default="HS256", description="JWT algorithm")
 
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
-        default=30,
-        description="JWT access token expiration in minutes"
+        default=30, description="JWT access token expiration in minutes"
     )
 
     # Password requirements
@@ -167,10 +135,7 @@ class SecuritySettings(BaseSettings):
     PASSWORD_REQUIRE_SPECIAL: bool = Field(default=True)
 
     model_config = SettingsConfigDict(
-        env_prefix="",
-        case_sensitive=False,
-        env_file=".env",
-        extra="ignore"
+        env_prefix="", case_sensitive=False, env_file=".env", extra="ignore"
     )
 
 
@@ -179,21 +144,34 @@ class LoggingSettings(BaseSettings):
 
     LOG_LEVEL: str = Field(default="INFO", description="Root log level")
     LOG_DIR: str = Field(default="logs", description="Base directory for log files")
-    LOG_FILE_ENABLED: bool = Field(default=True, description="Enable rotating file handler")
+    LOG_FILE_ENABLED: bool = Field(
+        default=True, description="Enable rotating file handler"
+    )
     LOG_FILE_PATH: str = Field(default="logs/app.log", description="Path to log file")
-    LOG_SERVER_FILE: Optional[str] = Field(default=None, description="Server log file path override")
-    LOG_WORKER_FILE: Optional[str] = Field(default=None, description="Worker log file path override")
-    LOG_SCHEDULER_FILE: Optional[str] = Field(default=None, description="Scheduler log file path override")
-    LOG_LLM_FILE: Optional[str] = Field(default=None, description="LLM summary log file path override")
-    LOG_FILE_MAX_SIZE: int = Field(default=10 * 1024 * 1024, description="Log file max size in bytes")
-    LOG_FILE_BACKUP_COUNT: int = Field(default=5, description="Log file backups to retain")
-    LOG_CONSOLE_ENABLED: bool = Field(default=True, description="Enable console logging output")
+    LOG_SERVER_FILE: Optional[str] = Field(
+        default=None, description="Server log file path override"
+    )
+    LOG_WORKER_FILE: Optional[str] = Field(
+        default=None, description="Worker log file path override"
+    )
+    LOG_SCHEDULER_FILE: Optional[str] = Field(
+        default=None, description="Scheduler log file path override"
+    )
+    LOG_LLM_FILE: Optional[str] = Field(
+        default=None, description="LLM summary log file path override"
+    )
+    LOG_FILE_MAX_SIZE: int = Field(
+        default=10 * 1024 * 1024, description="Log file max size in bytes"
+    )
+    LOG_FILE_BACKUP_COUNT: int = Field(
+        default=5, description="Log file backups to retain"
+    )
+    LOG_CONSOLE_ENABLED: bool = Field(
+        default=True, description="Enable console logging output"
+    )
 
     model_config = SettingsConfigDict(
-        env_prefix="",
-        case_sensitive=False,
-        env_file=".env",
-        extra="ignore"
+        env_prefix="", case_sensitive=False, env_file=".env", extra="ignore"
     )
 
     def _resolve_default_log_path(self, filename: str) -> str:
@@ -226,7 +204,9 @@ class LoggingSettings(BaseSettings):
             "app": "app.log",
             "cli": "cli.log",
         }
-        return self._resolve_default_log_path(default_filenames.get(service_name, f"{service_name}.log"))
+        return self._resolve_default_log_path(
+            default_filenames.get(service_name, f"{service_name}.log")
+        )
 
     def get_llm_log_path(self) -> str:
         """Return the file path for the dedicated LLM summary log."""
@@ -239,25 +219,19 @@ class CelerySettings(BaseSettings):
     """Celery task queue settings."""
 
     CELERY_BROKER_URL: str = Field(
-        default="redis://localhost:6379/0",
-        description="Celery broker URL"
+        default="redis://localhost:6379/0", description="Celery broker URL"
     )
 
     CELERY_RESULT_BACKEND: str = Field(
-        default="redis://localhost:6379/0",
-        description="Celery result backend URL"
+        default="redis://localhost:6379/0", description="Celery result backend URL"
     )
 
     CELERY_WORKER_CONCURRENCY: int = Field(
-        default=4,
-        description="Celery worker concurrency"
+        default=4, description="Celery worker concurrency"
     )
 
     model_config = SettingsConfigDict(
-        env_prefix="CELERY_",
-        case_sensitive=False,
-        env_file=".env",
-        extra="ignore"
+        env_prefix="CELERY_", case_sensitive=False, env_file=".env", extra="ignore"
     )
 
 
@@ -265,65 +239,46 @@ class ScraperSettings(BaseSettings):
     """Web scraping and myMoment integration settings."""
 
     MYMOMENT_BASE_URL: str = Field(
-        default="https://www.mymoment.ch",
-        description="myMoment platform base URL"
+        default="https://www.mymoment.ch", description="myMoment platform base URL"
     )
 
     MYMOMENT_LOGIN_URL: str = Field(
         default="https://www.mymoment.ch/accounts/login/",
-        description="myMoment login URL"
+        description="myMoment login URL",
     )
 
-    MYMOMENT_TIMEOUT: int = Field(
-        default=30,
-        description="Request timeout in seconds"
-    )
+    MYMOMENT_TIMEOUT: int = Field(default=30, description="Request timeout in seconds")
 
-    SCRAPING_RATE_LIMIT: float = Field(
-        default=2.0,
-        description="Requests per second"
-    )
+    SCRAPING_RATE_LIMIT: float = Field(default=2.0, description="Requests per second")
 
-    SCRAPING_BURST_LIMIT: int = Field(
-        default=5,
-        description="Burst limit for requests"
-    )
+    SCRAPING_BURST_LIMIT: int = Field(default=5, description="Burst limit for requests")
 
     SESSION_TIMEOUT_MINUTES: int = Field(
-        default=60,
-        description="Session timeout in minutes"
+        default=60, description="Session timeout in minutes"
     )
 
     SESSION_CLEANUP_INTERVAL_MINUTES: int = Field(
-        default=30,
-        description="Session cleanup interval in minutes"
+        default=30, description="Session cleanup interval in minutes"
     )
 
     MAX_CONCURRENT_SESSIONS: int = Field(
-        default=5,
-        description="Maximum concurrent scraping sessions"
+        default=5, description="Maximum concurrent scraping sessions"
     )
 
     MAX_ARTICLES_PER_REQUEST: int = Field(
-        default=20,
-        description="Maximum articles to fetch per request"
+        default=20, description="Maximum articles to fetch per request"
     )
 
     RETRY_ATTEMPTS: int = Field(
-        default=3,
-        description="Number of retry attempts for failed requests"
+        default=3, description="Number of retry attempts for failed requests"
     )
 
     RETRY_DELAY: float = Field(
-        default=5.0,
-        description="Delay in seconds between retry attempts"
+        default=5.0, description="Delay in seconds between retry attempts"
     )
 
     model_config = SettingsConfigDict(
-        env_prefix="",
-        case_sensitive=False,
-        env_file=".env",
-        extra="ignore"
+        env_prefix="", case_sensitive=False, env_file=".env", extra="ignore"
     )
 
 
@@ -331,38 +286,32 @@ class MonitoringSettings(BaseSettings):
     """Monitoring and comment generation settings."""
 
     DEFAULT_MONITORING_DURATION_MINUTES: int = Field(
-        default=60,
-        description="Default monitoring duration in minutes"
+        default=60, description="Default monitoring duration in minutes"
     )
 
     MAX_MONITORING_PROCESSES: int = Field(
-        default=10,
-        description="Maximum monitoring processes per user"
+        default=10, description="Maximum monitoring processes per user"
     )
 
     PROCESS_HEALTH_CHECK_INTERVAL_SECONDS: int = Field(
-        default=30,
-        description="Health check interval in seconds"
+        default=30, description="Health check interval in seconds"
     )
 
     COMMENT_GENERATION_TIMEOUT_SECONDS: int = Field(
-        default=60,
-        description="Comment generation timeout in seconds"
+        default=60, description="Comment generation timeout in seconds"
     )
 
     COMMENT_RATE_LIMIT_SECONDS: int = Field(
-        default=30,
-        description="Minimum seconds between comments"
+        default=30, description="Minimum seconds between comments"
     )
 
     ARTICLE_DISCOVERY_INTERVAL_SECONDS: int = Field(
-        default=60,
-        description="Article discovery interval in seconds"
+        default=60, description="Article discovery interval in seconds"
     )
 
     AI_COMMENT_PREFIX: str = Field(
         default="[Dieser Kommentar stammt von einem KI-ChatBot.]",
-        description="Required prefix for AI-generated comments"
+        description="Required prefix for AI-generated comments",
     )
 
     COMMENT_FORMAT_INSTRUCTION: str = Field(
@@ -373,26 +322,23 @@ class MonitoringSettings(BaseSettings):
             "Do NOT use <html>, <body>, <div>, <h1> through <h6>, or any other block-level or structural tags. "
             "Do not use plain-text newlines to separate paragraphs."
         ),
-        description="System-level formatting instruction appended to every LLM call for comment generation"
+        description="System-level formatting instruction appended to every LLM call for comment generation",
     )
 
     COMMENT_MIN_LENGTH: int = Field(
         default=50,
         ge=1,
-        description="Minimum character length of generated comment content (excluding AI prefix)"
+        description="Minimum character length of generated comment content (excluding AI prefix)",
     )
 
     COMMENT_MAX_LENGTH: Optional[int] = Field(
         default=None,
         ge=1,
-        description="Maximum character length of generated comment content (excluding AI prefix); null means unlimited"
+        description="Maximum character length of generated comment content (excluding AI prefix); null means unlimited",
     )
 
     model_config = SettingsConfigDict(
-        env_prefix="",
-        case_sensitive=False,
-        env_file=".env",
-        extra="ignore"
+        env_prefix="", case_sensitive=False, env_file=".env", extra="ignore"
     )
 
 
@@ -409,40 +355,34 @@ class StudentBackupSettings(BaseSettings):
 
     STUDENT_BACKUP_ENABLED: bool = Field(
         default=False,
-        description="Enable the Student Backup feature (default: disabled)"
+        description="Enable the Student Backup feature (default: disabled)",
     )
 
     STUDENT_BACKUP_INTERVAL_MINUTES: int = Field(
-        default=60,
-        ge=5,
-        le=1440,
-        description="Interval between backup runs in minutes"
+        default=60, ge=5, le=1440, description="Interval between backup runs in minutes"
     )
 
     STUDENT_BACKUP_MAX_TRACKED_STUDENTS_PER_USER: int = Field(
         default=50,
         ge=1,
         le=500,
-        description="Maximum number of students a user can track"
+        description="Maximum number of students a user can track",
     )
 
     STUDENT_BACKUP_MAX_VERSIONS_PER_ARTICLE: int = Field(
         default=100,
         ge=10,
         le=1000,
-        description="Maximum number of versions to keep per article (oldest get soft-deleted)"
+        description="Maximum number of versions to keep per article (oldest get soft-deleted)",
     )
 
     STUDENT_BACKUP_CONTENT_CHANGES_ONLY: bool = Field(
         default=True,
-        description="Only create new version if content has changed (uses SHA-256 hash)"
+        description="Only create new version if content has changed (uses SHA-256 hash)",
     )
 
     model_config = SettingsConfigDict(
-        env_prefix="",
-        case_sensitive=False,
-        env_file=".env",
-        extra="ignore"
+        env_prefix="", case_sensitive=False, env_file=".env", extra="ignore"
     )
 
 
@@ -500,11 +440,13 @@ class Settings:
             return SecuritySettings(
                 YOURMOMENT_ENCRYPTION_KEY=os.getenv(
                     "YOURMOMENT_ENCRYPTION_KEY",
-                    "test-encryption-key-not-for-production"
+                    "test-encryption-key-not-for-production",
                 ),
-                YOURMOMENT_KEY_FILE=os.getenv("YOURMOMENT_KEY_FILE", ".encryption_key.test"),
+                YOURMOMENT_KEY_FILE=os.getenv(
+                    "YOURMOMENT_KEY_FILE", ".encryption_key.test"
+                ),
                 JWT_SECRET=os.getenv("JWT_SECRET", "test-jwt-secret"),
-                SECRET_KEY=os.getenv("SECRET_KEY", "test-secret-key")
+                SECRET_KEY=os.getenv("SECRET_KEY", "test-secret-key"),
             )
         return SecuritySettings()
 
@@ -513,8 +455,12 @@ class Settings:
         if self.app.ENVIRONMENT == "testing":
             # Use separate Redis database for testing
             return CelerySettings(
-                CELERY_BROKER_URL=os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/1"),
-                CELERY_RESULT_BACKEND=os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
+                CELERY_BROKER_URL=os.getenv(
+                    "CELERY_BROKER_URL", "redis://localhost:6379/1"
+                ),
+                CELERY_RESULT_BACKEND=os.getenv(
+                    "CELERY_RESULT_BACKEND", "redis://localhost:6379/1"
+                ),
             )
         return CelerySettings()
 

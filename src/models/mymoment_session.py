@@ -36,7 +36,7 @@ class MyMomentSession(Base):
         UUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
-        doc="Unique session identifier"
+        doc="Unique session identifier",
     )
 
     # Foreign key to MyMomentLogin
@@ -45,28 +45,21 @@ class MyMomentSession(Base):
         ForeignKey("mymoment_logins.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
-        doc="MyMoment login these session belongs to"
+        doc="MyMoment login these session belongs to",
     )
 
     # Encrypted session data (cookies, tokens, etc.)
     session_data_encrypted = Column(
         Text,  # Can be large JSON data
         nullable=False,
-        doc="Encrypted session data (cookies, tokens, etc.) - FR-017"
+        doc="Encrypted session data (cookies, tokens, etc.) - FR-017",
     )
 
     # Session lifecycle fields
-    expires_at = Column(
-        UTCDateTime,
-        nullable=False,
-        doc="Session expiration timestamp"
-    )
+    expires_at = Column(UTCDateTime, nullable=False, doc="Session expiration timestamp")
 
     is_active = Column(
-        Boolean,
-        default=True,
-        nullable=False,
-        doc="Whether session is currently active"
+        Boolean, default=True, nullable=False, doc="Whether session is currently active"
     )
 
     # Timestamp fields
@@ -74,14 +67,14 @@ class MyMomentSession(Base):
         UTCDateTime,
         server_default=func.now(),
         nullable=False,
-        doc="Session creation timestamp"
+        doc="Session creation timestamp",
     )
 
     last_accessed = Column(
         UTCDateTime,
         server_default=func.now(),
         nullable=False,
-        doc="Last time session was accessed/used"
+        doc="Last time session was accessed/used",
     )
 
     updated_at = Column(
@@ -89,27 +82,29 @@ class MyMomentSession(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
-        doc="Last session update timestamp"
+        doc="Last session update timestamp",
     )
 
     # Relationships
     mymoment_login = relationship(
         "MyMomentLogin",
         back_populates="sessions",
-        doc="MyMoment login that owns this session"
+        doc="MyMoment login that owns this session",
     )
 
     def __repr__(self) -> str:
         """String representation of MyMomentSession (safe - no session data)."""
-        return (f"<MyMomentSession(id={self.id}, login_id={self.mymoment_login_id}, "
-                f"is_active={self.is_active}, expires_at={self.expires_at})>")
+        return (
+            f"<MyMomentSession(id={self.id}, login_id={self.mymoment_login_id}, "
+            f"is_active={self.is_active}, expires_at={self.expires_at})>"
+        )
 
     @classmethod
     def create_new_session(
         cls,
         mymoment_login_id: uuid.UUID,
         session_data: Union[str, Dict[str, Any]],
-        duration_hours: int = 24
+        duration_hours: int = 24,
     ) -> "MyMomentSession":
         """
         Create a new MyMoment session with encrypted data.
@@ -125,9 +120,7 @@ class MyMomentSession(Base):
         expires_at = utcnow() + timedelta(hours=duration_hours)
 
         session = cls(
-            mymoment_login_id=mymoment_login_id,
-            expires_at=expires_at,
-            is_active=True
+            mymoment_login_id=mymoment_login_id, expires_at=expires_at, is_active=True
         )
 
         session.set_session_data(session_data)
@@ -191,7 +184,9 @@ class MyMomentSession(Base):
             "is_active": self.is_active,
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
-            "last_accessed": self.last_accessed.isoformat() if self.last_accessed else None,
+            "last_accessed": self.last_accessed.isoformat()
+            if self.last_accessed
+            else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 

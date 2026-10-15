@@ -32,7 +32,9 @@ async def test_tracked_student_to_dict_and_lifecycle_helpers_are_safe(db_session
     assert payload["last_backup_at"] is None
     assert payload["created_at"] is not None
     assert payload["updated_at"] is not None
-    assert tracked_student.dashboard_url.endswith(f"/{tracked_student.mymoment_student_id}/")
+    assert tracked_student.dashboard_url.endswith(
+        f"/{tracked_student.mymoment_student_id}/"
+    )
 
     before_backup = utcnow()
     tracked_student.mark_backup_completed()
@@ -86,7 +88,9 @@ async def test_tracked_student_counts_only_active_article_versions(db_session):
     assert tracked_student.get_total_versions_count() == 2
 
 
-async def test_article_version_hash_urls_preview_and_dict_helpers_match_current_model(db_session):
+async def test_article_version_hash_urls_preview_and_dict_helpers_match_current_model(
+    db_session,
+):
     user = await create_user(db_session)
     admin_login = await create_mymoment_login(db_session, user=user, is_admin=True)
     tracked_student = await create_tracked_student(

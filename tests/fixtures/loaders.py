@@ -80,9 +80,7 @@ def load_manifest() -> dict:
         FixtureNotFoundError: If the manifest file is missing.
     """
     if not _MANIFEST_PATH.is_file():
-        raise FixtureNotFoundError(
-            f"Fixture manifest not found at {_MANIFEST_PATH}."
-        )
+        raise FixtureNotFoundError(f"Fixture manifest not found at {_MANIFEST_PATH}.")
     return json.loads(_MANIFEST_PATH.read_text(encoding="utf-8"))
 
 

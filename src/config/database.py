@@ -1,4 +1,5 @@
 """Database engine and session management using unified settings."""
+
 from typing import Optional
 
 from sqlalchemy import event
@@ -20,19 +21,25 @@ def build_sqlite_database_url(sqlite_file: str, *, async_driver: bool = True) ->
 def get_async_database_url() -> str:
     """Return the runtime async database URL from application settings."""
     settings = get_settings()
-    return build_sqlite_database_url(settings.database.DB_SQLITE_FILE, async_driver=True)
+    return build_sqlite_database_url(
+        settings.database.DB_SQLITE_FILE, async_driver=True
+    )
 
 
 def get_alembic_database_url() -> str:
     """Return the sync database URL Alembic should use for migrations."""
     settings = get_settings()
-    return build_sqlite_database_url(settings.database.DB_SQLITE_FILE, async_driver=False)
+    return build_sqlite_database_url(
+        settings.database.DB_SQLITE_FILE, async_driver=False
+    )
 
 
 class DatabaseManager:
     """Manages SQLite database connections and lifecycle."""
 
-    def __init__(self, *, database_url: Optional[str] = None, echo: Optional[bool] = None):
+    def __init__(
+        self, *, database_url: Optional[str] = None, echo: Optional[bool] = None
+    ):
         """Initialize database manager, optionally overriding settings-derived values."""
         self._database_url_override = database_url
         self._echo_override = echo
@@ -113,10 +120,7 @@ class DatabaseManager:
 
         engine = await self.create_engine()
 
-        self._sessionmaker = async_sessionmaker(
-            engine,
-            expire_on_commit=False
-        )
+        self._sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
 
         logger.info("Database sessionmaker created successfully")
         return self._sessionmaker
@@ -177,7 +181,9 @@ async def close_database():
         _database_manager = None
 
 
-def create_test_database_manager(sqlite_file: str = ":memory:", use_pool: bool = False) -> DatabaseManager:
+def create_test_database_manager(
+    sqlite_file: str = ":memory:", use_pool: bool = False
+) -> DatabaseManager:
     """
     Create a database manager for testing.
 
@@ -185,6 +191,8 @@ def create_test_database_manager(sqlite_file: str = ":memory:", use_pool: bool =
         sqlite_file: SQLite database file path (default: in-memory)
         use_pool: If True, use connection pooling (for pool testing)
     """
-    manager = DatabaseManager(database_url=f"sqlite+aiosqlite:///{sqlite_file}", echo=False)
+    manager = DatabaseManager(
+        database_url=f"sqlite+aiosqlite:///{sqlite_file}", echo=False
+    )
     manager._use_pool = use_pool  # Flag for conditional pooling
     return manager

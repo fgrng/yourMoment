@@ -7,7 +7,13 @@ from src.platforms.errors import (
     PlatformRejected,
     PlatformUnavailable,
 )
-from src.platforms.registry import MYMOMENT, adapter_for, adapter_for_platform, connect, use_adapter
+from src.platforms.registry import (
+    MYMOMENT,
+    adapter_for,
+    adapter_for_platform,
+    connect,
+    use_adapter,
+)
 from src.platforms.targets import label_target, validate_target
 from src.platforms.types import (
     ArticleContent,

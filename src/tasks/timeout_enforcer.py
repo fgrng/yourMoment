@@ -47,13 +47,12 @@ class TimeoutEnforcementTask(BaseTask):
 
                 # Find all running processes
                 result = await session.execute(
-                    select(MonitoringProcess)
-                    .where(
+                    select(MonitoringProcess).where(
                         and_(
                             MonitoringProcess.status == "running",
                             MonitoringProcess.is_active == True,
                             MonitoringProcess.started_at.isnot(None),
-                            MonitoringProcess.max_duration_minutes.isnot(None)
+                            MonitoringProcess.max_duration_minutes.isnot(None),
                         )
                     )
                 )
@@ -72,18 +71,19 @@ class TimeoutEnforcementTask(BaseTask):
                         if running_duration > max_duration:
                             timeout_processes += 1
 
-                            stop_result = await monitoring_service._stop_process_instance(
-                                process,
-                                reason="timeout",
-                                commit=False,
+                            stop_result = (
+                                await monitoring_service._stop_process_instance(
+                                    process,
+                                    reason="timeout",
+                                    commit=False,
+                                )
                             )
 
                             stopped_processes += 1
                             revoked_msg = ""
                             if stop_result["revoked_tasks"]:
-                                revoked_msg = (
-                                    ", revoked tasks: "
-                                    + ", ".join(stop_result["revoked_tasks"].keys())
+                                revoked_msg = ", revoked tasks: " + ", ".join(
+                                    stop_result["revoked_tasks"].keys()
                                 )
                             logger.warning(
                                 "Stopped process '%s' due to timeout "
@@ -102,16 +102,18 @@ class TimeoutEnforcementTask(BaseTask):
 
                 execution_time = (utcnow() - start_time).total_seconds()
 
-                logger.info(f"Process timeout check completed: {timeout_processes} timed out, "
-                          f"{stopped_processes} stopped successfully")
+                logger.info(
+                    f"Process timeout check completed: {timeout_processes} timed out, "
+                    f"{stopped_processes} stopped successfully"
+                )
 
                 return {
-                    'total_processes': len(running_processes),
-                    'timeout_processes': timeout_processes,
-                    'stopped_processes': stopped_processes,
-                    'errors': errors,
-                    'execution_time_seconds': execution_time,
-                    'timestamp': utcnow().isoformat()
+                    "total_processes": len(running_processes),
+                    "timeout_processes": timeout_processes,
+                    "stopped_processes": stopped_processes,
+                    "errors": errors,
+                    "execution_time_seconds": execution_time,
+                    "timestamp": utcnow().isoformat(),
                 }
 
             except Exception as e:
@@ -121,19 +123,18 @@ class TimeoutEnforcementTask(BaseTask):
 
                 execution_time = (utcnow() - start_time).total_seconds()
                 return {
-                    'total_processes': 0,
-                    'timeout_processes': 0,
-                    'stopped_processes': 0,
-                    'errors': errors,
-                    'execution_time_seconds': execution_time,
-                    'timestamp': utcnow().isoformat()
+                    "total_processes": 0,
+                    "timeout_processes": 0,
+                    "stopped_processes": 0,
+                    "errors": errors,
+                    "execution_time_seconds": execution_time,
+                    "timestamp": utcnow().isoformat(),
                 }
 
 
 # Register the task as a Celery task
 @celery_app.task(
-    name='src.tasks.timeout_enforcer.check_process_timeouts',
-    queue='timeouts'
+    name="src.tasks.timeout_enforcer.check_process_timeouts", queue="timeouts"
 )
 def check_process_timeouts() -> Dict[str, Any]:
     """

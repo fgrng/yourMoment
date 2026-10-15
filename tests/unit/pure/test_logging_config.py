@@ -11,7 +11,7 @@ from src.config.logging import (
     _resolve_log_level,
     _build_formatter,
     format_log_context,
-    _ServiceNameFilter
+    _ServiceNameFilter,
 )
 
 
@@ -47,15 +47,10 @@ def test_build_formatter_production():
 
 def test_format_log_context():
     """Should correctly format a dict into a key=value string."""
-    context = {
-        "user_id": 123,
-        "action": "login",
-        "empty": "",
-        "none": None
-    }
+    context = {"user_id": 123, "action": "login", "empty": "", "none": None}
     # Should skip empty and None values
     formatted = format_log_context(**context)
-    
+
     # Check parts (order may vary in some Python versions, but fragments list handles it)
     assert "user_id=123" in formatted
     assert "action=login" in formatted
@@ -69,6 +64,6 @@ def test_service_name_filter():
     record = MagicMock()
     # Mock hasattr to return False for "service"
     del record.service
-    
+
     name_filter.filter(record)
     assert record.service == "test-service"

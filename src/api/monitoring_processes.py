@@ -10,12 +10,12 @@ from src.api.schemas import (
     MonitoringProcessCreate,
     MonitoringProcessUpdate,
     MonitoringProcessResponse,
-    PipelineStatusResponse
+    PipelineStatusResponse,
 )
 from src.services.monitoring_service import (
     MonitoringService,
     ProcessValidationError,
-    ProcessOperationError
+    ProcessOperationError,
 )
 from src.api.error_utils import http_error
 from src.api.auth import get_current_user
@@ -32,14 +32,20 @@ router = APIRouter(prefix="/monitoring-processes", tags=["Monitoring"])
 
 def _invalid_target_error(error: InvalidTarget) -> HTTPException:
     """The target does not match the platform's target description; the message names what to fix."""
-    return http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid_target", str(error))
+    return http_error(
+        status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid_target", str(error)
+    )
 
 
-@router.post("/create", status_code=status.HTTP_201_CREATED, response_model=MonitoringProcessResponse)
+@router.post(
+    "/create",
+    status_code=status.HTTP_201_CREATED,
+    response_model=MonitoringProcessResponse,
+)
 async def create_monitoring_process(
     process_data: MonitoringProcessCreate,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Create a new monitoring process.
@@ -61,10 +67,12 @@ async def create_monitoring_process(
             prompt_template_ids=process_data.prompt_template_ids,
             llm_provider_id=process_data.llm_provider_id,
             generate_only=process_data.generate_only,
-            hide_comments=process_data.hide_comments
+            hide_comments=process_data.hide_comments,
         )
 
-        logger.info(f"Created monitoring process {process.id} for user {current_user.id}")
+        logger.info(
+            f"Created monitoring process {process.id} for user {current_user.id}"
+        )
 
         # Convert to response format using model properties
         return MonitoringProcessResponse.model_validate(process)
@@ -73,31 +81,34 @@ async def create_monitoring_process(
         raise _invalid_target_error(e)
     except ProcessValidationError as e:
         logger.warning(f"Process validation failed for user {current_user.id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except ProcessOperationError as e:
         logger.error(f"Process creation failed for user {current_user.id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create monitoring process"
+            detail="Failed to create monitoring process",
         )
     except Exception as e:
-        logger.error(f"Unexpected error creating process for user {current_user.id}: {e}")
+        logger.error(
+            f"Unexpected error creating process for user {current_user.id}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
+            detail="Internal server error",
         )
 
 
 @router.get("/index", response_model=List[MonitoringProcessResponse])
 async def list_monitoring_processes(
-    limit: int = Query(default=50, ge=1, le=100, description="Maximum number of processes to return"),
+    limit: int = Query(
+        default=50, ge=1, le=100, description="Maximum number of processes to return"
+    ),
     offset: int = Query(default=0, ge=0, description="Number of processes to skip"),
-    is_running: Optional[bool] = Query(default=None, description="Filter by running status"),
+    is_running: Optional[bool] = Query(
+        default=None, description="Filter by running status"
+    ),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     List user's monitoring processes.
@@ -108,22 +119,23 @@ async def list_monitoring_processes(
         service = MonitoringService(session)
 
         processes = await service.list_user_processes(
-            user_id=current_user.id,
-            limit=limit,
-            offset=offset,
-            is_running=is_running
+            user_id=current_user.id, limit=limit, offset=offset, is_running=is_running
         )
 
         logger.debug(f"Retrieved {len(processes)} processes for user {current_user.id}")
 
         # Convert to response format using model properties
-        return [MonitoringProcessResponse.model_validate(process) for process in processes]
+        return [
+            MonitoringProcessResponse.model_validate(process) for process in processes
+        ]
 
     except Exception as e:
-        logger.error(f"Unexpected error listing processes for user {current_user.id}: {e}")
+        logger.error(
+            f"Unexpected error listing processes for user {current_user.id}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
+            detail="Internal server error",
         )
 
 
@@ -131,7 +143,7 @@ async def list_monitoring_processes(
 async def get_monitoring_process(
     process_id: uuid.UUID = Path(..., description="Process unique identifier"),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Get monitoring process details.
@@ -143,12 +155,14 @@ async def get_monitoring_process(
         service = MonitoringService(session)
 
         # Get process with user ownership validation
-        process = await service._get_process_with_associations(process_id, current_user.id)
+        process = await service._get_process_with_associations(
+            process_id, current_user.id
+        )
 
         if not process:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Monitoring process not found"
+                detail="Monitoring process not found",
             )
 
         logger.debug(f"Retrieved process {process_id} for user {current_user.id}")
@@ -161,26 +175,28 @@ async def get_monitoring_process(
             raise http_error(
                 status.HTTP_404_NOT_FOUND,
                 "monitoring_process_not_found",
-                "Monitoring process not found."
+                "Monitoring process not found.",
             )
         logger.error(
             "Process operation error retrieving process %s for user %s: %s",
             process_id,
             current_user.id,
             e,
-            exc_info=True
+            exc_info=True,
         )
         raise http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "monitoring_process_error",
-            "Failed to retrieve monitoring process."
+            "Failed to retrieve monitoring process.",
         )
     except Exception as e:
-        logger.error(f"Unexpected error getting process {process_id} for user {current_user.id}: {e}")
+        logger.error(
+            f"Unexpected error getting process {process_id} for user {current_user.id}: {e}"
+        )
         raise http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "monitoring_process_error",
-            "Failed to retrieve monitoring process."
+            "Failed to retrieve monitoring process.",
         )
 
 
@@ -189,7 +205,7 @@ async def update_monitoring_process(
     process_id: uuid.UUID = Path(..., description="Process unique identifier"),
     process_data: MonitoringProcessUpdate = ...,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Update a monitoring process.
@@ -206,36 +222,36 @@ async def update_monitoring_process(
         # Build update kwargs with only provided fields
         update_kwargs = {}
         if process_data.name is not None:
-            update_kwargs['name'] = process_data.name
+            update_kwargs["name"] = process_data.name
         if process_data.description is not None:
-            update_kwargs['description'] = process_data.description
+            update_kwargs["description"] = process_data.description
         if process_data.max_duration_minutes is not None:
-            update_kwargs['max_duration_minutes'] = process_data.max_duration_minutes
+            update_kwargs["max_duration_minutes"] = process_data.max_duration_minutes
         if process_data.llm_provider_id is not None:
-            update_kwargs['llm_provider_id'] = process_data.llm_provider_id
+            update_kwargs["llm_provider_id"] = process_data.llm_provider_id
         if process_data.prompt_template_ids is not None:
-            update_kwargs['prompt_template_ids'] = process_data.prompt_template_ids
+            update_kwargs["prompt_template_ids"] = process_data.prompt_template_ids
         if process_data.mymoment_login_ids is not None:
-            update_kwargs['login_ids'] = process_data.mymoment_login_ids
+            update_kwargs["login_ids"] = process_data.mymoment_login_ids
         if process_data.generate_only is not None:
-            update_kwargs['generate_only'] = process_data.generate_only
+            update_kwargs["generate_only"] = process_data.generate_only
         if process_data.hide_comments is not None:
-            update_kwargs['hide_comments'] = process_data.hide_comments
+            update_kwargs["hide_comments"] = process_data.hide_comments
 
         if process_data.target is not None:
-            update_kwargs['target'] = process_data.target
+            update_kwargs["target"] = process_data.target
         # An explicit null or empty search term clears it
-        if 'search' in process_data.model_fields_set:
-            update_kwargs['search_filter'] = process_data.search or ""
+        if "search" in process_data.model_fields_set:
+            update_kwargs["search_filter"] = process_data.search or ""
 
         # Update the process
         updated_process = await service.update_process(
-            process_id=process_id,
-            user_id=current_user.id,
-            **update_kwargs
+            process_id=process_id, user_id=current_user.id, **update_kwargs
         )
 
-        logger.info(f"Updated monitoring process {process_id} for user {current_user.id}")
+        logger.info(
+            f"Updated monitoring process {process_id} for user {current_user.id}"
+        )
 
         return MonitoringProcessResponse.model_validate(updated_process)
 
@@ -244,9 +260,7 @@ async def update_monitoring_process(
     except ProcessValidationError as e:
         logger.warning(f"Process validation failed for update {process_id}: {e}")
         raise http_error(
-            status.HTTP_400_BAD_REQUEST,
-            "monitoring_process_validation_error",
-            str(e)
+            status.HTTP_400_BAD_REQUEST, "monitoring_process_validation_error", str(e)
         )
     except ProcessOperationError as e:
         error_msg = str(e)
@@ -254,26 +268,26 @@ async def update_monitoring_process(
             raise http_error(
                 status.HTTP_404_NOT_FOUND,
                 "monitoring_process_not_found",
-                "Monitoring process not found."
+                "Monitoring process not found.",
             )
         logger.error(
             "Process operation error updating process %s for user %s: %s",
             process_id,
             current_user.id,
             e,
-            exc_info=True
+            exc_info=True,
         )
         raise http_error(
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-            "monitoring_process_error",
-            error_msg
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "monitoring_process_error", error_msg
         )
     except Exception as e:
-        logger.error(f"Unexpected error updating process {process_id} for user {current_user.id}: {e}")
+        logger.error(
+            f"Unexpected error updating process {process_id} for user {current_user.id}: {e}"
+        )
         raise http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "monitoring_process_error",
-            "Failed to update monitoring process."
+            "Failed to update monitoring process.",
         )
 
 
@@ -281,7 +295,7 @@ async def update_monitoring_process(
 async def delete_monitoring_process(
     process_id: uuid.UUID = Path(..., description="Process unique identifier"),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Delete a monitoring process.
@@ -294,7 +308,9 @@ async def delete_monitoring_process(
 
         await service.delete_process(process_id, current_user.id)
 
-        logger.info(f"Deleted monitoring process {process_id} for user {current_user.id}")
+        logger.info(
+            f"Deleted monitoring process {process_id} for user {current_user.id}"
+        )
 
     except HTTPException:
         raise
@@ -304,27 +320,29 @@ async def delete_monitoring_process(
             raise http_error(
                 status.HTTP_404_NOT_FOUND,
                 "monitoring_process_not_found",
-                "Monitoring process not found."
+                "Monitoring process not found.",
             )
         logger.error(
             "Process operation error deleting process %s for user %s: %s",
             process_id,
             current_user.id,
             e,
-            exc_info=True
+            exc_info=True,
         )
         raise http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "monitoring_process_error",
-            "Failed to delete monitoring process."
+            "Failed to delete monitoring process.",
         )
     except Exception as e:
-        logger.error(f"Unexpected error deleting process {process_id} for user {current_user.id}: {e}")
+        logger.error(
+            f"Unexpected error deleting process {process_id} for user {current_user.id}: {e}"
+        )
         await session.rollback()
         raise http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "monitoring_process_error",
-            "Failed to delete monitoring process."
+            "Failed to delete monitoring process.",
         )
 
 
@@ -332,7 +350,7 @@ async def delete_monitoring_process(
 async def start_monitoring_process(
     process_id: uuid.UUID = Path(..., description="Process unique identifier"),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Start a monitoring process.
@@ -353,34 +371,40 @@ async def start_monitoring_process(
         if not isinstance(process_id, uuid.UUID):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid process ID format"
+                detail="Invalid process ID format",
             )
 
         service = MonitoringService(session)
 
         # Verify process exists and user owns it
-        process = await service._get_process_with_associations(process_id, current_user.id)
+        process = await service._get_process_with_associations(
+            process_id, current_user.id
+        )
 
         if not process:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Monitoring process not found"
+                detail="Monitoring process not found",
             )
 
         # Check if already running
         if process.is_running:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Monitoring process is already running"
+                detail="Monitoring process is already running",
             )
 
         # Start the process
         await service.start_process(process_id, current_user.id)
 
-        logger.info(f"Started monitoring process {process_id} for user {current_user.id}")
+        logger.info(
+            f"Started monitoring process {process_id} for user {current_user.id}"
+        )
 
         # Fetch the updated process to return in response format
-        updated_process = await service._get_process_with_associations(process_id, current_user.id)
+        updated_process = await service._get_process_with_associations(
+            process_id, current_user.id
+        )
         return MonitoringProcessResponse.model_validate(updated_process)
 
     except HTTPException:
@@ -393,14 +417,18 @@ async def start_monitoring_process(
             raise http_error(
                 status.HTTP_404_NOT_FOUND,
                 "monitoring_process_not_found",
-                "Monitoring process not found."
+                "Monitoring process not found.",
             )
-        elif "redis" in error_msg.lower() or "celery" in error_msg.lower() or "unavailable" in error_msg.lower():
+        elif (
+            "redis" in error_msg.lower()
+            or "celery" in error_msg.lower()
+            or "unavailable" in error_msg.lower()
+        ):
             # User-friendly error for Redis/Celery unavailability
             raise http_error(
                 status.HTTP_503_SERVICE_UNAVAILABLE,
                 "background_service_unavailable",
-                error_msg  # Use the detailed message from the service
+                error_msg,  # Use the detailed message from the service
             )
         else:
             # Generic error
@@ -409,26 +437,26 @@ async def start_monitoring_process(
                 process_id,
                 current_user.id,
                 e,
-                exc_info=True
+                exc_info=True,
             )
             raise http_error(
                 status.HTTP_500_INTERNAL_SERVER_ERROR,
                 "monitoring_process_error",
-                error_msg
+                error_msg,
             )
     except ProcessValidationError as e:
         logger.warning(f"Process validation failed for process {process_id}: {e}")
         raise http_error(
-            status.HTTP_400_BAD_REQUEST,
-            "monitoring_process_validation_error",
-            str(e)
+            status.HTTP_400_BAD_REQUEST, "monitoring_process_validation_error", str(e)
         )
     except Exception as e:
-        logger.error(f"Unexpected error starting process {process_id} for user {current_user.id}: {e}")
+        logger.error(
+            f"Unexpected error starting process {process_id} for user {current_user.id}: {e}"
+        )
         raise http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "monitoring_process_error",
-            "Failed to start monitoring process."
+            "Failed to start monitoring process.",
         )
 
 
@@ -436,7 +464,7 @@ async def start_monitoring_process(
 async def stop_monitoring_process(
     process_id: uuid.UUID = Path(..., description="Process unique identifier"),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Stop a monitoring process.
@@ -457,27 +485,33 @@ async def stop_monitoring_process(
         if not isinstance(process_id, uuid.UUID):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid process ID format"
+                detail="Invalid process ID format",
             )
 
         service = MonitoringService(session)
 
         # Verify process exists and user owns it
-        process = await service._get_process_with_associations(process_id, current_user.id)
+        process = await service._get_process_with_associations(
+            process_id, current_user.id
+        )
 
         if not process:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Monitoring process not found"
+                detail="Monitoring process not found",
             )
 
         # Stop the process (idempotent operation)
         await service.stop_process(process_id, current_user.id)
 
-        logger.info(f"Stopped monitoring process {process_id} for user {current_user.id}")
+        logger.info(
+            f"Stopped monitoring process {process_id} for user {current_user.id}"
+        )
 
         # Fetch the updated process to return in response format
-        updated_process = await service._get_process_with_associations(process_id, current_user.id)
+        updated_process = await service._get_process_with_associations(
+            process_id, current_user.id
+        )
         return MonitoringProcessResponse.model_validate(updated_process)
 
     except HTTPException:
@@ -487,33 +521,33 @@ async def stop_monitoring_process(
             raise http_error(
                 status.HTTP_404_NOT_FOUND,
                 "monitoring_process_not_found",
-                "Monitoring process not found."
+                "Monitoring process not found.",
             )
         logger.error(
             "Process operation error stopping process %s for user %s: %s",
             process_id,
             current_user.id,
             e,
-            exc_info=True
+            exc_info=True,
         )
         raise http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "monitoring_process_error",
-            "Failed to stop monitoring process."
+            "Failed to stop monitoring process.",
         )
     except ProcessValidationError as e:
         logger.warning(f"Process validation failed for process {process_id}: {e}")
         raise http_error(
-            status.HTTP_400_BAD_REQUEST,
-            "monitoring_process_validation_error",
-            str(e)
+            status.HTTP_400_BAD_REQUEST, "monitoring_process_validation_error", str(e)
         )
     except Exception as e:
-        logger.error(f"Unexpected error stopping process {process_id} for user {current_user.id}: {e}")
+        logger.error(
+            f"Unexpected error stopping process {process_id} for user {current_user.id}: {e}"
+        )
         raise http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "monitoring_process_error",
-            "Failed to stop monitoring process."
+            "Failed to stop monitoring process.",
         )
 
 
@@ -521,7 +555,7 @@ async def stop_monitoring_process(
 async def get_pipeline_status(
     process_id: uuid.UUID = Path(..., description="Process unique identifier"),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Get pipeline status for a monitoring process.
@@ -546,7 +580,7 @@ async def get_pipeline_status(
         if not isinstance(process_id, uuid.UUID):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid process ID format"
+                detail="Invalid process ID format",
             )
 
         service = MonitoringService(session)
@@ -554,7 +588,9 @@ async def get_pipeline_status(
         # Get pipeline status from service
         pipeline_status = await service.get_pipeline_status(process_id, current_user.id)
 
-        logger.debug(f"Retrieved pipeline status for process {process_id}: {pipeline_status}")
+        logger.debug(
+            f"Retrieved pipeline status for process {process_id}: {pipeline_status}"
+        )
 
         return PipelineStatusResponse(**pipeline_status)
 
@@ -565,36 +601,40 @@ async def get_pipeline_status(
             raise http_error(
                 status.HTTP_404_NOT_FOUND,
                 "monitoring_process_not_found",
-                "Monitoring process not found."
+                "Monitoring process not found.",
             )
         logger.error(
             "Process operation error getting pipeline status for process %s: %s",
             process_id,
             e,
-            exc_info=True
+            exc_info=True,
         )
         raise http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "monitoring_process_error",
-            "Failed to retrieve pipeline status."
+            "Failed to retrieve pipeline status.",
         )
     except Exception as e:
         logger.error(
             f"Unexpected error getting pipeline status for process {process_id}: {e}",
-            exc_info=True
+            exc_info=True,
         )
         raise http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "monitoring_process_error",
-            "Failed to retrieve pipeline status."
+            "Failed to retrieve pipeline status.",
         )
 
 
-@router.post("/{process_id}/post-comments", status_code=status.HTTP_202_ACCEPTED, response_model=dict)
+@router.post(
+    "/{process_id}/post-comments",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=dict,
+)
 async def trigger_comment_poster_task(
     process_id: uuid.UUID = Path(..., description="Process unique identifier"),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Trigger comment poster task for a monitoring process.
@@ -616,18 +656,20 @@ async def trigger_comment_poster_task(
         if not isinstance(process_id, uuid.UUID):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid process ID format"
+                detail="Invalid process ID format",
             )
 
         service = MonitoringService(session)
 
         # Verify process exists and user owns it
-        process = await service._get_process_with_associations(process_id, current_user.id)
+        process = await service._get_process_with_associations(
+            process_id, current_user.id
+        )
 
         if not process:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Monitoring process not found"
+                detail="Monitoring process not found",
             )
 
         # Import the Celery task
@@ -635,8 +677,7 @@ async def trigger_comment_poster_task(
 
         # Trigger the task
         task = post_comments_for_articles.apply_async(
-            args=[str(process_id)],
-            queue='posting'
+            args=[str(process_id)], queue="posting"
         )
 
         logger.info(
@@ -647,7 +688,7 @@ async def trigger_comment_poster_task(
         return {
             "message": "Comment posting task started",
             "task_id": task.id,
-            "process_id": str(process_id)
+            "process_id": str(process_id),
         }
 
     except HTTPException:
@@ -657,26 +698,26 @@ async def trigger_comment_poster_task(
             raise http_error(
                 status.HTTP_404_NOT_FOUND,
                 "monitoring_process_not_found",
-                "Monitoring process not found."
+                "Monitoring process not found.",
             )
         logger.error(
             "Process operation error triggering comment poster for process %s: %s",
             process_id,
             e,
-            exc_info=True
+            exc_info=True,
         )
         raise http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "monitoring_process_error",
-            "Failed to trigger comment posting."
+            "Failed to trigger comment posting.",
         )
     except Exception as e:
         logger.error(
             f"Unexpected error triggering comment poster for process {process_id}: {e}",
-            exc_info=True
+            exc_info=True,
         )
         raise http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "monitoring_process_error",
-            "Failed to trigger comment posting task."
+            "Failed to trigger comment posting task.",
         )

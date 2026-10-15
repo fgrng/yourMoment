@@ -60,40 +60,46 @@ class AIComment(BaseModel):
     __tablename__ = "ai_comments"
 
     # Primary fields
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False)
+    id = Column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False
+    )
 
     # myMoment external identifiers
-    mymoment_article_id = Column(String(100), nullable=False, index=True)  # Article ID on myMoment
-    mymoment_comment_id = Column(String(100), nullable=True, unique=True)  # Comment ID after posting
+    mymoment_article_id = Column(
+        String(100), nullable=False, index=True
+    )  # Article ID on myMoment
+    mymoment_comment_id = Column(
+        String(100), nullable=True, unique=True
+    )  # Comment ID after posting
 
     # Foreign keys - tracking who/what generated this comment
     user_id = Column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
     mymoment_login_id = Column(
         UUID(as_uuid=True),
         ForeignKey("mymoment_logins.id", ondelete="SET NULL"),
         nullable=True,  # Set when comment is posted
-        index=True
+        index=True,
     )
     monitoring_process_id = Column(
         UUID(as_uuid=True),
         ForeignKey("monitoring_processes.id", ondelete="SET NULL"),
         nullable=True,  # Set when generated via monitoring process
-        index=True
+        index=True,
     )
     prompt_template_id = Column(
         UUID(as_uuid=True),
         ForeignKey("prompt_templates.id", ondelete="SET NULL"),
-        nullable=True  # Which prompt template was used
+        nullable=True,  # Which prompt template was used
     )
     llm_provider_id = Column(
         UUID(as_uuid=True),
         ForeignKey("llm_provider_configurations.id", ondelete="SET NULL"),
-        nullable=True  # Which LLM provider was used
+        nullable=True,  # Which LLM provider was used
     )
 
     # ========================================
@@ -110,13 +116,21 @@ class AIComment(BaseModel):
 
     # Article content (frozen snapshot)
     # nullable=True to support discovered -> prepared workflow
-    article_content = Column(Text, nullable=True)  # Processed text content (populated in 'prepared' stage)
-    article_raw_html = Column(Text, nullable=True)  # Original HTML (populated in 'prepared' stage)
+    article_content = Column(
+        Text, nullable=True
+    )  # Processed text content (populated in 'prepared' stage)
+    article_raw_html = Column(
+        Text, nullable=True
+    )  # Original HTML (populated in 'prepared' stage)
 
     # Article timestamps
-    article_published_at = Column(UTCDateTime, nullable=True)  # When published on myMoment
+    article_published_at = Column(
+        UTCDateTime, nullable=True
+    )  # When published on myMoment
     article_edited_at = Column(UTCDateTime, nullable=True)  # Last edit on myMoment
-    article_scraped_at = Column(UTCDateTime, nullable=False)  # When we captured this snapshot
+    article_scraped_at = Column(
+        UTCDateTime, nullable=False
+    )  # When we captured this snapshot
 
     # Article metadata (optional)
     article_metadata = Column(JSON, nullable=True)  # Additional metadata as JSON
@@ -127,33 +141,44 @@ class AIComment(BaseModel):
 
     # AI comment fields
     comment_content = Column(Text, nullable=True)
-    reasoning_content = Column(Text, nullable=True)  # Store native reasoning/thought process from LLM
+    reasoning_content = Column(
+        Text, nullable=True
+    )  # Store native reasoning/thought process from LLM
 
     # Comment visibility on myMoment
-    is_hidden = Column(Boolean, nullable=False, default=False)  # Whether comment is hidden on myMoment
+    is_hidden = Column(
+        Boolean, nullable=False, default=False
+    )  # Whether comment is hidden on myMoment
 
     # Comment status
     status = Column(
-        String(20),
-        nullable=False,
-        default=lambda: "discovered",
-        index=True
+        String(20), nullable=False, default=lambda: "discovered", index=True
     )  # discovered, prepared, generated, posting, posted, failed, deleted
 
     # Comment generation metadata
     ai_model_name = Column(String(100), nullable=True)  # e.g., "claude-3-opus-20240229"
     ai_provider_name = Column(String(50), nullable=True)  # e.g., "openai", "mistral"
     generation_tokens = Column(Integer, nullable=True)  # Token count for generation
-    generation_time_ms = Column(Integer, nullable=True)  # Time taken to generate (milliseconds)
+    generation_time_ms = Column(
+        Integer, nullable=True
+    )  # Time taken to generate (milliseconds)
 
     # Timestamps
-    created_at = Column(UTCDateTime, nullable=False, default=utcnow)  # When comment generated
-    posted_at = Column(UTCDateTime, nullable=True)  # When successfully posted to myMoment
-    failed_at = Column(UTCDateTime, nullable=True)  # When posting failed (if applicable)
+    created_at = Column(
+        UTCDateTime, nullable=False, default=utcnow
+    )  # When comment generated
+    posted_at = Column(
+        UTCDateTime, nullable=True
+    )  # When successfully posted to myMoment
+    failed_at = Column(
+        UTCDateTime, nullable=True
+    )  # When posting failed (if applicable)
 
     # Error tracking
     error_message = Column(Text, nullable=True)  # Error message if posting failed
-    retry_count = Column(Integer, nullable=False, default=0)  # Number of posting attempts
+    retry_count = Column(
+        Integer, nullable=False, default=0
+    )  # Number of posting attempts
 
     # Soft delete
     is_active = Column(Boolean, nullable=False, default=True)
@@ -163,33 +188,35 @@ class AIComment(BaseModel):
     mymoment_login = relationship("MyMomentLogin", back_populates="ai_comments")
     monitoring_process = relationship("MonitoringProcess", back_populates="ai_comments")
     prompt_template = relationship("PromptTemplate", back_populates="ai_comments")
-    llm_provider = relationship("LLMProviderConfiguration", back_populates="ai_comments")
+    llm_provider = relationship(
+        "LLMProviderConfiguration", back_populates="ai_comments"
+    )
 
     # Constraints
     __table_args__ = (
         CheckConstraint(
             "status IN ('discovered', 'prepared', 'generated', 'posting', 'posted', 'failed', 'deleted')",
-            name="check_ai_comment_status"
+            name="check_ai_comment_status",
         ),
         CheckConstraint(
             "(status IN ('discovered', 'prepared', 'failed')) OR (comment_content IS NOT NULL)",
-            name="check_comment_content_required_after_preparation"
+            name="check_comment_content_required_after_preparation",
         ),
         CheckConstraint(
             "(status != 'posted') OR (status = 'posted' AND posted_at IS NOT NULL)",
-            name="check_posted_status_has_timestamp"
+            name="check_posted_status_has_timestamp",
         ),
         CheckConstraint(
             "(status != 'posted') OR (status = 'posted' AND mymoment_comment_id IS NOT NULL)",
-            name="check_posted_status_has_comment_id"
+            name="check_posted_status_has_comment_id",
         ),
         CheckConstraint(
             "(status != 'posted') OR (status = 'posted' AND mymoment_login_id IS NOT NULL)",
-            name="check_posted_status_has_login"
+            name="check_posted_status_has_login",
         ),
         CheckConstraint(
             "(status != 'failed') OR (status = 'failed' AND error_message IS NOT NULL)",
-            name="check_failed_status_has_error"
+            name="check_failed_status_has_error",
         ),
         UniqueConstraint(
             "mymoment_article_id",
@@ -202,12 +229,12 @@ class AIComment(BaseModel):
 
     def __init__(self, **kwargs):
         """Initialize AIComment with default values if not provided."""
-        if 'status' not in kwargs:
-            kwargs['status'] = 'discovered'
-        if 'is_active' not in kwargs:
-            kwargs['is_active'] = True
-        if 'is_hidden' not in kwargs:
-            kwargs['is_hidden'] = False
+        if "status" not in kwargs:
+            kwargs["status"] = "discovered"
+        if "is_active" not in kwargs:
+            kwargs["is_active"] = True
+        if "is_hidden" not in kwargs:
+            kwargs["is_hidden"] = False
         super().__init__(**kwargs)
 
     def __repr__(self) -> str:
@@ -262,10 +289,9 @@ class AIComment(BaseModel):
         settings = get_settings()
         required_prefix = settings.monitoring.AI_COMMENT_PREFIX
         normalized_content = self.comment_content.strip()
-        return (
-            normalized_content.startswith(required_prefix)
-            or normalized_content.startswith(f"<p>{required_prefix}</p>")
-        )
+        return normalized_content.startswith(
+            required_prefix
+        ) or normalized_content.startswith(f"<p>{required_prefix}</p>")
 
     @staticmethod
     def apply_ai_prefix(content: str) -> str:
@@ -285,9 +311,8 @@ class AIComment(BaseModel):
         prefix = settings.monitoring.AI_COMMENT_PREFIX
         normalized_content = content.strip()
 
-        if (
-            normalized_content.startswith(prefix)
-            or normalized_content.startswith(f"<p>{prefix}</p>")
+        if normalized_content.startswith(prefix) or normalized_content.startswith(
+            f"<p>{prefix}</p>"
         ):
             return normalized_content
 
@@ -327,13 +352,11 @@ class AIComment(BaseModel):
             "posting": "Posting to myMoment",
             "posted": "Posted to myMoment",
             "failed": "Posting failed",
-            "deleted": "Deleted"
+            "deleted": "Deleted",
         }.get(self.status, "Unknown")
 
     def mark_as_posted(
-        self,
-        mymoment_comment_id: str,
-        posted_at: Optional[datetime] = None
+        self, mymoment_comment_id: str, posted_at: Optional[datetime] = None
     ) -> None:
         """
         Mark this comment as successfully posted to myMoment.
@@ -348,9 +371,7 @@ class AIComment(BaseModel):
         self.error_message = None
 
     def mark_as_failed(
-        self,
-        error_message: str,
-        failed_at: Optional[datetime] = None
+        self, error_message: str, failed_at: Optional[datetime] = None
     ) -> None:
         """
         Mark this comment posting as failed.
@@ -373,11 +394,21 @@ class AIComment(BaseModel):
         validation_results = {
             "has_required_prefix": self.has_valid_ai_prefix,
             "has_monitoring_process": self.monitoring_process_id is not None,
-            "has_login_if_posted": self.mymoment_login_id is not None if self.is_posted else True,
-            "has_comment_id_if_posted": self.mymoment_comment_id is not None if self.is_posted else True,
-            "content_not_empty": bool(self.comment_content and self.comment_content.strip()),
-            "article_content_not_empty": bool(self.article_content and self.article_content.strip()),
-            "article_title_not_empty": bool(self.article_title and self.article_title.strip()),
+            "has_login_if_posted": self.mymoment_login_id is not None
+            if self.is_posted
+            else True,
+            "has_comment_id_if_posted": self.mymoment_comment_id is not None
+            if self.is_posted
+            else True,
+            "content_not_empty": bool(
+                self.comment_content and self.comment_content.strip()
+            ),
+            "article_content_not_empty": bool(
+                self.article_content and self.article_content.strip()
+            ),
+            "article_title_not_empty": bool(
+                self.article_title and self.article_title.strip()
+            ),
         }
 
         validation_results["is_valid"] = all(validation_results.values())

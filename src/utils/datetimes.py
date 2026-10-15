@@ -11,7 +11,9 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def format_local(value: datetime | None, timezone: str, fmt: str = DISPLAY_FORMAT, fallback: str = "") -> str:
+def format_local(
+    value: datetime | None, timezone: str, fmt: str = DISPLAY_FORMAT, fallback: str = ""
+) -> str:
     """Format an aware datetime as wall-clock time in ``timezone`` for display.
 
     ``None`` gives ``fallback``. Only for display: stored and API values stay UTC.

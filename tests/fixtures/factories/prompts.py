@@ -37,7 +37,9 @@ async def create_prompt_template(
         name=overrides.pop("name", f"Prompt {index}"),
         description=overrides.pop("description", f"Prompt template {index}"),
         system_prompt=overrides.pop("system_prompt", DEFAULT_SYSTEM_PROMPT),
-        user_prompt_template=overrides.pop("user_prompt_template", DEFAULT_USER_PROMPT_TEMPLATE),
+        user_prompt_template=overrides.pop(
+            "user_prompt_template", DEFAULT_USER_PROMPT_TEMPLATE
+        ),
         category=category,
         user=owner["user"] if owner else None,
         user_id=owner["user_id"] if owner else None,

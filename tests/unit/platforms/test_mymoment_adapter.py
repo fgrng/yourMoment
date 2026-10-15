@@ -66,13 +66,21 @@ def cookie_store() -> InMemoryCookieStore:
 
 @pytest.fixture
 def adapter(http, cookie_store) -> MyMomentAdapter:
-    return MyMomentAdapter(cookie_store=cookie_store, http_session_factory=http.as_factory())
+    return MyMomentAdapter(
+        cookie_store=cookie_store, http_session_factory=http.as_factory()
+    )
 
 
 def _stored_session(value: str) -> dict:
     return {
         "cookies": [
-            {"name": "sessionid", "value": value, "domain": "www.mymoment.ch", "path": "/", "expires": None}
+            {
+                "name": "sessionid",
+                "value": value,
+                "domain": "www.mymoment.ch",
+                "path": "/",
+                "expires": None,
+            }
         ],
         "csrf_token": "stored-csrf",
         "saved_at": "2026-10-14T08:00:00",
@@ -80,7 +88,9 @@ def _stored_session(value: str) -> dict:
 
 
 def _stored_cookie_value(cookie_store, account) -> str:
-    return {c["name"]: c["value"] for c in cookie_store.saved[account.id]["cookies"]}["sessionid"]
+    return {c["name"]: c["value"] for c in cookie_store.saved[account.id]["cookies"]}[
+        "sessionid"
+    ]
 
 
 async def test_login_stores_session_cookie(adapter, http, cookie_store, account):
@@ -92,7 +102,9 @@ async def test_login_stores_session_cookie(adapter, http, cookie_store, account)
     assert _stored_cookie_value(cookie_store, account) == "fresh-session"
 
 
-async def test_valid_stored_cookie_is_reused_without_login(adapter, http, cookie_store, account):
+async def test_valid_stored_cookie_is_reused_without_login(
+    adapter, http, cookie_store, account
+):
     cookie_store.saved[account.id] = _stored_session("stored-session")
     http.queue_response("GET", HOME_URL, logged_in_page())
 
@@ -102,7 +114,9 @@ async def test_valid_stored_cookie_is_reused_without_login(adapter, http, cookie
     assert [r["url"] for r in http.requests] == [HOME_URL]
 
 
-async def test_invalid_stored_cookie_leads_to_new_login(adapter, http, cookie_store, account):
+async def test_invalid_stored_cookie_leads_to_new_login(
+    adapter, http, cookie_store, account
+):
     cookie_store.saved[account.id] = _stored_session("expired-session")
     http.queue_response("GET", HOME_URL, logged_out_page())
     queue_login(http, session_cookie="fresh-session")
@@ -113,7 +127,9 @@ async def test_invalid_stored_cookie_leads_to_new_login(adapter, http, cookie_st
     assert _stored_cookie_value(cookie_store, account) == "fresh-session"
 
 
-async def test_rejected_credentials_discard_the_stored_cookie(adapter, http, cookie_store, account):
+async def test_rejected_credentials_discard_the_stored_cookie(
+    adapter, http, cookie_store, account
+):
     cookie_store.saved[account.id] = _stored_session("expired-session")
     http.queue_response("GET", HOME_URL, logged_out_page())
     queue_login(http, succeed=False)
@@ -131,8 +147,13 @@ async def test_login_sends_credentials_with_csrf_token(adapter, http, account):
     async with adapter.connect(account):
         pass
 
-    login_post = next(r for r in http.requests if r["method"] == "POST" and r["url"] == LOGIN_URL)
-    assert {k: login_post["kwargs"]["data"][k] for k in ("csrfmiddlewaretoken", "username", "password")} == {
+    login_post = next(
+        r for r in http.requests if r["method"] == "POST" and r["url"] == LOGIN_URL
+    )
+    assert {
+        k: login_post["kwargs"]["data"][k]
+        for k in ("csrfmiddlewaretoken", "username", "password")
+    } == {
         "csrfmiddlewaretoken": "TEST_CSRF_TOKEN",
         "username": "teacher",
         "password": "secret",
@@ -157,7 +178,10 @@ async def test_fetch_article_reads_author_and_html_body(adapter, http, account):
     async with adapter.connect(account) as connection:
         content = await connection.fetch_article(ArticleRef(id="3170", url=ARTICLE_URL))
 
-    assert (content.author, content.body_html.startswith('<div class="article">')) == ("SampleAuthor01", True)
+    assert (content.author, content.body_html.startswith('<div class="article">')) == (
+        "SampleAuthor01",
+        True,
+    )
 
 
 async def test_fetch_article_follows_malformed_redirect(adapter, http, account):
@@ -166,7 +190,9 @@ async def test_fetch_article_follows_malformed_redirect(adapter, http, account):
     http.queue_response(
         "GET",
         ARTICLE_URL,
-        AiohttpStubResponse(status=301, headers={"Location": "\\article\\3170\\detail\\"}),
+        AiohttpStubResponse(
+            status=301, headers={"Location": "\\article\\3170\\detail\\"}
+        ),
     )
     queue_article(http, "3170/detail")
 
@@ -185,7 +211,9 @@ async def test_fetch_article_on_server_error_raises_unavailable(adapter, http, a
             await connection.fetch_article(ArticleRef(id="3170", url=ARTICLE_URL))
 
 
-async def test_login_is_confirmed_on_home_page_wherever_it_lands(adapter, http, account):
+async def test_login_is_confirmed_on_home_page_wherever_it_lands(
+    adapter, http, account
+):
     http.queue_response("GET", LOGIN_URL, logged_out_page())
     http.queue_response(
         "POST",
@@ -195,7 +223,9 @@ async def test_login_is_confirmed_on_home_page_wherever_it_lands(adapter, http, 
     http.queue_response(
         "GET",
         f"{MYMOMENT_BASE_URL}/accounts/profile/",
-        AiohttpStubResponse(status=200, body="<html><body><h1>Profil</h1></body></html>"),
+        AiohttpStubResponse(
+            status=200, body="<html><body><h1>Profil</h1></body></html>"
+        ),
     )
     http.queue_response("GET", HOME_URL, logged_in_page())
 
@@ -215,9 +245,15 @@ class _TimedStubSession(AiohttpStubSession):
         return super().request(method, url, **kwargs)
 
 
-async def test_concurrent_requests_on_one_connection_keep_the_rate_limit(cookie_store, account):
+async def test_concurrent_requests_on_one_connection_keep_the_rate_limit(
+    cookie_store, account
+):
     http = _TimedStubSession()
-    adapter = MyMomentAdapter(cookie_store=cookie_store, rate_limit_delay=0.05, http_session_factory=http.as_factory())
+    adapter = MyMomentAdapter(
+        cookie_store=cookie_store,
+        rate_limit_delay=0.05,
+        http_session_factory=http.as_factory(),
+    )
     cookie_store.saved[account.id] = _stored_session("stored-session")
     http.queue_response("GET", HOME_URL, logged_in_page())
     queue_article(http, "3170")
@@ -226,15 +262,22 @@ async def test_concurrent_requests_on_one_connection_keep_the_rate_limit(cookie_
     async with adapter.connect(account) as connection:
         await asyncio.gather(
             connection.fetch_article(ArticleRef(id="3170", url=ARTICLE_URL)),
-            connection.fetch_article(ArticleRef(id="3171", url=f"{MYMOMENT_BASE_URL}/article/3171/")),
+            connection.fetch_article(
+                ArticleRef(id="3171", url=f"{MYMOMENT_BASE_URL}/article/3171/")
+            ),
         )
 
     gaps = [later - earlier for earlier, later in zip(http.sent_at, http.sent_at[1:])]
     assert min(gaps) >= 0.045
 
 
-async def test_corrupt_stored_cookies_lead_to_new_login(adapter, http, cookie_store, account):
-    cookie_store.saved[account.id] = {"cookies": [{"value": "no-name"}], "csrf_token": None}
+async def test_corrupt_stored_cookies_lead_to_new_login(
+    adapter, http, cookie_store, account
+):
+    cookie_store.saved[account.id] = {
+        "cookies": [{"value": "no-name"}],
+        "csrf_token": None,
+    }
     queue_login(http, session_cookie="fresh-session")
 
     async with adapter.connect(account):
@@ -249,7 +292,9 @@ class _FailingSaveCookieStore(InMemoryCookieStore):
 
 
 async def test_failed_cookie_save_keeps_the_connection_usable(http, account):
-    adapter = MyMomentAdapter(cookie_store=_FailingSaveCookieStore(), http_session_factory=http.as_factory())
+    adapter = MyMomentAdapter(
+        cookie_store=_FailingSaveCookieStore(), http_session_factory=http.as_factory()
+    )
     queue_login(http)
     queue_article(http, "3170")
 
@@ -265,7 +310,10 @@ class _FailingDiscardCookieStore(InMemoryCookieStore):
 
 
 async def test_failed_cookie_discard_still_reports_rejected_credentials(http, account):
-    adapter = MyMomentAdapter(cookie_store=_FailingDiscardCookieStore(), http_session_factory=http.as_factory())
+    adapter = MyMomentAdapter(
+        cookie_store=_FailingDiscardCookieStore(),
+        http_session_factory=http.as_factory(),
+    )
     queue_login(http, succeed=False)
 
     with pytest.raises(PlatformAuthError):
@@ -280,7 +328,9 @@ class _FailingLoadCookieStore(InMemoryCookieStore):
 
 async def test_failed_cookie_load_leads_to_new_login(http, account):
     cookie_store = _FailingLoadCookieStore()
-    adapter = MyMomentAdapter(cookie_store=cookie_store, http_session_factory=http.as_factory())
+    adapter = MyMomentAdapter(
+        cookie_store=cookie_store, http_session_factory=http.as_factory()
+    )
     queue_login(http, session_cookie="fresh-session")
 
     async with adapter.connect(account):
@@ -289,7 +339,9 @@ async def test_failed_cookie_load_leads_to_new_login(http, account):
     assert _stored_cookie_value(cookie_store, account) == "fresh-session"
 
 
-async def test_fresh_login_ignores_a_valid_stored_cookie(adapter, http, cookie_store, account):
+async def test_fresh_login_ignores_a_valid_stored_cookie(
+    adapter, http, cookie_store, account
+):
     cookie_store.saved[account.id] = _stored_session("stored-session")
     queue_login(http, succeed=False)
 
@@ -299,7 +351,11 @@ async def test_fresh_login_ignores_a_valid_stored_cookie(adapter, http, cookie_s
 
 
 async def test_login_page_without_csrf_token_raises_unavailable(adapter, http, account):
-    http.queue_response("GET", LOGIN_URL, AiohttpStubResponse(status=200, body="<html><body>Wartung</body></html>"))
+    http.queue_response(
+        "GET",
+        LOGIN_URL,
+        AiohttpStubResponse(status=200, body="<html><body>Wartung</body></html>"),
+    )
 
     with pytest.raises(PlatformUnavailable):
         async with adapter.connect(account):
@@ -316,7 +372,9 @@ async def test_fetch_missing_article_raises_rejected(adapter, http, account):
 
 
 @pytest.mark.parametrize("article_id", ["..", "3170?tab=alle", "3170/comment", "²", ""])
-async def test_fetch_article_rejects_malformed_id_without_request(adapter, http, account, article_id):
+async def test_fetch_article_rejects_malformed_id_without_request(
+    adapter, http, account, article_id
+):
     queue_login(http)
 
     async with adapter.connect(account) as connection:
@@ -337,16 +395,25 @@ async def test_redirect_without_location_raises_unavailable(adapter, http, accou
 
 
 @pytest.mark.parametrize("status", [307, 308])
-async def test_redirect_keeping_the_method_resends_the_form(adapter, http, account, status):
+async def test_redirect_keeping_the_method_resends_the_form(
+    adapter, http, account, status
+):
     confirm_url = f"{MYMOMENT_BASE_URL}/accounts/login/confirm/"
     http.queue_response("GET", LOGIN_URL, logged_out_page())
     http.queue_response(
-        "POST", LOGIN_URL, AiohttpStubResponse(status=status, headers={"Location": "/accounts/login/confirm/"})
+        "POST",
+        LOGIN_URL,
+        AiohttpStubResponse(
+            status=status, headers={"Location": "/accounts/login/confirm/"}
+        ),
     )
     http.queue_response(
         "POST",
         confirm_url,
-        AiohttpStubResponse(status=302, headers={"Location": "/", "Set-Cookie": "sessionid=fresh; Path=/"}),
+        AiohttpStubResponse(
+            status=302,
+            headers={"Location": "/", "Set-Cookie": "sessionid=fresh; Path=/"},
+        ),
     )
     http.queue_response("GET", HOME_URL, logged_in_page())
     http.queue_response("GET", HOME_URL, logged_in_page())
@@ -355,13 +422,20 @@ async def test_redirect_keeping_the_method_resends_the_form(adapter, http, accou
         pass
 
     resent = next(r for r in http.requests if r["url"] == confirm_url)
-    assert (resent["method"], resent["kwargs"]["data"]["password"]) == ("POST", "secret")
+    assert (resent["method"], resent["kwargs"]["data"]["password"]) == (
+        "POST",
+        "secret",
+    )
 
 
 async def test_endless_redirects_raise_unavailable(adapter, http, account):
     queue_login(http)
     for _ in range(6):
-        http.queue_response("GET", ARTICLE_URL, AiohttpStubResponse(status=302, headers={"Location": ARTICLE_URL}))
+        http.queue_response(
+            "GET",
+            ARTICLE_URL,
+            AiohttpStubResponse(status=302, headers={"Location": ARTICLE_URL}),
+        )
 
     async with adapter.connect(account) as connection:
         with pytest.raises(PlatformUnavailable):
@@ -377,10 +451,16 @@ async def test_list_articles_reads_category_from_each_card(adapter, http, accoun
     async with adapter.connect(account) as connection:
         articles = await connection.list_articles(target)
 
-    assert [(a.ref.id, a.category) for a in articles] == [("4601", "7"), ("4602", "7"), ("4603", "8")]
+    assert [(a.ref.id, a.category) for a in articles] == [
+        ("4601", "7"),
+        ("4602", "7"),
+        ("4603", "8"),
+    ]
 
 
-async def test_list_articles_category_target_drops_other_categories(adapter, http, account):
+async def test_list_articles_category_target_drops_other_categories(
+    adapter, http, account
+):
     """Regression: the category filter used to pass every article through."""
     target = {"classroom": "82", "category": "8"}
     queue_login(http)
@@ -399,7 +479,12 @@ async def test_list_articles_returns_card_metadata(adapter, http, account):
     async with adapter.connect(account) as connection:
         [article] = await connection.list_articles({"classroom": "home"})
 
-    assert (article.ref.url, article.title, article.author, article.extra["visibility"]) == (
+    assert (
+        article.ref.url,
+        article.title,
+        article.author,
+        article.extra["visibility"],
+    ) == (
         f"{MYMOMENT_BASE_URL}/article/4501/",
         "Beispieltext Zuhause 01",
         "SampleAuthor10",
@@ -431,16 +516,27 @@ async def test_list_articles_reads_the_teacher_table(adapter, http, account):
     async with adapter.connect(account) as connection:
         articles = await connection.list_articles(target)
 
-    assert [(a.ref.id, a.category, a.extra.get("arrangement"), a.extra["status"]) for a in articles] == [
+    assert [
+        (a.ref.id, a.category, a.extra.get("arrangement"), a.extra["status"])
+        for a in articles
+    ] == [
         ("3170", "7", "10", "Publiziert"),
         ("3171", "9", None, "Entwurf"),
     ]
 
 
-async def test_list_articles_reads_the_id_from_a_link_to_the_edit_page(adapter, http, account):
+async def test_list_articles_reads_the_id_from_a_link_to_the_edit_page(
+    adapter, http, account
+):
     target = {"classroom": "82"}
     queue_login(http)
-    queue_article_list(http, target, body=_TEACHER_TABLE.replace('href="/article/3171/"', 'href="/article/3171/edit/"'))
+    queue_article_list(
+        http,
+        target,
+        body=_TEACHER_TABLE.replace(
+            'href="/article/3171/"', 'href="/article/3171/edit/"'
+        ),
+    )
 
     async with adapter.connect(account) as connection:
         articles = await connection.list_articles(target)
@@ -448,7 +544,9 @@ async def test_list_articles_reads_the_id_from_a_link_to_the_edit_page(adapter, 
     assert [a.ref.id for a in articles] == ["3170", "3171"]
 
 
-async def test_list_articles_arrangement_target_is_sent_and_kept_on_the_summaries(adapter, http, account):
+async def test_list_articles_arrangement_target_is_sent_and_kept_on_the_summaries(
+    adapter, http, account
+):
     # Cards do not show the arrangement; myMoment filters by the query parameter
     target = {"classroom": "alle", "arrangement": "4"}
     queue_login(http)
@@ -474,7 +572,9 @@ async def test_list_articles_arrangement_target_is_sent_and_kept_on_the_summarie
         {"classroom": "alle", "arrangement": "²"},
     ],
 )
-async def test_list_articles_rejects_invalid_target_without_request(adapter, http, account, target):
+async def test_list_articles_rejects_invalid_target_without_request(
+    adapter, http, account, target
+):
     queue_login(http)
 
     async with adapter.connect(account) as connection:
@@ -485,16 +585,22 @@ async def test_list_articles_rejects_invalid_target_without_request(adapter, htt
     assert len(http.requests) == requests_before
 
 
-async def test_list_articles_raises_rejected_when_the_list_is_missing(adapter, http, account):
+async def test_list_articles_raises_rejected_when_the_list_is_missing(
+    adapter, http, account
+):
     queue_login(http)
-    http.queue_response("GET", f"{MYMOMENT_BASE_URL}/articles/?tab=82", AiohttpStubResponse(status=404))
+    http.queue_response(
+        "GET", f"{MYMOMENT_BASE_URL}/articles/?tab=82", AiohttpStubResponse(status=404)
+    )
 
     async with adapter.connect(account) as connection:
         with pytest.raises(PlatformRejected):
             await connection.list_articles({"classroom": "82"})
 
 
-async def test_list_targets_raises_rejected_when_the_index_is_missing(adapter, http, account):
+async def test_list_targets_raises_rejected_when_the_index_is_missing(
+    adapter, http, account
+):
     queue_login(http)
     queue_targets(http, status=404)
 
@@ -503,12 +609,16 @@ async def test_list_targets_raises_rejected_when_the_index_is_missing(adapter, h
             await connection.list_targets()
 
 
-async def test_list_targets_without_arrangement_filter_offers_no_arrangements(adapter, http, account):
+async def test_list_targets_without_arrangement_filter_offers_no_arrangements(
+    adapter, http, account
+):
     queue_login(http)
     http.queue_response(
         "GET",
         f"{MYMOMENT_BASE_URL}/articles/",
-        AiohttpStubResponse(status=200, body="<html><body><p>Keine Filter</p></body></html>"),
+        AiohttpStubResponse(
+            status=200, body="<html><body><p>Keine Filter</p></body></html>"
+        ),
     )
 
     async with adapter.connect(account) as connection:
@@ -521,7 +631,9 @@ COMMENT_URL = f"{MYMOMENT_BASE_URL}/article/3170/comment/"
 
 
 def _comment_post(http) -> dict:
-    return next(r for r in http.requests if r["method"] == "POST" and r["url"] == COMMENT_URL)
+    return next(
+        r for r in http.requests if r["method"] == "POST" and r["url"] == COMMENT_URL
+    )
 
 
 async def test_post_comment_sends_the_comment_form(adapter, http, account):
@@ -530,11 +642,18 @@ async def test_post_comment_sends_the_comment_form(adapter, http, account):
     queue_comment_post(http, "3170")
 
     async with adapter.connect(account) as connection:
-        await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>")
+        await connection.post_comment(
+            ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>"
+        )
 
     post = _comment_post(http)
     assert (post["kwargs"]["data"], post["kwargs"]["headers"]["Referer"]) == (
-        {"csrfmiddlewaretoken": "TEST_CSRF_TOKEN", "text": "<p>Toll!</p>", "status": "20", "highlight": ""},
+        {
+            "csrfmiddlewaretoken": "TEST_CSRF_TOKEN",
+            "text": "<p>Toll!</p>",
+            "status": "20",
+            "highlight": "",
+        },
         ARTICLE_URL,
     )
 
@@ -545,29 +664,39 @@ async def test_post_hidden_comment_ticks_the_hide_box(adapter, http, account):
     queue_comment_post(http, "3170")
 
     async with adapter.connect(account) as connection:
-        await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>", hidden=True)
+        await connection.post_comment(
+            ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>", hidden=True
+        )
 
     assert _comment_post(http)["kwargs"]["data"]["hide"] == "on"
 
 
-async def test_post_comment_answered_with_200_succeeds_without_comment_id(adapter, http, account):
+async def test_post_comment_answered_with_200_succeeds_without_comment_id(
+    adapter, http, account
+):
     queue_login(http)
     queue_article(http, "3170")
     queue_comment_post(http, "3170", status=200)
 
     async with adapter.connect(account) as connection:
-        posted = await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>")
+        posted = await connection.post_comment(
+            ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>"
+        )
 
     assert posted.external_id is None
 
 
-async def test_post_comment_does_not_follow_the_success_redirect(adapter, http, account):
+async def test_post_comment_does_not_follow_the_success_redirect(
+    adapter, http, account
+):
     queue_login(http)
     queue_article(http, "3170")
     queue_comment_post(http, "3170")
 
     async with adapter.connect(account) as connection:
-        await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>")
+        await connection.post_comment(
+            ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>"
+        )
 
     assert http.requests[-1]["url"] == COMMENT_URL
 
@@ -580,10 +709,14 @@ async def test_post_comment_refused_by_myMoment_raises_rejected(adapter, http, a
 
     async with adapter.connect(account) as connection:
         with pytest.raises(PlatformRejected):
-            await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>")
+            await connection.post_comment(
+                ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>"
+            )
 
 
-async def test_post_comment_forbidden_by_an_expired_session_raises_unavailable(adapter, http, account):
+async def test_post_comment_forbidden_by_an_expired_session_raises_unavailable(
+    adapter, http, account
+):
     # Django answers 403 to an expired session or a stale CSRF token; a new connection can succeed
     queue_login(http)
     queue_article(http, "3170")
@@ -591,30 +724,46 @@ async def test_post_comment_forbidden_by_an_expired_session_raises_unavailable(a
 
     async with adapter.connect(account) as connection:
         with pytest.raises(PlatformUnavailable):
-            await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>")
+            await connection.post_comment(
+                ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>"
+            )
 
 
 @pytest.mark.parametrize("article_id", ["edit", "..", "3170/comment", "²", ""])
-async def test_post_comment_rejects_malformed_id_without_request(adapter, http, account, article_id):
+async def test_post_comment_rejects_malformed_id_without_request(
+    adapter, http, account, article_id
+):
     queue_login(http)
 
     async with adapter.connect(account) as connection:
         requests_before = len(http.requests)
         with pytest.raises(PlatformRejected):
-            await connection.post_comment(ArticleRef(id=article_id, url=ARTICLE_URL), "<p>Toll!</p>")
+            await connection.post_comment(
+                ArticleRef(id=article_id, url=ARTICLE_URL), "<p>Toll!</p>"
+            )
 
     assert len(http.requests) == requests_before
 
 
-async def test_post_comment_without_comment_form_raises_rejected_without_posting(adapter, http, account):
+async def test_post_comment_without_comment_form_raises_rejected_without_posting(
+    adapter, http, account
+):
     queue_login(http)
-    http.queue_response("GET", ARTICLE_URL, AiohttpStubResponse(status=200, body="<html><body><h1>Text</h1></body></html>"))
+    http.queue_response(
+        "GET",
+        ARTICLE_URL,
+        AiohttpStubResponse(status=200, body="<html><body><h1>Text</h1></body></html>"),
+    )
 
     async with adapter.connect(account) as connection:
         with pytest.raises(PlatformRejected):
-            await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>")
+            await connection.post_comment(
+                ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>"
+            )
 
-    assert [r for r in http.requests if r["method"] == "POST" and r["url"] == COMMENT_URL] == []
+    assert [
+        r for r in http.requests if r["method"] == "POST" and r["url"] == COMMENT_URL
+    ] == []
 
 
 async def test_post_comment_on_server_error_raises_unavailable(adapter, http, account):
@@ -624,7 +773,9 @@ async def test_post_comment_on_server_error_raises_unavailable(adapter, http, ac
 
     async with adapter.connect(account) as connection:
         with pytest.raises(PlatformUnavailable):
-            await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>")
+            await connection.post_comment(
+                ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>"
+            )
 
 
 async def test_list_student_articles_returns_dashboard_metadata(adapter, http, account):
@@ -636,16 +787,28 @@ async def test_list_student_articles_returns_dashboard_metadata(adapter, http, a
         articles = await connection.list_student_articles(StudentRef(id="1042"))
 
     first = articles[0]
-    assert (first.ref.url, first.title, first.category, first.edited_at, dict(first.extra)) == (
+    assert (
+        first.ref.url,
+        first.title,
+        first.category,
+        first.edited_at,
+        dict(first.extra),
+    ) == (
         f"{MYMOMENT_BASE_URL}/article/2695/",
         "Mein Ausflug in den Zoo",
         "9",
         datetime(2026, 1, 28, 8, 24, tzinfo=UTC),
-        {"categories": "Unterhalten", "status": "Publiziert", "visibility": "Beispielklasse A (Testschule)"},
+        {
+            "categories": "Unterhalten",
+            "status": "Publiziert",
+            "visibility": "Beispielklasse A (Testschule)",
+        },
     )
 
 
-async def test_list_student_articles_keeps_drafts_without_category(adapter, http, account):
+async def test_list_student_articles_keeps_drafts_without_category(
+    adapter, http, account
+):
     queue_login(http)
     queue_student_dashboard(http, "1042")
 
@@ -653,10 +816,16 @@ async def test_list_student_articles_keeps_drafts_without_category(adapter, http
         articles = await connection.list_student_articles(StudentRef(id="1042"))
 
     draft = articles[2]
-    assert (draft.category, draft.extra["categories"], draft.extra["status"]) == (None, "", "Entwurf")
+    assert (draft.category, draft.extra["categories"], draft.extra["status"]) == (
+        None,
+        "",
+        "Entwurf",
+    )
 
 
-async def test_list_student_articles_joins_several_categories_without_a_category_id(adapter, http, account):
+async def test_list_student_articles_joins_several_categories_without_a_category_id(
+    adapter, http, account
+):
     # student_dashboard.html, second row: "Anleiten" and "Informieren"
     queue_login(http)
     queue_student_dashboard(http, "1042")
@@ -665,12 +834,19 @@ async def test_list_student_articles_joins_several_categories_without_a_category
         articles = await connection.list_student_articles(StudentRef(id="1042"))
 
     second = articles[1]
-    assert (second.category, second.extra["categories"]) == (None, "Anleiten, Informieren")
+    assert (second.category, second.extra["categories"]) == (
+        None,
+        "Anleiten, Informieren",
+    )
 
 
-async def test_list_student_articles_reads_a_category_shown_as_plain_text(adapter, http, account):
+async def test_list_student_articles_reads_a_category_shown_as_plain_text(
+    adapter, http, account
+):
     queue_login(http)
-    queue_student_dashboard(http, "1042", body=_dashboard_row(category_cell="Berichten"))
+    queue_student_dashboard(
+        http, "1042", body=_dashboard_row(category_cell="Berichten")
+    )
 
     async with adapter.connect(account) as connection:
         [article] = await connection.list_student_articles(StudentRef(id="1042"))
@@ -678,7 +854,9 @@ async def test_list_student_articles_reads_a_category_shown_as_plain_text(adapte
     assert (article.category, article.extra["categories"]) == ("14", "Berichten")
 
 
-async def test_list_student_articles_keeps_an_article_whose_date_cannot_be_read(adapter, http, account):
+async def test_list_student_articles_keeps_an_article_whose_date_cannot_be_read(
+    adapter, http, account
+):
     queue_login(http)
     queue_student_dashboard(http, "1042", body=_dashboard_row(edited="gestern"))
 
@@ -695,7 +873,9 @@ async def test_list_student_articles_keeps_an_article_whose_date_cannot_be_read(
         ("14.01.2026 um 09:30 Uhr", "2026-01-14T08:30:00+00:00"),
     ],
 )
-async def test_list_student_articles_reads_the_date_as_zurich_time_in_utc(adapter, http, account, edited, expected):
+async def test_list_student_articles_reads_the_date_as_zurich_time_in_utc(
+    adapter, http, account, edited, expected
+):
     queue_login(http)
     queue_student_dashboard(http, "1042", body=_dashboard_row(edited=edited))
 
@@ -706,7 +886,9 @@ async def test_list_student_articles_reads_the_date_as_zurich_time_in_utc(adapte
 
 
 @pytest.mark.parametrize("status", [403, 404])
-async def test_list_student_articles_without_access_to_the_dashboard_raises_rejected(adapter, http, account, status):
+async def test_list_student_articles_without_access_to_the_dashboard_raises_rejected(
+    adapter, http, account, status
+):
     queue_login(http)
     queue_student_dashboard(http, "1042", status=status)
 
@@ -715,7 +897,9 @@ async def test_list_student_articles_without_access_to_the_dashboard_raises_reje
             await connection.list_student_articles(StudentRef(id="1042"))
 
 
-async def test_list_student_articles_rejects_a_malformed_student_id_without_request(adapter, http, account):
+async def test_list_student_articles_rejects_a_malformed_student_id_without_request(
+    adapter, http, account
+):
     queue_login(http)
 
     async with adapter.connect(account) as connection:
@@ -726,7 +910,9 @@ async def test_list_student_articles_rejects_a_malformed_student_id_without_requ
     assert len(http.requests) == requests_after_login
 
 
-def _dashboard_row(category_cell: str = "<li>Unterhalten</li>", edited: str = "28.01.2026 um 09:24 Uhr") -> str:
+def _dashboard_row(
+    category_cell: str = "<li>Unterhalten</li>", edited: str = "28.01.2026 um 09:24 Uhr"
+) -> str:
     return f"""
     <div id="pills-articles"><table><tbody><tr>
       <td><a href="/article/edit/2695/">Mein Ausflug in den Zoo</a></td>
@@ -739,7 +925,11 @@ def _dashboard_row(category_cell: str = "<li>Unterhalten</li>", edited: str = "2
 
 
 def test_target_labels_are_german(adapter):
-    assert [d.label for d in adapter.describe_target()] == ["Kategorie", "Schreibaufgabe", "Klasse"]
+    assert [d.label for d in adapter.describe_target()] == [
+        "Kategorie",
+        "Schreibaufgabe",
+        "Klasse",
+    ]
 
 
 def test_target_with_classroom_alle_is_rejected(adapter):
@@ -750,7 +940,11 @@ def test_target_with_classroom_alle_is_rejected(adapter):
 def test_target_of_the_mymoment_platform_is_described_without_network():
     adapter = adapter_for_platform(MYMOMENT)
 
-    assert [d.key for d in adapter.describe_target()] == ["category", "arrangement", "classroom"]
+    assert [d.key for d in adapter.describe_target()] == [
+        "category",
+        "arrangement",
+        "classroom",
+    ]
 
 
 def test_unknown_platform_has_no_adapter():

@@ -15,7 +15,9 @@ pytestmark = [pytest.mark.unit, pytest.mark.database]
 
 async def test_load_platform_account_decrypts_credentials(db_session):
     user = await create_user(db_session)
-    login = await create_mymoment_login(db_session, user=user, username="teacher", password="Secret-1!", is_admin=True)
+    login = await create_mymoment_login(
+        db_session, user=user, username="teacher", password="Secret-1!", is_admin=True
+    )
 
     account = await load_platform_account(db_session, login.id, user.id)
 

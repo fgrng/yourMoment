@@ -38,8 +38,7 @@ class BaseModel(Base):
             method to customize the output and handle sensitive data.
         """
         return {
-            column.name: getattr(self, column.name)
-            for column in self.__table__.columns
+            column.name: getattr(self, column.name) for column in self.__table__.columns
         }
 
 
@@ -55,14 +54,20 @@ class UTCDateTime(TypeDecorator):
     impl = DateTime(timezone=True)
     cache_ok = True
 
-    def process_bind_param(self, value: Optional[datetime], dialect: Dialect) -> Optional[datetime]:
+    def process_bind_param(
+        self, value: Optional[datetime], dialect: Dialect
+    ) -> Optional[datetime]:
         if value is None:
             return None
         if value.tzinfo is None:
-            raise ValueError(f"UTCDateTime requires an aware datetime, got naive {value!r}")
+            raise ValueError(
+                f"UTCDateTime requires an aware datetime, got naive {value!r}"
+            )
         return value.astimezone(UTC)
 
-    def process_result_value(self, value: Optional[datetime], dialect: Dialect) -> Optional[datetime]:
+    def process_result_value(
+        self, value: Optional[datetime], dialect: Dialect
+    ) -> Optional[datetime]:
         if value is None:
             return None
         if value.tzinfo is None:

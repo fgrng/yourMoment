@@ -43,6 +43,7 @@ _NOT_RETRYABLE = (PlatformAuthError, PlatformRejected, ValueError)
 @dataclass
 class ArticleSnapshot:
     """Snapshot of discovered article for preparation."""
+
     ai_comment_id: uuid.UUID
     mymoment_article_id: str
     article_title: str
@@ -64,7 +65,9 @@ class ArticlePreparationTask(BaseTask):
         sessionmaker = await self.db_manager.create_sessionmaker()
         return sessionmaker()
 
-    async def _read_article_snapshot(self, ai_comment_id: uuid.UUID) -> Optional[ArticleSnapshot]:
+    async def _read_article_snapshot(
+        self, ai_comment_id: uuid.UUID
+    ) -> Optional[ArticleSnapshot]:
         """Read a single AIComment as a lightweight snapshot."""
         session = await self.get_async_session()
         async with session:
@@ -83,7 +86,9 @@ class ArticlePreparationTask(BaseTask):
                 status=ai_comment.status,
             )
 
-    async def _load_platform_account(self, snapshot: ArticleSnapshot) -> PlatformAccount:
+    async def _load_platform_account(
+        self, snapshot: ArticleSnapshot
+    ) -> PlatformAccount:
         """Load the decrypted platform account of the AIComment; a missing account is final (ValueError)."""
         session = await self.get_async_session()
         async with session:
@@ -147,7 +152,9 @@ class ArticlePreparationTask(BaseTask):
 
                 if result.rowcount:
                     await session.commit()
-                    logger.debug(f"Updated article content for AIComment {ai_comment_id}")
+                    logger.debug(
+                        f"Updated article content for AIComment {ai_comment_id}"
+                    )
                     return True
 
                 ai_comment = await session.get(AIComment, ai_comment_id)
@@ -203,7 +210,9 @@ class ArticlePreparationTask(BaseTask):
 
                 if result.rowcount:
                     await session.commit()
-                    logger.info(f"Marked AIComment {ai_comment_id} as failed: {error_message}")
+                    logger.info(
+                        f"Marked AIComment {ai_comment_id} as failed: {error_message}"
+                    )
                     return True
 
                 ai_comment = await session.get(AIComment, ai_comment_id)
@@ -221,7 +230,9 @@ class ArticlePreparationTask(BaseTask):
             logger.error(f"Failed to mark AIComment {ai_comment_id} as failed: {e}")
             return False
 
-    async def _prepare_single_article_async(self, ai_comment_id: uuid.UUID) -> Dict[str, Any]:
+    async def _prepare_single_article_async(
+        self, ai_comment_id: uuid.UUID
+    ) -> Dict[str, Any]:
         """Prepare one article by fetching content and moving discovered -> prepared."""
         start_time = utcnow()
         snapshot = await self._read_article_snapshot(ai_comment_id)
@@ -257,7 +268,9 @@ class ArticlePreparationTask(BaseTask):
             account = await self._load_platform_account(snapshot)
             async with connect(account) as platform:
                 content = await platform.fetch_article(
-                    ArticleRef(id=snapshot.mymoment_article_id, url=snapshot.article_url)
+                    ArticleRef(
+                        id=snapshot.mymoment_article_id, url=snapshot.article_url
+                    )
                 )
 
             updated = await self._update_article_content(
@@ -292,21 +305,29 @@ def _normalize_identifier(identifier: Any, compat_args: tuple[Any, ...]) -> str:
 @celery_app.task(
     bind=True,
     base=ArticlePreparationTask,
-    name='src.tasks.article_preparation.prepare_article_content',
-    queue='preparation',
+    name="src.tasks.article_preparation.prepare_article_content",
+    queue="preparation",
     max_retries=3,
-    default_retry_delay=60
+    default_retry_delay=60,
 )
-def prepare_article_content(self, ai_comment_id: Any, *compat_args: Any) -> Dict[str, Any]:
+def prepare_article_content(
+    self, ai_comment_id: Any, *compat_args: Any
+) -> Dict[str, Any]:
     """Prepare one AIComment row for downstream generation."""
     ai_comment_id = _normalize_identifier(ai_comment_id, compat_args)
     try:
-        logger.info(f"Starting single-article preparation task for AIComment {ai_comment_id}")
-        result = asyncio.run(self._prepare_single_article_async(uuid.UUID(ai_comment_id)))
+        logger.info(
+            f"Starting single-article preparation task for AIComment {ai_comment_id}"
+        )
+        result = asyncio.run(
+            self._prepare_single_article_async(uuid.UUID(ai_comment_id))
+        )
         logger.info(f"Single-article preparation task completed: {result}")
         return result
     except _NOT_RETRYABLE as exc:
-        logger.error(f"Single-article preparation failed permanently for AIComment {ai_comment_id}: {exc}")
+        logger.error(
+            f"Single-article preparation failed permanently for AIComment {ai_comment_id}: {exc}"
+        )
         asyncio.run(
             self._mark_article_failed(
                 uuid.UUID(ai_comment_id),
@@ -321,7 +342,7 @@ def prepare_article_content(self, ai_comment_id: Any, *compat_args: Any) -> Dict
             "execution_time_seconds": 0,
         }
     except Exception as exc:
-        countdown = min(60 * (2 ** self.request.retries), 300)
+        countdown = min(60 * (2**self.request.retries), 300)
         logger.warning(
             f"Single-article preparation task failed, retrying "
             f"(attempt {self.request.retries + 1}/{self.max_retries}, countdown {countdown}s) "
@@ -330,7 +351,9 @@ def prepare_article_content(self, ai_comment_id: Any, *compat_args: Any) -> Dict
         try:
             self.retry(exc=exc, countdown=countdown)
         except MaxRetriesExceededError:
-            logger.error(f"Max retries exhausted for single-article preparation of AIComment {ai_comment_id}")
+            logger.error(
+                f"Max retries exhausted for single-article preparation of AIComment {ai_comment_id}"
+            )
             asyncio.run(
                 self._mark_article_failed(
                     uuid.UUID(ai_comment_id),

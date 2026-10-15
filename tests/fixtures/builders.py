@@ -30,7 +30,9 @@ from tests.fixtures.factories import (
 ScenarioData = dict[str, Any]
 
 
-def _with_overrides(overrides: Mapping[str, Any] | None, key: str, defaults: dict[str, Any]) -> dict[str, Any]:
+def _with_overrides(
+    overrides: Mapping[str, Any] | None, key: str, defaults: dict[str, Any]
+) -> dict[str, Any]:
     merged = dict(defaults)
     if overrides and overrides.get(key):
         merged.update(dict(overrides[key]))
@@ -368,7 +370,9 @@ async def _scenario_student_backup_with_versions(
     admin_login = await create_mymoment_login(
         session,
         user=user,
-        **_with_overrides(overrides, "admin_login", {"is_admin": True, "name": "Admin Login"}),
+        **_with_overrides(
+            overrides, "admin_login", {"is_admin": True, "name": "Admin Login"}
+        ),
     )
     tracked_student = await create_tracked_student(
         session,
@@ -430,7 +434,9 @@ async def build_scenario(
         builder = _SCENARIOS[name]
     except KeyError as exc:
         available = ", ".join(sorted(_SCENARIOS))
-        raise ValueError(f"unknown scenario {name!r}; available scenarios: {available}") from exc
+        raise ValueError(
+            f"unknown scenario {name!r}; available scenarios: {available}"
+        ) from exc
 
     scenario = await builder(session, overrides)
     await session.flush()

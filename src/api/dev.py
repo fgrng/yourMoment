@@ -33,7 +33,9 @@ async def get_seed_status() -> Dict[str, Any]:
         # Count seeded data
         user_count = await session.scalar(select(func.count(User.id)))
         mymoment_count = await session.scalar(select(func.count(MyMomentLogin.id)))
-        llm_provider_count = await session.scalar(select(func.count(LLMProviderConfiguration.id)))
+        llm_provider_count = await session.scalar(
+            select(func.count(LLMProviderConfiguration.id))
+        )
         prompt_count = await session.scalar(select(func.count(PromptTemplate.id)))
         process_count = await session.scalar(select(func.count(MonitoringProcess.id)))
 
@@ -50,12 +52,14 @@ async def get_seed_status() -> Dict[str, Any]:
                 "mymoment_logins": mymoment_count,
                 "llm_providers": llm_provider_count,
                 "prompt_templates": prompt_count,
-                "monitoring_processes": process_count
+                "monitoring_processes": process_count,
             },
             "test_credentials": {
                 "email": "test@yourmoment.dev",
-                "password": "password123"
-            } if test_user else None
+                "password": "password123",
+            }
+            if test_user
+            else None,
         }
 
 
@@ -69,6 +73,7 @@ async def trigger_seed() -> Dict[str, str]:
     """
     try:
         from seed_db import seed_database
+
         await seed_database()
         return {"status": "success", "message": "Database seeding completed"}
     except Exception as e:
@@ -86,6 +91,7 @@ async def trigger_reset() -> Dict[str, str]:
     """
     try:
         from seed_db import reset_database
+
         await reset_database()
         return {"status": "success", "message": "Database reset and seeding completed"}
     except Exception as e:
@@ -108,7 +114,9 @@ async def get_environment_info() -> Dict[str, Any]:
         "environment": settings.app.ENVIRONMENT,
         "debug": settings.app.DEBUG,
         "database_url": database_url,
-        "cors_origins": settings.app.CORS_ORIGINS.split(",") if settings.app.CORS_ORIGINS else ["*"],
+        "cors_origins": settings.app.CORS_ORIGINS.split(",")
+        if settings.app.CORS_ORIGINS
+        else ["*"],
         "allowed_hosts": settings.app.ALLOWED_HOSTS.split(","),
     }
 
@@ -127,7 +135,7 @@ async def detailed_health_check() -> Dict[str, Any]:
         "status": "healthy",
         "service": "yourMoment API (Development)",
         "environment": settings.app.ENVIRONMENT,
-        "database": "unknown"
+        "database": "unknown",
     }
 
     try:
@@ -136,6 +144,7 @@ async def detailed_health_check() -> Dict[str, Any]:
 
         async with AsyncSession(engine) as session:
             from sqlalchemy import text
+
             result = await session.execute(text("SELECT 1"))
             if result.scalar() == 1:
                 health_info["database"] = "connected"
@@ -157,14 +166,16 @@ async def list_routes() -> Dict[str, Any]:
 
     routes = []
     for route in app.routes:
-        if hasattr(route, 'path') and hasattr(route, 'methods'):
-            routes.append({
-                "path": route.path,
-                "methods": list(route.methods),
-                "name": getattr(route, 'name', None)
-            })
+        if hasattr(route, "path") and hasattr(route, "methods"):
+            routes.append(
+                {
+                    "path": route.path,
+                    "methods": list(route.methods),
+                    "name": getattr(route, "name", None),
+                }
+            )
 
     return {
         "total_routes": len(routes),
-        "routes": sorted(routes, key=lambda x: x['path'])
+        "routes": sorted(routes, key=lambda x: x["path"]),
     }

@@ -35,7 +35,7 @@ class LLMProviderConfiguration(Base):
         UUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
-        doc="Unique provider configuration identifier"
+        doc="Unique provider configuration identifier",
     )
 
     # Foreign key to User
@@ -44,40 +44,40 @@ class LLMProviderConfiguration(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
-        doc="Owner of this LLM provider configuration"
+        doc="Owner of this LLM provider configuration",
     )
 
     # Provider identification
     provider_name = Column(
         String(50),
         nullable=False,
-        doc="LLM provider name (openai, mistral, huggingface)"
+        doc="LLM provider name (openai, mistral, huggingface)",
     )
 
     # Encrypted API credentials
     api_key_encrypted = Column(
         String(500),  # Encrypted data is longer than plaintext
         nullable=False,
-        doc="Encrypted API key (FR-002)"
+        doc="Encrypted API key (FR-002)",
     )
 
     # Model configuration
     model_name = Column(
         String(100),
         nullable=False,
-        doc="Specific model to use (e.g., gpt-4o, mistral-large-latest)"
+        doc="Specific model to use (e.g., gpt-4o, mistral-large-latest)",
     )
 
     max_tokens = Column(
         Integer,
         nullable=True,
-        doc="Maximum tokens for responses (provider-specific default if null)"
+        doc="Maximum tokens for responses (provider-specific default if null)",
     )
 
     temperature = Column(
         Float,
         nullable=True,
-        doc="Temperature for response generation (0.0-1.0, provider default if null)"
+        doc="Temperature for response generation (0.0-1.0, provider default if null)",
     )
 
     # Status fields
@@ -85,7 +85,7 @@ class LLMProviderConfiguration(Base):
         Boolean,
         default=True,
         nullable=False,
-        doc="Whether this provider configuration is active"
+        doc="Whether this provider configuration is active",
     )
 
     # Timestamp fields
@@ -93,7 +93,7 @@ class LLMProviderConfiguration(Base):
         UTCDateTime,
         server_default=func.now(),
         nullable=False,
-        doc="Configuration creation timestamp"
+        doc="Configuration creation timestamp",
     )
 
     updated_at = Column(
@@ -101,28 +101,32 @@ class LLMProviderConfiguration(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
-        doc="Last configuration update timestamp"
+        doc="Last configuration update timestamp",
     )
 
     last_used = Column(
         UTCDateTime,
         nullable=True,
-        doc="Last time this provider was used for generation"
+        doc="Last time this provider was used for generation",
     )
 
     # Relationships
     user = relationship(
         "User",
         back_populates="llm_providers",
-        doc="User who owns this provider configuration"
+        doc="User who owns this provider configuration",
     )
     ai_comments = relationship("AIComment", back_populates="llm_provider")
-    monitoring_processes = relationship("MonitoringProcess", back_populates="llm_provider")
+    monitoring_processes = relationship(
+        "MonitoringProcess", back_populates="llm_provider"
+    )
 
     def __repr__(self) -> str:
         """String representation of LLMProviderConfiguration (safe - no API key)."""
-        return (f"<LLMProviderConfiguration(id={self.id}, user_id={self.user_id}, "
-                f"provider={self.provider_name}, model={self.model_name})>")
+        return (
+            f"<LLMProviderConfiguration(id={self.id}, user_id={self.user_id}, "
+            f"provider={self.provider_name}, model={self.model_name})>"
+        )
 
     def set_api_key(self, api_key: str) -> None:
         """

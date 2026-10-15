@@ -32,65 +32,73 @@ class CookieStore(Protocol):
     async def discard(self, account_id: uuid.UUID) -> None: ...
 
 
-def serialize_cookie_jar(jar: CookieJar, csrf_token: Optional[str] = None) -> Dict[str, Any]:
+def serialize_cookie_jar(
+    jar: CookieJar, csrf_token: Optional[str] = None
+) -> Dict[str, Any]:
     """Serialize a cookie jar into a persistable dictionary."""
     cookies = []
     for cookie in jar:
         expires = None
-        expires_value = cookie['expires']
+        expires_value = cookie["expires"]
         if expires_value:
             try:
                 expires = parsedate_to_datetime(expires_value).isoformat()
             except (TypeError, ValueError, IndexError):
                 expires = None
 
-        cookies.append({
-            'name': cookie.key,
-            'value': cookie.value,
-            'domain': cookie['domain'] or None,
-            'path': cookie['path'] or '/',
-            'expires': expires
-        })
+        cookies.append(
+            {
+                "name": cookie.key,
+                "value": cookie.value,
+                "domain": cookie["domain"] or None,
+                "path": cookie["path"] or "/",
+                "expires": expires,
+            }
+        )
 
     return {
-        'cookies': cookies,
-        'csrf_token': csrf_token,
-        'saved_at': utcnow().isoformat()
+        "cookies": cookies,
+        "csrf_token": csrf_token,
+        "saved_at": utcnow().isoformat(),
     }
 
 
-def restore_cookie_jar(jar: CookieJar, data: Optional[Dict[str, Any]], base_url: str) -> bool:
+def restore_cookie_jar(
+    jar: CookieJar, data: Optional[Dict[str, Any]], base_url: str
+) -> bool:
     """Put persisted cookies into the jar; return True if there were any."""
-    cookies = data.get('cookies') if isinstance(data, dict) else None
+    cookies = data.get("cookies") if isinstance(data, dict) else None
     if not isinstance(cookies, list) or not cookies:
         return False
 
     base = URL(base_url)
     for cookie_data in cookies:
         simple_cookie = SimpleCookie()
-        simple_cookie[cookie_data['name']] = cookie_data['value']
-        morsel = simple_cookie[cookie_data['name']]
+        simple_cookie[cookie_data["name"]] = cookie_data["value"]
+        morsel = simple_cookie[cookie_data["name"]]
 
-        domain = cookie_data.get('domain')
+        domain = cookie_data.get("domain")
         if domain:
-            morsel['domain'] = domain
+            morsel["domain"] = domain
 
-        path = cookie_data.get('path') or '/'
-        morsel['path'] = path
+        path = cookie_data.get("path") or "/"
+        morsel["path"] = path
 
-        expires = cookie_data.get('expires')
+        expires = cookie_data.get("expires")
         if expires:
             expires_dt = datetime.fromisoformat(expires)
             if expires_dt.tzinfo is None:
                 expires_dt = expires_dt.replace(tzinfo=UTC)
             else:
                 expires_dt = expires_dt.astimezone(UTC)
-            morsel['expires'] = format_datetime(expires_dt, usegmt=True)
+            morsel["expires"] = format_datetime(expires_dt, usegmt=True)
 
-        cookie_domain = (domain or base.host or '').lstrip('.')
-        cookie_path = path if path.startswith('/') else f'/{path}'
+        cookie_domain = (domain or base.host or "").lstrip(".")
+        cookie_path = path if path.startswith("/") else f"/{path}"
         if cookie_domain:
-            response_url = URL.build(scheme=base.scheme or 'https', host=cookie_domain, path=cookie_path)
+            response_url = URL.build(
+                scheme=base.scheme or "https", host=cookie_domain, path=cookie_path
+            )
         else:
             response_url = base.with_path(cookie_path)
 

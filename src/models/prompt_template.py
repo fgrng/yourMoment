@@ -22,7 +22,9 @@ class PromptTemplate(BaseModel):
     __tablename__ = "prompt_templates"
 
     # Primary fields
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False)
+    id = Column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False
+    )
     name = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
 
@@ -32,7 +34,9 @@ class PromptTemplate(BaseModel):
 
     # Template categorization
     category = Column(String(20), nullable=False)  # SYSTEM or USER
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+    )
 
     # Status
     is_active = Column(Boolean, nullable=False, default=True)
@@ -46,19 +50,18 @@ class PromptTemplate(BaseModel):
     monitoring_process_prompts = relationship(
         "MonitoringProcessPrompt",
         back_populates="prompt_template",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
     ai_comments = relationship("AIComment", back_populates="prompt_template")
 
     # Constraints
     __table_args__ = (
         CheckConstraint(
-            "category IN ('SYSTEM', 'USER')",
-            name="check_prompt_template_category"
+            "category IN ('SYSTEM', 'USER')", name="check_prompt_template_category"
         ),
         CheckConstraint(
             "(category = 'SYSTEM' AND user_id IS NULL) OR (category = 'USER' AND user_id IS NOT NULL)",
-            name="check_prompt_template_user_consistency"
+            name="check_prompt_template_user_consistency",
         ),
     )
 
@@ -82,7 +85,7 @@ class PromptTemplate(BaseModel):
         Returns a list of placeholder names found in the template (without braces).
         Example: "{article_title}" -> "article_title"
         """
-        placeholders = re.findall(r'\{([^}]+)\}', self.user_prompt_template)
+        placeholders = re.findall(r"\{([^}]+)\}", self.user_prompt_template)
         return list(set(placeholders))  # Remove duplicates
 
     def validate_placeholders(self) -> Dict[str, bool]:
@@ -92,9 +95,13 @@ class PromptTemplate(BaseModel):
         Returns a dictionary mapping placeholder names to validation status.
         """
         supported_placeholders = {
-            'article_title', 'article_content', 'article_author',
-            'article_category', 'article_published_at', 'article_url',
-            'mymoment_username'
+            "article_title",
+            "article_content",
+            "article_author",
+            "article_category",
+            "article_published_at",
+            "article_url",
+            "mymoment_username",
         }
 
         placeholders = self.extract_placeholders()

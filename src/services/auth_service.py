@@ -22,18 +22,22 @@ from src.services.base_service import BaseService
 from src.config.settings import get_settings
 from src.utils.datetimes import utcnow
 
+
 class AuthServiceError(Exception):
     """Base exception for authentication service operations."""
+
     pass
 
 
 class AuthServiceValidationError(AuthServiceError):
     """Raised when authentication validation fails."""
+
     pass
 
 
 class AuthServiceNotFoundError(AuthServiceError):
     """Raised when user or session is not found."""
+
     pass
 
 
@@ -48,7 +52,12 @@ class AuthService(BaseService):
     - Session management and tracking
     """
 
-    def __init__(self, db_session: AsyncSession, jwt_secret: str = None, jwt_algorithm: str = None):
+    def __init__(
+        self,
+        db_session: AsyncSession,
+        jwt_secret: str = None,
+        jwt_algorithm: str = None,
+    ):
         """
         Initialize authentication service.
 
@@ -66,11 +75,7 @@ class AuthService(BaseService):
         self.token_expiry_minutes = settings.security.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
         self.token_expiry_hours = self.token_expiry_minutes / 60
 
-    async def register_user(
-        self,
-        email: str,
-        password: str
-    ) -> Tuple[User, str]:
+    async def register_user(self, email: str, password: str) -> Tuple[User, str]:
         """
         Register a new user with email and password.
 
@@ -89,10 +94,7 @@ class AuthService(BaseService):
 
         # Create user
         user = User(
-            email=email,
-            password_hash=password_hash,
-            is_active=True,
-            is_verified=False
+            email=email, password_hash=password_hash, is_active=True, is_verified=False
         )
 
         try:
@@ -106,11 +108,7 @@ class AuthService(BaseService):
         access_token = await self._create_user_session(user_id=user.id)
         return user, access_token
 
-    async def authenticate_user(
-        self,
-        email: str,
-        password: str
-    ) -> Tuple[User, str]:
+    async def authenticate_user(self, email: str, password: str) -> Tuple[User, str]:
         """
         Authenticate user with email and password.
 
@@ -164,15 +162,16 @@ class AuthService(BaseService):
         """
         try:
             # Decode JWT token
-            payload = jwt.decode(token, self.jwt_secret, algorithms=[self.jwt_algorithm])
+            payload = jwt.decode(
+                token, self.jwt_secret, algorithms=[self.jwt_algorithm]
+            )
             user_id = uuid.UUID(payload.get("sub"))
 
             # Check token hash in database
             token_hash = self._hash_token(token)
             stmt = select(UserSession).where(
                 and_(
-                    UserSession.token_hash == token_hash,
-                    UserSession.is_active == True
+                    UserSession.token_hash == token_hash, UserSession.is_active == True
                 )
             )
             result = await self.db_session.execute(stmt)
@@ -212,8 +211,7 @@ class AuthService(BaseService):
             token_hash = self._hash_token(token)
             stmt = select(UserSession).where(
                 and_(
-                    UserSession.token_hash == token_hash,
-                    UserSession.is_active == True
+                    UserSession.token_hash == token_hash, UserSession.is_active == True
                 )
             )
             result = await self.db_session.execute(stmt)
@@ -239,12 +237,7 @@ class AuthService(BaseService):
         Returns:
             User object if found and active, None otherwise
         """
-        stmt = select(User).where(
-            and_(
-                User.id == user_id,
-                User.is_active == True
-            )
-        )
+        stmt = select(User).where(and_(User.id == user_id, User.is_active == True))
         result = await self.db_session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -257,14 +250,11 @@ class AuthService(BaseService):
         """
         from sqlalchemy import delete
 
-        stmt = delete(UserSession).where(
-            UserSession.expires_at < utcnow()
-        )
+        stmt = delete(UserSession).where(UserSession.expires_at < utcnow())
         result = await self.db_session.execute(stmt)
         await self.db_session.commit()
 
         return result.rowcount
-
 
     def _hash_password(self, password: str) -> str:
         """
@@ -277,8 +267,8 @@ class AuthService(BaseService):
             Bcrypt hash as string
         """
         salt = bcrypt.gensalt()
-        hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
-        return hashed.decode('utf-8')
+        hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
+        return hashed.decode("utf-8")
 
     def _verify_password(self, password: str, password_hash: str) -> bool:
         """
@@ -294,7 +284,9 @@ class AuthService(BaseService):
         try:
             # bcrypt.checkpw expects the hash as bytes, not string
             # The hash is stored as string in database, so we need to convert it back to bytes
-            return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+            return bcrypt.checkpw(
+                password.encode("utf-8"), password_hash.encode("utf-8")
+            )
         except (ValueError, TypeError):
             return False
 
@@ -308,12 +300,9 @@ class AuthService(BaseService):
         Returns:
             SHA-256 hash of token
         """
-        return hashlib.sha256(token.encode('utf-8')).hexdigest()
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
-    async def _create_user_session(
-        self,
-        user_id: uuid.UUID
-    ) -> str:
+    async def _create_user_session(self, user_id: uuid.UUID) -> str:
         """
         Create a user session and corresponding JWT token.
 
@@ -339,17 +328,21 @@ class AuthService(BaseService):
             "exp": expires_at,
             "is_active": user.is_active,
             "is_verified": user.is_verified,
-            "jti": str(uuid.uuid4())  # Add unique identifier to prevent duplicate token hashes
+            "jti": str(
+                uuid.uuid4()
+            ),  # Add unique identifier to prevent duplicate token hashes
         }
 
-        access_token = jwt.encode(payload, self.jwt_secret, algorithm=self.jwt_algorithm)
+        access_token = jwt.encode(
+            payload, self.jwt_secret, algorithm=self.jwt_algorithm
+        )
 
         # Create session record
         token_hash = self._hash_token(access_token)
         session = UserSession.create_session(
             user_id=user_id,
             token_hash=token_hash,
-            session_duration=timedelta(minutes=self.token_expiry_minutes)
+            session_duration=timedelta(minutes=self.token_expiry_minutes),
         )
 
         self.db_session.add(session)
@@ -374,5 +367,5 @@ class AuthService(BaseService):
             "access_token": access_token,
             "token_type": "bearer",
             "expires_in": self.token_expiry_minutes * 60,  # Convert to seconds
-            "user": UserResponse.model_validate(user)
+            "user": UserResponse.model_validate(user),
         }

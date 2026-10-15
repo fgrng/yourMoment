@@ -9,7 +9,7 @@ from src.validators.password import (
     PasswordValidator,
     get_password_validator,
     validate_password,
-    is_password_valid
+    is_password_valid,
 )
 
 __all__ = [

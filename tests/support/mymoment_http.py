@@ -22,7 +22,12 @@ def logged_out_page() -> AiohttpStubResponse:
     return AiohttpStubResponse(status=200, body=load_html_fixture("accounts_login"))
 
 
-def queue_login(http: AiohttpStubSession, *, succeed: bool = True, session_cookie: str = "fresh-session") -> None:
+def queue_login(
+    http: AiohttpStubSession,
+    *,
+    succeed: bool = True,
+    session_cookie: str = "fresh-session",
+) -> None:
     """Queue the Django login: form with CSRF, POST, landing page, home page check."""
     http.queue_response("GET", LOGIN_URL, logged_out_page())
     if succeed:
@@ -31,7 +36,10 @@ def queue_login(http: AiohttpStubSession, *, succeed: bool = True, session_cooki
             LOGIN_URL,
             AiohttpStubResponse(
                 status=302,
-                headers={"Location": "/", "Set-Cookie": f"sessionid={session_cookie}; Path=/"},
+                headers={
+                    "Location": "/",
+                    "Set-Cookie": f"sessionid={session_cookie}; Path=/",
+                },
             ),
         )
         http.queue_response("GET", HOME_URL, logged_in_page())
@@ -41,7 +49,9 @@ def queue_login(http: AiohttpStubSession, *, succeed: bool = True, session_cooki
         http.queue_response("GET", HOME_URL, logged_out_page())
 
 
-def queue_article(http: AiohttpStubSession, article_id: str = "3170", fixture: str = "articles_get") -> None:
+def queue_article(
+    http: AiohttpStubSession, article_id: str = "3170", fixture: str = "articles_get"
+) -> None:
     http.queue_response(
         "GET",
         f"{MYMOMENT_BASE_URL}/article/{article_id}/",
@@ -49,7 +59,9 @@ def queue_article(http: AiohttpStubSession, article_id: str = "3170", fixture: s
     )
 
 
-def queue_comment_post(http: AiohttpStubSession, article_id: str = "3170", status: int = 302) -> None:
+def queue_comment_post(
+    http: AiohttpStubSession, article_id: str = "3170", status: int = 302
+) -> None:
     """Queue myMoment's answer to the comment form: a redirect back to the article."""
     headers = {"Location": f"/article/{article_id}/"} if status == 302 else {}
     http.queue_response(
@@ -74,7 +86,10 @@ def queue_article_list(
     http.queue_response(
         "GET",
         f"{MYMOMENT_BASE_URL}/articles/?{urlencode(params)}",
-        AiohttpStubResponse(status=200, body=body if body is not None else load_html_fixture("articles_index")),
+        AiohttpStubResponse(
+            status=200,
+            body=body if body is not None else load_html_fixture("articles_index"),
+        ),
     )
 
 
@@ -83,7 +98,10 @@ def queue_targets(http: AiohttpStubSession, status: int = 200) -> None:
     http.queue_response(
         "GET",
         f"{MYMOMENT_BASE_URL}/articles/",
-        AiohttpStubResponse(status=status, body=load_html_fixture("articles_index") if status == 200 else ""),
+        AiohttpStubResponse(
+            status=status,
+            body=load_html_fixture("articles_index") if status == 200 else "",
+        ),
     )
 
 

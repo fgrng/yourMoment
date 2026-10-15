@@ -39,8 +39,12 @@ async def test_trigger_pipeline_async_process_scoped_filters_to_requested_runnin
     monkeypatch,
 ):
     user = await create_user(db_session)
-    requested_running = await create_monitoring_process(db_session, user=user, status="running")
-    requested_stopped = await create_monitoring_process(db_session, user=user, status="stopped")
+    requested_running = await create_monitoring_process(
+        db_session, user=user, status="running"
+    )
+    requested_stopped = await create_monitoring_process(
+        db_session, user=user, status="stopped"
+    )
     requested_inactive = await create_monitoring_process(
         db_session,
         user=user,
@@ -54,7 +58,9 @@ async def test_trigger_pipeline_async_process_scoped_filters_to_requested_runnin
     task = _bind_task_sessions(SchedulingTask(), db_engine)
     seen_process_ids: list[str] = []
 
-    async def fake_spawn(session, process, discover_articles_task, force_immediate=False):
+    async def fake_spawn(
+        session, process, discover_articles_task, force_immediate=False
+    ):
         seen_process_ids.append(str(process.id))
         return {
             "spawned": [
@@ -98,14 +104,18 @@ async def test_trigger_pipeline_async_process_scoped_reports_invalid_ids(
     monkeypatch,
 ):
     user = await create_user(db_session)
-    valid_process = await create_monitoring_process(db_session, user=user, status="running")
+    valid_process = await create_monitoring_process(
+        db_session, user=user, status="running"
+    )
     await db_session.commit()
     await db_session.close()
 
     task = _bind_task_sessions(SchedulingTask(), db_engine)
     seen_process_ids: list[str] = []
 
-    async def fake_spawn(session, process, discover_articles_task, force_immediate=False):
+    async def fake_spawn(
+        session, process, discover_articles_task, force_immediate=False
+    ):
         seen_process_ids.append(str(process.id))
         return {
             "spawned": [
@@ -143,14 +153,18 @@ async def test_trigger_pipeline_async_periodic_global_scans_all_running_active_p
     running_a = await create_monitoring_process(db_session, user=user, status="running")
     running_b = await create_monitoring_process(db_session, user=user, status="running")
     await create_monitoring_process(db_session, user=user, status="stopped")
-    await create_monitoring_process(db_session, user=user, status="running", is_active=False)
+    await create_monitoring_process(
+        db_session, user=user, status="running", is_active=False
+    )
     await db_session.commit()
     await db_session.close()
 
     task = _bind_task_sessions(SchedulingTask(), db_engine)
     seen_process_ids: list[str] = []
 
-    async def fake_spawn(session, process, discover_articles_task, force_immediate=False):
+    async def fake_spawn(
+        session, process, discover_articles_task, force_immediate=False
+    ):
         seen_process_ids.append(str(process.id))
         return {
             "spawned": [
@@ -317,7 +331,9 @@ async def test_trigger_pipeline_async_inflight_guard_spawns_on_async_result_exce
     assert delay_calls == [str(process.id)]
 
 
-def test_trigger_monitoring_pipeline_wrapper_forwards_process_ids_to_async_impl(monkeypatch):
+def test_trigger_monitoring_pipeline_wrapper_forwards_process_ids_to_async_impl(
+    monkeypatch,
+):
     process_ids = [str(uuid.uuid4())]
     captured: dict[str, object] = {}
     expected_result = {
@@ -333,7 +349,9 @@ def test_trigger_monitoring_pipeline_wrapper_forwards_process_ids_to_async_impl(
     }
 
     class FakeSchedulingTask:
-        async def _trigger_pipeline_async(self, force_immediate=False, process_ids=None):
+        async def _trigger_pipeline_async(
+            self, force_immediate=False, process_ids=None
+        ):
             captured["force_immediate"] = force_immediate
             captured["process_ids"] = process_ids
             return expected_result

@@ -12,7 +12,10 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from src.models.base import Base, UTCDateTime
-from src.config.encryption import encrypt_mymoment_credentials, decrypt_mymoment_credentials
+from src.config.encryption import (
+    encrypt_mymoment_credentials,
+    decrypt_mymoment_credentials,
+)
 from src.utils.datetimes import utcnow
 
 
@@ -34,7 +37,7 @@ class MyMomentLogin(Base):
         UUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
-        doc="Unique login credential identifier"
+        doc="Unique login credential identifier",
     )
 
     # Foreign key to User
@@ -43,27 +46,25 @@ class MyMomentLogin(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
-        doc="Owner of these credentials"
+        doc="Owner of these credentials",
     )
 
     # Encrypted credential fields
     username_encrypted = Column(
         String(500),  # Encrypted data is longer than plaintext
         nullable=False,
-        doc="Encrypted myMoment username (FR-017)"
+        doc="Encrypted myMoment username (FR-017)",
     )
 
     password_encrypted = Column(
         String(500),  # Encrypted data is longer than plaintext
         nullable=False,
-        doc="Encrypted myMoment password (FR-017)"
+        doc="Encrypted myMoment password (FR-017)",
     )
 
     # User-friendly name for this login
     name = Column(
-        String(100),
-        nullable=False,
-        doc="Friendly name for these credentials"
+        String(100), nullable=False, doc="Friendly name for these credentials"
     )
 
     # Status fields
@@ -71,7 +72,7 @@ class MyMomentLogin(Base):
         Boolean,
         default=True,
         nullable=False,
-        doc="Whether this login is active and usable"
+        doc="Whether this login is active and usable",
     )
 
     # Admin flag for Student Backup feature
@@ -80,7 +81,7 @@ class MyMomentLogin(Base):
         Boolean,
         default=False,
         nullable=False,
-        doc="Whether this is an admin account (for Student Backup feature)"
+        doc="Whether this is an admin account (for Student Backup feature)",
     )
 
     # Timestamp fields
@@ -88,13 +89,13 @@ class MyMomentLogin(Base):
         UTCDateTime,
         server_default=func.now(),
         nullable=False,
-        doc="Credential creation timestamp"
+        doc="Credential creation timestamp",
     )
 
     last_used = Column(
         UTCDateTime,
         nullable=True,
-        doc="Last time these credentials were used for login"
+        doc="Last time these credentials were used for login",
     )
 
     updated_at = Column(
@@ -102,48 +103,48 @@ class MyMomentLogin(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
-        doc="Last credential update timestamp"
+        doc="Last credential update timestamp",
     )
 
     # Relationships
     user = relationship(
-        "User",
-        back_populates="mymoment_logins",
-        doc="User who owns these credentials"
+        "User", back_populates="mymoment_logins", doc="User who owns these credentials"
     )
 
     sessions = relationship(
         "MyMomentSession",
         back_populates="mymoment_login",
         cascade="all, delete-orphan",
-        doc="Active sessions using these credentials"
+        doc="Active sessions using these credentials",
     )
 
     monitoring_process_logins = relationship(
         "MonitoringProcessLogin",
         back_populates="mymoment_login",
         cascade="all, delete-orphan",
-        doc="Monitoring processes using these credentials"
+        doc="Monitoring processes using these credentials",
     )
 
     # AI comments posted using this login
     ai_comments = relationship(
         "AIComment",
         back_populates="mymoment_login",
-        doc="AI comments posted using this login"
+        doc="AI comments posted using this login",
     )
 
     # Tracked students using this admin login (Student Backup feature)
     tracked_students = relationship(
         "TrackedStudent",
         back_populates="mymoment_login",
-        doc="Tracked students using this admin login for backup"
+        doc="Tracked students using this admin login for backup",
     )
 
     def __repr__(self) -> str:
         """String representation of MyMomentLogin (safe - no credentials)."""
-        return (f"<MyMomentLogin(id={self.id}, user_id={self.user_id}, "
-                f"is_active={self.is_active})>")
+        return (
+            f"<MyMomentLogin(id={self.id}, user_id={self.user_id}, "
+            f"is_active={self.is_active})>"
+        )
 
     def set_credentials(self, username: str, password: str) -> None:
         """
@@ -179,8 +180,7 @@ class MyMomentLogin(Base):
             Credentials should not be logged or cached in plaintext.
         """
         return decrypt_mymoment_credentials(
-            self.username_encrypted,
-            self.password_encrypted
+            self.username_encrypted, self.password_encrypted
         )
 
     def get_username(self) -> str:
@@ -244,10 +244,7 @@ class MyMomentLogin(Base):
         # Only include decrypted credentials if explicitly requested (internal use only)
         if include_credentials:
             username, password = self.get_credentials()
-            login_dict["credentials"] = {
-                "username": username,
-                "password": password
-            }
+            login_dict["credentials"] = {"username": username, "password": password}
 
         return login_dict
 

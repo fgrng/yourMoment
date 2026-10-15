@@ -32,7 +32,9 @@ def build_litellm_success_payload(
         )
         message = SimpleNamespace(content=message_content, reasoning_content=None)
     else:
-        message = SimpleNamespace(content=comment_content, reasoning_content=reasoning_content)
+        message = SimpleNamespace(
+            content=comment_content, reasoning_content=reasoning_content
+        )
 
     usage = SimpleNamespace(
         prompt_tokens=prompt_tokens,
@@ -54,12 +56,22 @@ def build_litellm_exception(
     import litellm
 
     mapping = {
-        "authentication": lambda: litellm.exceptions.AuthenticationError(message, provider, model),
-        "rate_limit": lambda: litellm.exceptions.RateLimitError(message, provider, model),
-        "context_window": lambda: litellm.exceptions.ContextWindowExceededError(message, model, provider),
-        "connection": lambda: litellm.exceptions.APIConnectionError(message, provider, model),
+        "authentication": lambda: litellm.exceptions.AuthenticationError(
+            message, provider, model
+        ),
+        "rate_limit": lambda: litellm.exceptions.RateLimitError(
+            message, provider, model
+        ),
+        "context_window": lambda: litellm.exceptions.ContextWindowExceededError(
+            message, model, provider
+        ),
+        "connection": lambda: litellm.exceptions.APIConnectionError(
+            message, provider, model
+        ),
         "timeout": lambda: litellm.exceptions.Timeout(message, model, provider),
-        "service_unavailable": lambda: litellm.exceptions.ServiceUnavailableError(message, provider, model),
+        "service_unavailable": lambda: litellm.exceptions.ServiceUnavailableError(
+            message, provider, model
+        ),
     }
     try:
         return mapping[kind]()
@@ -108,7 +120,9 @@ class AiohttpStubSession:
     """
 
     def __init__(self, cookie_jar: Any = None) -> None:
-        self._routes: dict[tuple[str, str], deque[AiohttpStubResponse | BaseException]] = defaultdict(deque)
+        self._routes: dict[
+            tuple[str, str], deque[AiohttpStubResponse | BaseException]
+        ] = defaultdict(deque)
         self.requests: list[dict[str, Any]] = []
         self.closed = False
         self.cookie_jar = cookie_jar
@@ -122,14 +136,18 @@ class AiohttpStubSession:
 
         return factory
 
-    def queue_response(self, method: str, url: str, response: AiohttpStubResponse | BaseException) -> None:
+    def queue_response(
+        self, method: str, url: str, response: AiohttpStubResponse | BaseException
+    ) -> None:
         self._routes[(method.upper(), url)].append(response)
 
     def request(self, method: str, url: str, **kwargs: Any) -> AiohttpStubResponse:
         self.requests.append({"method": method.upper(), "url": url, "kwargs": kwargs})
         key = (method.upper(), url)
         if not self._routes[key]:
-            raise AssertionError(f"no queued aiohttp response for {method.upper()} {url}")
+            raise AssertionError(
+                f"no queued aiohttp response for {method.upper()} {url}"
+            )
         response = self._routes[key].popleft()
         if isinstance(response, BaseException):
             raise response
@@ -137,7 +155,9 @@ class AiohttpStubSession:
         if set_cookie and self.cookie_jar is not None:
             from yarl import URL
 
-            self.cookie_jar.update_cookies(SimpleCookie(set_cookie), response_url=URL(url))
+            self.cookie_jar.update_cookies(
+                SimpleCookie(set_cookie), response_url=URL(url)
+            )
         return response
 
     def get(self, url: str, **kwargs: Any) -> AiohttpStubResponse:

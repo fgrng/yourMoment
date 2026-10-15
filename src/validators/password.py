@@ -43,19 +43,23 @@ class PasswordValidator:
 
         # Check length requirements
         if len(password) < self.min_length:
-            errors.append(f"Password must be at least {self.min_length} characters long")
+            errors.append(
+                f"Password must be at least {self.min_length} characters long"
+            )
 
         if len(password) > self.max_length:
-            errors.append(f"Password must be no more than {self.max_length} characters long")
+            errors.append(
+                f"Password must be no more than {self.max_length} characters long"
+            )
 
         # Check character requirements
-        if self.require_uppercase and not re.search(r'[A-Z]', password):
+        if self.require_uppercase and not re.search(r"[A-Z]", password):
             errors.append("Password must contain at least one uppercase letter")
 
-        if self.require_lowercase and not re.search(r'[a-z]', password):
+        if self.require_lowercase and not re.search(r"[a-z]", password):
             errors.append("Password must contain at least one lowercase letter")
 
-        if self.require_digits and not re.search(r'\d', password):
+        if self.require_digits and not re.search(r"\d", password):
             errors.append("Password must contain at least one digit")
 
         if self.require_special and not re.search(self.special_chars, password):

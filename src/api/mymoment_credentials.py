@@ -11,7 +11,7 @@ from src.api.auth import get_current_user
 from src.api.schemas import (
     MyMomentCredentialsRequest,
     MyMomentCredentialsResponse,
-    ErrorResponse
+    ErrorResponse,
 )
 from src.config.database import get_session
 from src.models.user import User
@@ -21,7 +21,7 @@ from src.services.mymoment_credentials_service import (
     MyMomentCredentialsService,
     MyMomentCredentialsServiceError,
     MyMomentCredentialsValidationError,
-    MyMomentCredentialsNotFoundError
+    MyMomentCredentialsNotFoundError,
 )
 from src.api.error_utils import http_error
 
@@ -41,7 +41,7 @@ def _map_validation_error(message: str) -> tuple[int, str, str, Optional[dict]]:
             status.HTTP_409_CONFLICT,
             "mymoment_credentials_conflict",
             "Credentials name already exists.",
-            {"field": "name"}
+            {"field": "name"},
         )
 
     if "username and password cannot be empty" in lowered:
@@ -49,7 +49,7 @@ def _map_validation_error(message: str) -> tuple[int, str, str, Optional[dict]]:
             status.HTTP_400_BAD_REQUEST,
             "mymoment_credentials_missing_fields",
             "Username and password are required.",
-            {"fields": ["username", "password"]}
+            {"fields": ["username", "password"]},
         )
 
     if "username cannot be empty" in lowered:
@@ -57,7 +57,7 @@ def _map_validation_error(message: str) -> tuple[int, str, str, Optional[dict]]:
             status.HTTP_400_BAD_REQUEST,
             "mymoment_credentials_invalid_username",
             "Username is required.",
-            {"field": "username"}
+            {"field": "username"},
         )
 
     if "password cannot be empty" in lowered:
@@ -65,7 +65,7 @@ def _map_validation_error(message: str) -> tuple[int, str, str, Optional[dict]]:
             status.HTTP_400_BAD_REQUEST,
             "mymoment_credentials_invalid_password",
             "Password is required.",
-            {"field": "password"}
+            {"field": "password"},
         )
 
     if "name cannot be empty" in lowered:
@@ -73,7 +73,7 @@ def _map_validation_error(message: str) -> tuple[int, str, str, Optional[dict]]:
             status.HTTP_400_BAD_REQUEST,
             "mymoment_credentials_invalid_name",
             "Credential name is required.",
-            {"field": "name"}
+            {"field": "name"},
         )
 
     if normalized.lower().startswith("failed to"):
@@ -81,14 +81,14 @@ def _map_validation_error(message: str) -> tuple[int, str, str, Optional[dict]]:
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "mymoment_credentials_service_error",
             "Failed to process credentials request. Please try again later.",
-            None
+            None,
         )
 
     return (
         status.HTTP_400_BAD_REQUEST,
         "mymoment_credentials_validation_error",
         "Invalid myMoment credentials request.",
-        {"reason": normalized} if normalized else None
+        {"reason": normalized} if normalized else None,
     )
 
 
@@ -97,7 +97,9 @@ def _handle_credentials_service_error(e: MyMomentCredentialsServiceError) -> Non
     message = str(e)
 
     if isinstance(e, MyMomentCredentialsValidationError):
-        status_code, error_code, response_message, detail = _map_validation_error(message)
+        status_code, error_code, response_message, detail = _map_validation_error(
+            message
+        )
         if status_code >= 500:
             logger.error("Validation failure escalated to server error: %s", message)
         else:
@@ -109,14 +111,14 @@ def _handle_credentials_service_error(e: MyMomentCredentialsServiceError) -> Non
         raise http_error(
             status.HTTP_404_NOT_FOUND,
             "mymoment_credentials_not_found",
-            "Credentials not found."
+            "Credentials not found.",
         )
 
     logger.error("Credentials service error: %s", message, exc_info=True)
     raise http_error(
         status.HTTP_500_INTERNAL_SERVER_ERROR,
         "mymoment_credentials_service_error",
-        "Failed to process credentials request. Please try again later."
+        "Failed to process credentials request. Please try again later.",
     )
 
 
@@ -125,7 +127,7 @@ def _raise_not_found() -> None:
     raise http_error(
         status.HTTP_404_NOT_FOUND,
         "mymoment_credentials_not_found",
-        "Credentials not found."
+        "Credentials not found.",
     )
 
 
@@ -136,11 +138,13 @@ def _raise_validation_failure(reason: Optional[str] = None) -> None:
         status.HTTP_400_BAD_REQUEST,
         "mymoment_credentials_validation_error",
         "Invalid myMoment credentials request.",
-        detail=detail
+        detail=detail,
     )
 
 
-async def get_credentials_service(db: AsyncSession = Depends(get_session)) -> MyMomentCredentialsService:
+async def get_credentials_service(
+    db: AsyncSession = Depends(get_session),
+) -> MyMomentCredentialsService:
     """Dependency to get credentials service."""
     return MyMomentCredentialsService(db)
 
@@ -152,13 +156,16 @@ async def get_credentials_service(db: AsyncSession = Depends(get_session)) -> My
     responses={
         400: {"model": ErrorResponse, "description": "Bad request - validation error"},
         401: {"model": ErrorResponse, "description": "Unauthorized"},
-        409: {"model": ErrorResponse, "description": "Conflict - credentials name already exists"}
-    }
+        409: {
+            "model": ErrorResponse,
+            "description": "Conflict - credentials name already exists",
+        },
+    },
 )
 async def create_credentials(
     request: MyMomentCredentialsRequest,
     current_user: User = Depends(get_current_user),
-    service: MyMomentCredentialsService = Depends(get_credentials_service)
+    service: MyMomentCredentialsService = Depends(get_credentials_service),
 ):
     """
     Create new myMoment credentials.
@@ -172,7 +179,7 @@ async def create_credentials(
             username=request.username,
             password=request.password,
             name=request.name,
-            is_admin=request.is_admin
+            is_admin=request.is_admin,
         )
 
         return MyMomentCredentialsResponse.model_validate(credentials)
@@ -184,17 +191,15 @@ async def create_credentials(
 @router.get(
     "/index",
     response_model=List[MyMomentCredentialsResponse],
-    responses={
-        401: {"model": ErrorResponse, "description": "Unauthorized"}
-    }
+    responses={401: {"model": ErrorResponse, "description": "Unauthorized"}},
 )
 async def get_credentials(
     is_admin: Optional[bool] = Query(
         default=None,
-        description="Filter by admin status. True=admin logins only, False=non-admin only, None=all"
+        description="Filter by admin status. True=admin logins only, False=non-admin only, None=all",
     ),
     current_user: User = Depends(get_current_user),
-    service: MyMomentCredentialsService = Depends(get_credentials_service)
+    service: MyMomentCredentialsService = Depends(get_credentials_service),
 ):
     """
     Get all myMoment credentials for the current user.
@@ -207,8 +212,12 @@ async def get_credentials(
                   If False, returns only non-admin logins (for monitoring).
                   If not specified, returns all logins.
     """
-    credentials_list = await service.get_user_credentials(current_user.id, is_admin=is_admin)
-    return [MyMomentCredentialsResponse.model_validate(creds) for creds in credentials_list]
+    credentials_list = await service.get_user_credentials(
+        current_user.id, is_admin=is_admin
+    )
+    return [
+        MyMomentCredentialsResponse.model_validate(creds) for creds in credentials_list
+    ]
 
 
 @router.get(
@@ -216,13 +225,13 @@ async def get_credentials(
     response_model=MyMomentCredentialsResponse,
     responses={
         401: {"model": ErrorResponse, "description": "Unauthorized"},
-        404: {"model": ErrorResponse, "description": "Not found"}
-    }
+        404: {"model": ErrorResponse, "description": "Not found"},
+    },
 )
 async def get_credentials_by_id(
     credentials_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    service: MyMomentCredentialsService = Depends(get_credentials_service)
+    service: MyMomentCredentialsService = Depends(get_credentials_service),
 ):
     """
     Get specific myMoment credentials by ID.
@@ -245,14 +254,17 @@ async def get_credentials_by_id(
         400: {"model": ErrorResponse, "description": "Bad request - validation error"},
         401: {"model": ErrorResponse, "description": "Unauthorized"},
         404: {"model": ErrorResponse, "description": "Not found"},
-        409: {"model": ErrorResponse, "description": "Conflict - credentials name already exists"}
-    }
+        409: {
+            "model": ErrorResponse,
+            "description": "Conflict - credentials name already exists",
+        },
+    },
 )
 async def update_credentials(
     credentials_id: uuid.UUID,
     request: MyMomentCredentialsRequest,
     current_user: User = Depends(get_current_user),
-    service: MyMomentCredentialsService = Depends(get_credentials_service)
+    service: MyMomentCredentialsService = Depends(get_credentials_service),
 ):
     """
     Update existing myMoment credentials.
@@ -267,7 +279,7 @@ async def update_credentials(
             username=request.username,
             password=request.password,
             name=request.name,
-            is_admin=request.is_admin
+            is_admin=request.is_admin,
         )
 
         if not credentials:
@@ -286,14 +298,17 @@ async def update_credentials(
         400: {"model": ErrorResponse, "description": "Bad request - validation error"},
         401: {"model": ErrorResponse, "description": "Unauthorized"},
         404: {"model": ErrorResponse, "description": "Not found"},
-        409: {"model": ErrorResponse, "description": "Conflict - credentials name already exists"}
-    }
+        409: {
+            "model": ErrorResponse,
+            "description": "Conflict - credentials name already exists",
+        },
+    },
 )
 async def patch_credentials(
     credentials_id: uuid.UUID,
     request: MyMomentCredentialsRequest,
     current_user: User = Depends(get_current_user),
-    service: MyMomentCredentialsService = Depends(get_credentials_service)
+    service: MyMomentCredentialsService = Depends(get_credentials_service),
 ):
     """
     Partially update existing myMoment credentials (PATCH).
@@ -308,7 +323,7 @@ async def patch_credentials(
             username=request.username,
             password=request.password,
             name=request.name,
-            is_admin=request.is_admin
+            is_admin=request.is_admin,
         )
 
         if not credentials:
@@ -325,13 +340,13 @@ async def patch_credentials(
     status_code=status.HTTP_204_NO_CONTENT,
     responses={
         401: {"model": ErrorResponse, "description": "Unauthorized"},
-        404: {"model": ErrorResponse, "description": "Not found"}
-    }
+        404: {"model": ErrorResponse, "description": "Not found"},
+    },
 )
 async def delete_credentials(
     credentials_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    service: MyMomentCredentialsService = Depends(get_credentials_service)
+    service: MyMomentCredentialsService = Depends(get_credentials_service),
 ):
     """
     Delete myMoment credentials.
@@ -351,13 +366,13 @@ async def delete_credentials(
         200: {"description": "Credentials are valid"},
         400: {"model": ErrorResponse, "description": "Bad request - validation failed"},
         401: {"model": ErrorResponse, "description": "Unauthorized"},
-        404: {"model": ErrorResponse, "description": "Not found"}
-    }
+        404: {"model": ErrorResponse, "description": "Not found"},
+    },
 )
 async def validate_credentials(
     credentials_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    service: MyMomentCredentialsService = Depends(get_credentials_service)
+    service: MyMomentCredentialsService = Depends(get_credentials_service),
 ):
     """
     Validate myMoment credentials.
@@ -366,7 +381,9 @@ async def validate_credentials(
     This endpoint does not actually attempt to authenticate with myMoment,
     it only validates that the stored data is accessible.
     """
-    is_valid, error_message = await service.validate_credentials(credentials_id, current_user.id)
+    is_valid, error_message = await service.validate_credentials(
+        credentials_id, current_user.id
+    )
 
     if not is_valid:
         normalized_error = (error_message or "").strip()
@@ -381,16 +398,22 @@ async def validate_credentials(
     "/{credentials_id}/test",
     responses={
         200: {"description": "Authentication test successful"},
-        400: {"model": ErrorResponse, "description": "Bad request - credentials could not be decrypted"},
-        401: {"model": ErrorResponse, "description": "Unauthorized or credentials rejected by myMoment"},
+        400: {
+            "model": ErrorResponse,
+            "description": "Bad request - credentials could not be decrypted",
+        },
+        401: {
+            "model": ErrorResponse,
+            "description": "Unauthorized or credentials rejected by myMoment",
+        },
         404: {"model": ErrorResponse, "description": "Not found"},
-        503: {"model": ErrorResponse, "description": "myMoment not reachable"}
-    }
+        503: {"model": ErrorResponse, "description": "myMoment not reachable"},
+    },
 )
 async def test_credentials(
     credentials_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    service: MyMomentCredentialsService = Depends(get_credentials_service)
+    service: MyMomentCredentialsService = Depends(get_credentials_service),
 ):
     """
     Test myMoment credentials by connecting to the platform.
@@ -404,7 +427,9 @@ async def test_credentials(
         _raise_not_found()
 
     # Validate credentials can be decrypted
-    is_valid, error_message = await service.validate_credentials(credentials_id, current_user.id)
+    is_valid, error_message = await service.validate_credentials(
+        credentials_id, current_user.id
+    )
 
     if not is_valid:
         normalized_error = (error_message or "").strip()
@@ -419,22 +444,30 @@ async def test_credentials(
         async with connect(account, fresh_login=True):
             pass
     except PlatformAuthError as e:
-        logger.warning("Authentication failed during credential test for credentials %s: %s", credentials_id, e)
+        logger.warning(
+            "Authentication failed during credential test for credentials %s: %s",
+            credentials_id,
+            e,
+        )
         raise http_error(
             status.HTTP_401_UNAUTHORIZED,
             "mymoment_credentials_authentication_failed",
-            "Authentication failed. Please verify your username and password are correct."
+            "Authentication failed. Please verify your username and password are correct.",
         )
     except PlatformUnavailable as e:
-        logger.error("myMoment unavailable during credential test for credentials %s: %s", credentials_id, e)
+        logger.error(
+            "myMoment unavailable during credential test for credentials %s: %s",
+            credentials_id,
+            e,
+        )
         raise http_error(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "mymoment_credentials_platform_unavailable",
-            "The myMoment platform is not reachable. Please try again later."
+            "The myMoment platform is not reachable. Please try again later.",
         )
 
     return {
         "message": "Authentication successful",
         "username": account.username,
-        "platform": "myMoment"
+        "platform": "myMoment",
     }

@@ -42,9 +42,7 @@ class SchedulingTask(BaseTask):
         return sessionmaker()
 
     async def _trigger_pipeline_async(
-        self,
-        force_immediate: bool = False,
-        process_ids: Optional[List[str]] = None
+        self, force_immediate: bool = False, process_ids: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         Async implementation of pipeline triggering.
@@ -63,7 +61,9 @@ class SchedulingTask(BaseTask):
         spawned_tasks = []
         skipped_tasks = []
         errors = []
-        trigger_mode = "process_scoped" if process_ids is not None else "periodic_global"
+        trigger_mode = (
+            "process_scoped" if process_ids is not None else "periodic_global"
+        )
 
         async with await self.get_async_session() as session:
             try:
@@ -81,8 +81,7 @@ class SchedulingTask(BaseTask):
 
                     if normalized_process_ids:
                         result = await session.execute(
-                            select(MonitoringProcess)
-                            .where(
+                            select(MonitoringProcess).where(
                                 and_(
                                     MonitoringProcess.status == "running",
                                     MonitoringProcess.is_active == True,
@@ -102,11 +101,10 @@ class SchedulingTask(BaseTask):
                 else:
                     # Find all running monitoring processes
                     result = await session.execute(
-                        select(MonitoringProcess)
-                        .where(
+                        select(MonitoringProcess).where(
                             and_(
                                 MonitoringProcess.status == "running",
-                                MonitoringProcess.is_active == True
+                                MonitoringProcess.is_active == True,
                             )
                         )
                     )
@@ -127,13 +125,15 @@ class SchedulingTask(BaseTask):
                             session,
                             process,
                             discover_articles,
-                            force_immediate=force_immediate
+                            force_immediate=force_immediate,
                         )
 
-                        spawned_tasks.extend(process_spawned['spawned'])
-                        skipped_tasks.extend(process_spawned['skipped'])
-                        if process_spawned.get('discovery_metrics'):
-                            discovery_metrics.append(process_spawned['discovery_metrics'])
+                        spawned_tasks.extend(process_spawned["spawned"])
+                        skipped_tasks.extend(process_spawned["skipped"])
+                        if process_spawned.get("discovery_metrics"):
+                            discovery_metrics.append(
+                                process_spawned["discovery_metrics"]
+                            )
 
                     except Exception as e:
                         error_msg = f"Failed to trigger tasks for process {process.id}: {str(e)}"
@@ -153,16 +153,16 @@ class SchedulingTask(BaseTask):
                 )
 
                 return {
-                    'trigger_mode': trigger_mode,
-                    'processes_checked': len(running_processes),
-                    'tasks_spawned': len(spawned_tasks),
-                    'tasks_skipped': len(skipped_tasks),
-                    'spawned_details': spawned_tasks,
-                    'skipped_details': skipped_tasks,
-                    'discovery_metrics': discovery_metrics,
-                    'errors': errors,
-                    'execution_time_seconds': execution_time,
-                    'timestamp': utcnow().isoformat()
+                    "trigger_mode": trigger_mode,
+                    "processes_checked": len(running_processes),
+                    "tasks_spawned": len(spawned_tasks),
+                    "tasks_skipped": len(skipped_tasks),
+                    "spawned_details": spawned_tasks,
+                    "skipped_details": skipped_tasks,
+                    "discovery_metrics": discovery_metrics,
+                    "errors": errors,
+                    "execution_time_seconds": execution_time,
+                    "timestamp": utcnow().isoformat(),
                 }
 
             except Exception as e:
@@ -172,16 +172,16 @@ class SchedulingTask(BaseTask):
 
                 execution_time = (utcnow() - start_time).total_seconds()
                 return {
-                    'trigger_mode': trigger_mode,
-                    'processes_checked': 0,
-                    'tasks_spawned': 0,
-                    'tasks_skipped': 0,
-                    'spawned_details': [],
-                    'skipped_details': [],
-                    'discovery_metrics': [],
-                    'errors': errors,
-                    'execution_time_seconds': execution_time,
-                    'timestamp': utcnow().isoformat()
+                    "trigger_mode": trigger_mode,
+                    "processes_checked": 0,
+                    "tasks_spawned": 0,
+                    "tasks_skipped": 0,
+                    "spawned_details": [],
+                    "skipped_details": [],
+                    "discovery_metrics": [],
+                    "errors": errors,
+                    "execution_time_seconds": execution_time,
+                    "timestamp": utcnow().isoformat(),
                 }
 
     def _compute_discovery_backoff_seconds(self, empty_streak: int) -> int:
@@ -251,11 +251,15 @@ class SchedulingTask(BaseTask):
 
                 if discovered_count is not None:
                     if discovered_count == 0:
-                        process.discovery_empty_streak = (process.discovery_empty_streak or 0) + 1
+                        process.discovery_empty_streak = (
+                            process.discovery_empty_streak or 0
+                        ) + 1
                         delay_seconds = self._compute_discovery_backoff_seconds(
                             process.discovery_empty_streak
                         )
-                        process.next_discovery_at = now_utc + timedelta(seconds=delay_seconds)
+                        process.next_discovery_at = now_utc + timedelta(
+                            seconds=delay_seconds
+                        )
                     else:
                         process.discovery_empty_streak = 0
                         process.next_discovery_at = now_utc
@@ -265,7 +269,9 @@ class SchedulingTask(BaseTask):
                     # persistent scraping/auth errors. Do not increment the streak
                     # because this is not a zero-hit discovery, it is an error.
                     min_delay = max(
-                        int(self.settings.monitoring.ARTICLE_DISCOVERY_INTERVAL_SECONDS),
+                        int(
+                            self.settings.monitoring.ARTICLE_DISCOVERY_INTERVAL_SECONDS
+                        ),
                         self.DISCOVERY_MIN_BACKOFF_SECONDS,
                     )
                     process.next_discovery_at = now_utc + timedelta(seconds=min_delay)
@@ -280,7 +286,9 @@ class SchedulingTask(BaseTask):
                     task_state,
                     discovered_count,
                     process.discovery_empty_streak,
-                    process.next_discovery_at.isoformat() if process.next_discovery_at else None,
+                    process.next_discovery_at.isoformat()
+                    if process.next_discovery_at
+                    else None,
                 )
 
             return {
@@ -332,7 +340,7 @@ class SchedulingTask(BaseTask):
         session: AsyncSession,
         process: MonitoringProcess,
         discover_articles_task,
-        force_immediate: bool = False
+        force_immediate: bool = False,
     ) -> Dict[str, Any]:
         """
         Spawn discovery task for a single process, checking if the task is already running.
@@ -353,39 +361,45 @@ class SchedulingTask(BaseTask):
 
         stages = [
             {
-                'name': 'discovery',
-                'task_id_field': 'celery_discovery_task_id',
-                'task_callable': discover_articles_task,
-                'enabled': True
+                "name": "discovery",
+                "task_id_field": "celery_discovery_task_id",
+                "task_callable": discover_articles_task,
+                "enabled": True,
             }
         ]
 
         for stage in stages:
-            if not stage['enabled']:
-                skipped.append({
-                    'process_id': str(process.id),
-                    'stage': stage['name'],
-                    'reason': 'disabled (generate_only=True)'
-                })
+            if not stage["enabled"]:
+                skipped.append(
+                    {
+                        "process_id": str(process.id),
+                        "stage": stage["name"],
+                        "reason": "disabled (generate_only=True)",
+                    }
+                )
                 continue
 
-            current_task_id = getattr(process, stage['task_id_field'], None)
+            current_task_id = getattr(process, stage["task_id_field"], None)
             terminal_state = self._refresh_discovery_state_from_terminal_result(
                 process,
                 current_task_id,
             )
-            current_task_id = getattr(process, stage['task_id_field'], None)
+            current_task_id = getattr(process, stage["task_id_field"], None)
             last_discovered_count = terminal_state["last_discovered_count"]
-            pending_backlog_count = await self._count_discovered_backlog(session, process.id)
+            pending_backlog_count = await self._count_discovered_backlog(
+                session, process.id
+            )
 
             if pending_backlog_count > 0:
-                reason = 'pending_discovered_backlog'
-                skipped.append({
-                    'process_id': str(process.id),
-                    'stage': stage['name'],
-                    'reason': reason,
-                    'pending_backlog_count': pending_backlog_count,
-                })
+                reason = "pending_discovered_backlog"
+                skipped.append(
+                    {
+                        "process_id": str(process.id),
+                        "stage": stage["name"],
+                        "reason": reason,
+                        "pending_backlog_count": pending_backlog_count,
+                    }
+                )
                 discovery_metrics = self._build_discovery_metrics(
                     process,
                     pending_backlog_count,
@@ -402,13 +416,15 @@ class SchedulingTask(BaseTask):
             now_utc = utcnow()
             next_discovery_at = process.next_discovery_at
             if next_discovery_at is not None and next_discovery_at > now_utc:
-                reason = 'cooldown_active'
-                skipped.append({
-                    'process_id': str(process.id),
-                    'stage': stage['name'],
-                    'reason': reason,
-                    'next_discovery_at': next_discovery_at.isoformat(),
-                })
+                reason = "cooldown_active"
+                skipped.append(
+                    {
+                        "process_id": str(process.id),
+                        "stage": stage["name"],
+                        "reason": reason,
+                        "next_discovery_at": next_discovery_at.isoformat(),
+                    }
+                )
                 discovery_metrics = self._build_discovery_metrics(
                     process,
                     pending_backlog_count,
@@ -425,13 +441,15 @@ class SchedulingTask(BaseTask):
             queued_at = process.discovery_queued_at
             lease_cutoff = now_utc - timedelta(seconds=self.DISCOVERY_LEASE_SECONDS)
             if queued_at is not None and queued_at > lease_cutoff:
-                reason = 'discovery_lease_active'
-                skipped.append({
-                    'process_id': str(process.id),
-                    'stage': stage['name'],
-                    'reason': reason,
-                    'discovery_queued_at': queued_at.isoformat(),
-                })
+                reason = "discovery_lease_active"
+                skipped.append(
+                    {
+                        "process_id": str(process.id),
+                        "stage": stage["name"],
+                        "reason": reason,
+                        "discovery_queued_at": queued_at.isoformat(),
+                    }
+                )
                 discovery_metrics = self._build_discovery_metrics(
                     process,
                     pending_backlog_count,
@@ -446,7 +464,7 @@ class SchedulingTask(BaseTask):
                 continue
 
             # Get current task ID for this stage
-            current_task_id = getattr(process, stage['task_id_field'], None)
+            current_task_id = getattr(process, stage["task_id_field"], None)
 
             # Check if task is still running. This remains an additional guard,
             # not the primary backpressure mechanism.
@@ -458,20 +476,22 @@ class SchedulingTask(BaseTask):
                     # state of expired results. Only treat STARTED and RETRY as
                     # genuinely running to avoid permanently blocking re-spawning
                     # when a task has completed and its result TTL has expired.
-                    is_running = task_result.state in ['STARTED', 'RETRY']
+                    is_running = task_result.state in ["STARTED", "RETRY"]
 
                     if is_running:
-                        skipped.append({
-                            'process_id': str(process.id),
-                            'stage': stage['name'],
-                            'task_id': current_task_id,
-                            'state': task_result.state,
-                            'reason': 'already running'
-                        })
+                        skipped.append(
+                            {
+                                "process_id": str(process.id),
+                                "stage": stage["name"],
+                                "task_id": current_task_id,
+                                "state": task_result.state,
+                                "reason": "already running",
+                            }
+                        )
                         discovery_metrics = self._build_discovery_metrics(
                             process,
                             pending_backlog_count,
-                            'already running',
+                            "already running",
                             last_discovered_count,
                         )
                         continue
@@ -483,18 +503,20 @@ class SchedulingTask(BaseTask):
 
             # Spawn new task for this stage
             try:
-                new_task = stage['task_callable'].delay(str(process.id))
+                new_task = stage["task_callable"].delay(str(process.id))
 
                 # Update task ID in process
-                setattr(process, stage['task_id_field'], new_task.id)
+                setattr(process, stage["task_id_field"], new_task.id)
                 process.discovery_queued_at = now_utc
 
-                spawned.append({
-                    'process_id': str(process.id),
-                    'process_name': process.name,
-                    'stage': stage['name'],
-                    'task_id': new_task.id
-                })
+                spawned.append(
+                    {
+                        "process_id": str(process.id),
+                        "process_name": process.name,
+                        "stage": stage["name"],
+                        "task_id": new_task.id,
+                    }
+                )
                 discovery_metrics = self._build_discovery_metrics(
                     process,
                     pending_backlog_count,
@@ -511,33 +533,33 @@ class SchedulingTask(BaseTask):
                 logger.error(
                     f"Failed to spawn {stage['name']} task for process {process.id}: {e}"
                 )
-                skipped.append({
-                    'process_id': str(process.id),
-                    'stage': stage['name'],
-                    'reason': f'spawn failed: {str(e)}'
-                })
+                skipped.append(
+                    {
+                        "process_id": str(process.id),
+                        "stage": stage["name"],
+                        "reason": f"spawn failed: {str(e)}",
+                    }
+                )
                 discovery_metrics = self._build_discovery_metrics(
                     process,
                     pending_backlog_count,
-                    f'spawn failed: {str(e)}',
+                    f"spawn failed: {str(e)}",
                     last_discovered_count,
                 )
 
         return {
-            'spawned': spawned,
-            'skipped': skipped,
-            'discovery_metrics': discovery_metrics,
+            "spawned": spawned,
+            "skipped": skipped,
+            "discovery_metrics": discovery_metrics,
         }
 
 
 # Register the task as a Celery task
 @celery_app.task(
-    name='src.tasks.scheduler.trigger_monitoring_pipeline',
-    queue='scheduler'
+    name="src.tasks.scheduler.trigger_monitoring_pipeline", queue="scheduler"
 )
 def trigger_monitoring_pipeline(
-    force_immediate: bool = False,
-    process_ids: Optional[List[str]] = None
+    force_immediate: bool = False, process_ids: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Periodically trigger pipeline stage tasks for all active monitoring processes.

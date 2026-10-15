@@ -25,6 +25,7 @@ from pathlib import Path
 
 # Ensure .env is loaded before any imports
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # Add src to path
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # SERVER COMMANDS
 # ============================================================================
+
 
 def cmd_server(args: argparse.Namespace) -> None:
     """Start the web server."""
@@ -82,6 +84,7 @@ def cmd_server(args: argparse.Namespace) -> None:
 # WORKER COMMANDS
 # ============================================================================
 
+
 def cmd_worker(args: argparse.Namespace) -> None:
     """Start Celery worker."""
     from src.tasks.worker import start_worker
@@ -110,6 +113,7 @@ def cmd_scheduler(args: argparse.Namespace) -> None:
 # DATABASE COMMANDS
 # ============================================================================
 
+
 async def cmd_db_migrate(args: argparse.Namespace) -> None:
     """Run database migrations."""
     import subprocess
@@ -118,10 +122,7 @@ async def cmd_db_migrate(args: argparse.Namespace) -> None:
 
     try:
         result = subprocess.run(
-            ["alembic", "upgrade", "head"],
-            check=True,
-            capture_output=True,
-            text=True
+            ["alembic", "upgrade", "head"], check=True, capture_output=True, text=True
         )
         print(result.stdout)
         logger.info("✓ Migrations completed successfully")
@@ -212,7 +213,9 @@ async def cmd_db_seed(args: argparse.Namespace) -> None:
                 await session.flush()
                 logger.info(f"✓ Created {len(system_prompts)} system prompt templates")
             else:
-                logger.info(f"✓ System prompt templates already exist ({len(templates)} templates)")
+                logger.info(
+                    f"✓ System prompt templates already exist ({len(templates)} templates)"
+                )
 
             # Only create test user in development or if explicitly forced
             if not is_production or args.force:
@@ -223,10 +226,10 @@ async def cmd_db_seed(args: argparse.Namespace) -> None:
 
                 if not user:
                     import bcrypt
+
                     password_hash = bcrypt.hashpw(
-                        "Valid!Password123".encode('utf-8'),
-                        bcrypt.gensalt()
-                    ).decode('utf-8')
+                        "Valid!Password123".encode("utf-8"), bcrypt.gensalt()
+                    ).decode("utf-8")
 
                     user = User(
                         email="test@yourmoment.dev",
@@ -238,7 +241,9 @@ async def cmd_db_seed(args: argparse.Namespace) -> None:
                     )
                     session.add(user)
                     await session.flush()
-                    logger.warning("⚠️  Created DEVELOPMENT test user: test@yourmoment.dev")
+                    logger.warning(
+                        "⚠️  Created DEVELOPMENT test user: test@yourmoment.dev"
+                    )
                     logger.warning("⚠️  Password: Valid!Password123")
                     logger.warning("⚠️  DO NOT use this in production!")
                 else:
@@ -286,6 +291,7 @@ async def cmd_db_reset(args: argparse.Namespace) -> None:
 
     # Now seed with fresh data (create new args without force flag for safety)
     import argparse
+
     seed_args = argparse.Namespace(force=False)
     await cmd_db_seed(seed_args)
 
@@ -308,15 +314,24 @@ async def cmd_db_stats(args: argparse.Namespace) -> None:
     async with AsyncSession(engine) as session:
         # Get counts
         user_count = (await session.execute(select(func.count(User.id)))).scalar()
-        login_count = (await session.execute(select(func.count(MyMomentLogin.id)))).scalar()
-        comment_count = (await session.execute(select(func.count(AIComment.id)))).scalar()
-        process_count = (await session.execute(select(func.count(MonitoringProcess.id)))).scalar()
-        template_count = (await session.execute(select(func.count(PromptTemplate.id)))).scalar()
+        login_count = (
+            await session.execute(select(func.count(MyMomentLogin.id)))
+        ).scalar()
+        comment_count = (
+            await session.execute(select(func.count(AIComment.id)))
+        ).scalar()
+        process_count = (
+            await session.execute(select(func.count(MonitoringProcess.id)))
+        ).scalar()
+        template_count = (
+            await session.execute(select(func.count(PromptTemplate.id)))
+        ).scalar()
 
         # Get comment status breakdown
         result = await session.execute(
-            select(AIComment.status, func.count(AIComment.id))
-            .group_by(AIComment.status)
+            select(AIComment.status, func.count(AIComment.id)).group_by(
+                AIComment.status
+            )
         )
         status_counts = {row[0]: row[1] for row in result.all()}
 
@@ -337,6 +352,7 @@ async def cmd_db_stats(args: argparse.Namespace) -> None:
 # USER COMMANDS
 # ============================================================================
 
+
 async def cmd_user_create(args: argparse.Namespace) -> None:
     """Create a new user interactively."""
     import bcrypt
@@ -351,16 +367,17 @@ async def cmd_user_create(args: argparse.Namespace) -> None:
     # Get user input
     email = input("Email: ")
     password = input("Password: ")
-    is_verified = input("Mark as verified? (Y/n): ").lower() != 'n'
+    is_verified = input("Mark as verified? (Y/n): ").lower() != "n"
 
     # Validate email
     from pydantic import BaseModel, EmailStr
+
     class EmailDummy(BaseModel):
         email: EmailStr
 
     # Use EmailDummy class with pedantic validator
     try:
-        EmailDummy(email = email)
+        EmailDummy(email=email)
         email_validated = True
     except ValueError:
         email_validated = False
@@ -370,10 +387,9 @@ async def cmd_user_create(args: argparse.Namespace) -> None:
         return
 
     # Hash password
-    password_hash = bcrypt.hashpw(
-        password.encode('utf-8'),
-        bcrypt.gensalt()
-    ).decode('utf-8')
+    password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode(
+        "utf-8"
+    )
 
     # Create user
     db_manager = get_database_manager()
@@ -406,6 +422,7 @@ async def cmd_user_create(args: argparse.Namespace) -> None:
 # CELERY COMMANDS
 # ============================================================================
 
+
 def cmd_celery_info(args: argparse.Namespace) -> None:
     """Show Celery configuration."""
     from src.tasks.worker import get_task_info
@@ -414,15 +431,15 @@ def cmd_celery_info(args: argparse.Namespace) -> None:
 
     print("\n=== Celery Configuration ===")
     print(f"Project tasks: {len(info['project_tasks'])}")
-    for task in info['project_tasks']:
+    for task in info["project_tasks"]:
         print(f"  - {task}")
 
     print(f"\nQueues: {len(info['queues'])}")
-    for queue in info['queues']:
+    for queue in info["queues"]:
         print(f"  - {queue}")
 
     print(f"\nBeat schedule: {len(info['beat_schedule'])}")
-    for schedule in info['beat_schedule']:
+    for schedule in info["beat_schedule"]:
         print(f"  - {schedule}")
 
     print()
@@ -438,10 +455,10 @@ def cmd_celery_health(args: argparse.Namespace) -> None:
     print(f"Status: {health['status']}")
     print(f"Broker connection: {health.get('broker_connection', 'unknown')}")
 
-    if health['status'] == 'healthy':
+    if health["status"] == "healthy":
         print(f"Active workers: {health.get('workers', 0)}")
         print(f"Available queues: {len(health.get('queues', []))}")
-        for queue in health.get('queues', []):
+        for queue in health.get("queues", []):
             print(f"  - {queue}")
     else:
         print(f"Error: {health.get('error', 'Unknown error')}")
@@ -463,10 +480,10 @@ def cmd_celery_clear(args: argparse.Namespace) -> None:
     print("\n=== Queue Clear Result ===")
     print(f"Status: {result['status']}")
 
-    if result['status'] == 'success':
+    if result["status"] == "success":
         print(f"Total tasks cleared: {result['total_tasks_cleared']}")
         print("\nCleared queues:")
-        for queue, count in result['cleared_queues'].items():
+        for queue, count in result["cleared_queues"].items():
             if isinstance(count, int):
                 print(f"  - {queue}: {count} tasks")
             else:
@@ -481,61 +498,90 @@ def cmd_celery_clear(args: argparse.Namespace) -> None:
 # MAIN CLI
 # ============================================================================
 
+
 def main() -> None:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description='yourMoment Management CLI',
+        description="yourMoment Management CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Server command
-    server_parser = subparsers.add_parser('server', help='Start web server')
-    server_parser.add_argument('--host', default='0.0.0.0', help='Host to bind')
-    server_parser.add_argument('--port', type=int, default=8000, help='Port to bind')
-    server_parser.add_argument('--workers', type=int, default=4, help='Number of workers (production only)')
-    server_parser.add_argument('--loglevel', default='info', choices=['debug', 'info', 'warning', 'error'])
+    server_parser = subparsers.add_parser("server", help="Start web server")
+    server_parser.add_argument("--host", default="0.0.0.0", help="Host to bind")
+    server_parser.add_argument("--port", type=int, default=8000, help="Port to bind")
+    server_parser.add_argument(
+        "--workers", type=int, default=4, help="Number of workers (production only)"
+    )
+    server_parser.add_argument(
+        "--loglevel", default="info", choices=["debug", "info", "warning", "error"]
+    )
 
     # Worker command
-    worker_parser = subparsers.add_parser('worker', help='Start Celery worker')
-    worker_parser.add_argument('--loglevel', default='info', choices=['debug', 'info', 'warning', 'error'])
-    worker_parser.add_argument('--queues', nargs='+', help='Queues to consume')
-    worker_parser.add_argument('--concurrency', type=int, default=4, help='Number of worker processes')
-    worker_parser.add_argument('--pool', default=None, help='Worker pool implementation (e.g. solo, prefork, threads)')
+    worker_parser = subparsers.add_parser("worker", help="Start Celery worker")
+    worker_parser.add_argument(
+        "--loglevel", default="info", choices=["debug", "info", "warning", "error"]
+    )
+    worker_parser.add_argument("--queues", nargs="+", help="Queues to consume")
+    worker_parser.add_argument(
+        "--concurrency", type=int, default=4, help="Number of worker processes"
+    )
+    worker_parser.add_argument(
+        "--pool",
+        default=None,
+        help="Worker pool implementation (e.g. solo, prefork, threads)",
+    )
 
     # Scheduler command
-    scheduler_parser = subparsers.add_parser('scheduler', help='Start Celery beat scheduler')
-    scheduler_parser.add_argument('--loglevel', default='info', choices=['debug', 'info', 'warning', 'error'])
+    scheduler_parser = subparsers.add_parser(
+        "scheduler", help="Start Celery beat scheduler"
+    )
+    scheduler_parser.add_argument(
+        "--loglevel", default="info", choices=["debug", "info", "warning", "error"]
+    )
 
     # Database commands
-    db_parser = subparsers.add_parser('db', help='Database management')
-    db_subparsers = db_parser.add_subparsers(dest='db_command', help='Database commands')
+    db_parser = subparsers.add_parser("db", help="Database management")
+    db_subparsers = db_parser.add_subparsers(
+        dest="db_command", help="Database commands"
+    )
 
-    db_subparsers.add_parser('migrate', help='Run database migrations')
+    db_subparsers.add_parser("migrate", help="Run database migrations")
 
-    db_seed_parser = db_subparsers.add_parser('seed', help='Seed database with essential data')
-    db_seed_parser.add_argument('--force', action='store_true', help='Force creation of test user in production')
+    db_seed_parser = db_subparsers.add_parser(
+        "seed", help="Seed database with essential data"
+    )
+    db_seed_parser.add_argument(
+        "--force", action="store_true", help="Force creation of test user in production"
+    )
 
-    db_reset_parser = db_subparsers.add_parser('reset', help='Reset and seed database')
-    db_reset_parser.add_argument('--force', action='store_true', help='Skip confirmation')
+    db_reset_parser = db_subparsers.add_parser("reset", help="Reset and seed database")
+    db_reset_parser.add_argument(
+        "--force", action="store_true", help="Skip confirmation"
+    )
 
-    db_subparsers.add_parser('stats', help='Show database statistics')
+    db_subparsers.add_parser("stats", help="Show database statistics")
 
     # User commands
-    user_parser = subparsers.add_parser('user', help='User management')
-    user_subparsers = user_parser.add_subparsers(dest='user_command', help='User commands')
-    user_subparsers.add_parser('create', help='Create a new user')
+    user_parser = subparsers.add_parser("user", help="User management")
+    user_subparsers = user_parser.add_subparsers(
+        dest="user_command", help="User commands"
+    )
+    user_subparsers.add_parser("create", help="Create a new user")
 
     # Celery commands
-    celery_parser = subparsers.add_parser('celery', help='Celery management')
-    celery_subparsers = celery_parser.add_subparsers(dest='celery_command', help='Celery commands')
+    celery_parser = subparsers.add_parser("celery", help="Celery management")
+    celery_subparsers = celery_parser.add_subparsers(
+        dest="celery_command", help="Celery commands"
+    )
 
-    celery_subparsers.add_parser('info', help='Show Celery configuration')
-    celery_subparsers.add_parser('health', help='Check Celery health')
+    celery_subparsers.add_parser("info", help="Show Celery configuration")
+    celery_subparsers.add_parser("health", help="Check Celery health")
 
-    celery_clear_parser = celery_subparsers.add_parser('clear', help='Clear queue(s)')
-    celery_clear_parser.add_argument('--queue', help='Specific queue to clear')
+    celery_clear_parser = celery_subparsers.add_parser("clear", help="Clear queue(s)")
+    celery_clear_parser.add_argument("--queue", help="Specific queue to clear")
 
     args = parser.parse_args()
 
@@ -559,42 +605,42 @@ def main() -> None:
 
     try:
         # Route to appropriate command
-        if args.command == 'server':
+        if args.command == "server":
             cmd_server(args)
-        elif args.command == 'worker':
+        elif args.command == "worker":
             cmd_worker(args)
-        elif args.command == 'scheduler':
+        elif args.command == "scheduler":
             cmd_scheduler(args)
-        elif args.command == 'db':
+        elif args.command == "db":
             if not args.db_command:
                 db_parser.print_help()
                 return
 
-            if args.db_command == 'migrate':
+            if args.db_command == "migrate":
                 asyncio.run(cmd_db_migrate(args))
-            elif args.db_command == 'seed':
+            elif args.db_command == "seed":
                 asyncio.run(cmd_db_seed(args))
-            elif args.db_command == 'reset':
+            elif args.db_command == "reset":
                 asyncio.run(cmd_db_reset(args))
-            elif args.db_command == 'stats':
+            elif args.db_command == "stats":
                 asyncio.run(cmd_db_stats(args))
-        elif args.command == 'user':
+        elif args.command == "user":
             if not args.user_command:
                 user_parser.print_help()
                 return
 
-            if args.user_command == 'create':
+            if args.user_command == "create":
                 asyncio.run(cmd_user_create(args))
-        elif args.command == 'celery':
+        elif args.command == "celery":
             if not args.celery_command:
                 celery_parser.print_help()
                 return
 
-            if args.celery_command == 'info':
+            if args.celery_command == "info":
                 cmd_celery_info(args)
-            elif args.celery_command == 'health':
+            elif args.celery_command == "health":
                 cmd_celery_health(args)
-            elif args.celery_command == 'clear':
+            elif args.celery_command == "clear":
                 cmd_celery_clear(args)
         else:
             parser.print_help()
@@ -607,5 +653,5 @@ def main() -> None:
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

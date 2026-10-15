@@ -18,23 +18,28 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.user import User
 from src.utils.datetimes import utcnow
 
+
 class BaseServiceError(Exception):
     """Base exception for all service operations."""
+
     pass
 
 
 class ServiceValidationError(BaseServiceError):
     """Raised when service validation fails."""
+
     pass
 
 
 class ServiceNotFoundError(BaseServiceError):
     """Raised when a requested resource is not found."""
+
     pass
 
 
 class ServiceAccessError(BaseServiceError):
     """Raised when user lacks access to a resource."""
+
     pass
 
 
@@ -59,9 +64,7 @@ class BaseService(ABC):
         self.logger = logging.getLogger(self.__class__.__name__)
 
     async def get_user_by_id(
-        self,
-        user_id: uuid.UUID,
-        require_active: bool = True
+        self, user_id: uuid.UUID, require_active: bool = True
     ) -> Optional[User]:
         """
         Get user by ID with optional active status validation.
@@ -87,9 +90,7 @@ class BaseService(ABC):
             return None
 
     async def validate_user_exists(
-        self,
-        user_id: uuid.UUID,
-        require_active: bool = True
+        self, user_id: uuid.UUID, require_active: bool = True
     ) -> User:
         """
         Validate that a user exists and optionally is active.
@@ -111,9 +112,7 @@ class BaseService(ABC):
         return user
 
     async def validate_user_access(
-        self,
-        user_id: uuid.UUID,
-        resource_user_id: Optional[uuid.UUID]
+        self, user_id: uuid.UUID, resource_user_id: Optional[uuid.UUID]
     ) -> bool:
         """
         Validate that a user has access to a resource owned by another user.
@@ -145,7 +144,7 @@ class BaseService(ABC):
         operation: str,
         user_id: Optional[uuid.UUID] = None,
         resource_id: Optional[uuid.UUID] = None,
-        additional_data: Optional[Dict[str, Any]] = None
+        additional_data: Optional[Dict[str, Any]] = None,
     ):
         """
         Log service operations in a standardized format.
@@ -159,7 +158,7 @@ class BaseService(ABC):
         log_data = {
             "operation": operation,
             "timestamp": utcnow().isoformat(),
-            "service": self.__class__.__name__
+            "service": self.__class__.__name__,
         }
 
         if user_id:

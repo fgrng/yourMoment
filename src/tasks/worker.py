@@ -13,21 +13,28 @@ import logging
 from importlib import import_module
 from typing import Any, Dict, Iterable
 from celery import Celery
-from celery.signals import setup_logging as celery_setup_logging, task_prerun, task_postrun
+from celery.signals import (
+    setup_logging as celery_setup_logging,
+    task_prerun,
+    task_postrun,
+)
 from kombu import Queue
 
-from src.config.logging import format_log_context, setup_logging as setup_project_logging
+from src.config.logging import (
+    format_log_context,
+    setup_logging as setup_project_logging,
+)
 from src.config.settings import get_settings
 
 # Task modules that need to be imported so Celery registers them
 TASK_MODULES: Iterable[str] = (
-    'src.tasks.timeout_enforcer',
-    'src.tasks.scheduler',
-    'src.tasks.article_discovery',
-    'src.tasks.article_preparation',
-    'src.tasks.comment_generation',
-    'src.tasks.comment_posting',
-    'src.tasks.student_backup',
+    "src.tasks.timeout_enforcer",
+    "src.tasks.scheduler",
+    "src.tasks.article_discovery",
+    "src.tasks.article_preparation",
+    "src.tasks.comment_generation",
+    "src.tasks.comment_posting",
+    "src.tasks.student_backup",
 )
 
 # Configure logging for Celery
@@ -44,47 +51,49 @@ class CeleryConfig:
 
     # Task routing and queues
     task_routes = {
-        'src.tasks.timeout_enforcer.*': {'queue': 'timeouts'},
-        'src.tasks.scheduler.*': {'queue': 'scheduler'},
-        'src.tasks.article_discovery.*': {'queue': 'discovery'},
-        'src.tasks.article_preparation.*': {'queue': 'preparation'},
-        'src.tasks.comment_generation.*': {'queue': 'generation'},
-        'src.tasks.comment_posting.*': {'queue': 'posting'},
-        'src.tasks.student_backup.*': {'queue': 'backup'},
+        "src.tasks.timeout_enforcer.*": {"queue": "timeouts"},
+        "src.tasks.scheduler.*": {"queue": "scheduler"},
+        "src.tasks.article_discovery.*": {"queue": "discovery"},
+        "src.tasks.article_preparation.*": {"queue": "preparation"},
+        "src.tasks.comment_generation.*": {"queue": "generation"},
+        "src.tasks.comment_posting.*": {"queue": "posting"},
+        "src.tasks.student_backup.*": {"queue": "backup"},
     }
 
     # Define queues
     task_queues = (
-        Queue('timeouts', routing_key='timeouts'),
-        Queue('scheduler', routing_key='scheduler'),
-        Queue('discovery', routing_key='discovery'),
-        Queue('preparation', routing_key='preparation'),
-        Queue('generation', routing_key='generation'),
-        Queue('posting', routing_key='posting'),
-        Queue('backup', routing_key='backup'),  # Student Backup feature
-        Queue('celery', routing_key='celery'),  # default queue
+        Queue("timeouts", routing_key="timeouts"),
+        Queue("scheduler", routing_key="scheduler"),
+        Queue("discovery", routing_key="discovery"),
+        Queue("preparation", routing_key="preparation"),
+        Queue("generation", routing_key="generation"),
+        Queue("posting", routing_key="posting"),
+        Queue("backup", routing_key="backup"),  # Student Backup feature
+        Queue("celery", routing_key="celery"),  # default queue
     )
 
     # Task execution settings
-    task_serializer = 'json'
-    accept_content = ['json']
-    result_serializer = 'json'
-    timezone = 'UTC'
+    task_serializer = "json"
+    accept_content = ["json"]
+    result_serializer = "json"
+    timezone = "UTC"
     enable_utc = True
 
     # Worker settings
     worker_prefetch_multiplier = 1  # One task at a time for better resource control
     task_acks_late = True  # Acknowledge tasks after completion
     task_track_started = True  # Emit STARTED so scheduler can detect in-flight tasks
-    worker_max_tasks_per_child = 100  # Restart worker after 100 tasks to prevent memory leaks
+    worker_max_tasks_per_child = (
+        100  # Restart worker after 100 tasks to prevent memory leaks
+    )
     worker_hijack_root_logger = False
 
     # Task time limits
-    task_soft_time_limit = 3*(60*60)  # 3 hours soft limit
-    task_time_limit = 6*(60*60)  # 6 hours hard limit
+    task_soft_time_limit = 3 * (60 * 60)  # 3 hours soft limit
+    task_time_limit = 6 * (60 * 60)  # 6 hours hard limit
 
     # Result expiration
-    result_expires = 24*(60*60)  # 24 hours
+    result_expires = 24 * (60 * 60)  # 24 hours
 
     # Task routing optimization
     task_ignore_result = False
@@ -96,21 +105,21 @@ class CeleryConfig:
 
     # Beat schedule for periodic tasks
     beat_schedule = {
-        'check-process-timeouts': {
-            'task': 'src.tasks.timeout_enforcer.check_process_timeouts',
-            'schedule': settings.monitoring.PROCESS_HEALTH_CHECK_INTERVAL_SECONDS,
+        "check-process-timeouts": {
+            "task": "src.tasks.timeout_enforcer.check_process_timeouts",
+            "schedule": settings.monitoring.PROCESS_HEALTH_CHECK_INTERVAL_SECONDS,
         },
-        'trigger-monitoring-pipeline': {
-            'task': 'src.tasks.scheduler.trigger_monitoring_pipeline',
-            'schedule': settings.monitoring.ARTICLE_DISCOVERY_INTERVAL_SECONDS,
+        "trigger-monitoring-pipeline": {
+            "task": "src.tasks.scheduler.trigger_monitoring_pipeline",
+            "schedule": settings.monitoring.ARTICLE_DISCOVERY_INTERVAL_SECONDS,
         },
         # Student Backup feature - task checks STUDENT_BACKUP_ENABLED internally
-        'backup-tracked-students': {
-            'task': 'src.tasks.student_backup.backup_all_tracked_students',
-            'schedule': settings.student_backup.STUDENT_BACKUP_INTERVAL_MINUTES * 60,
+        "backup-tracked-students": {
+            "task": "src.tasks.student_backup.backup_all_tracked_students",
+            "schedule": settings.student_backup.STUDENT_BACKUP_INTERVAL_MINUTES * 60,
         },
     }
-    beat_scheduler = 'celery.beat:PersistentScheduler'
+    beat_scheduler = "celery.beat:PersistentScheduler"
 
 
 def create_celery_app() -> Celery:
@@ -121,7 +130,7 @@ def create_celery_app() -> Celery:
         Configured Celery application instance
     """
     # Create Celery app
-    celery_app = Celery('yourMoment')
+    celery_app = Celery("yourMoment")
 
     # Load configuration
     celery_app.config_from_object(CeleryConfig)
@@ -143,14 +152,18 @@ celery_app = create_celery_app()
 
 
 @celery_setup_logging.connect
-def setup_celery_logging(loglevel=None, logfile=None, format=None, colorize=None, **kwargs):
+def setup_celery_logging(
+    loglevel=None, logfile=None, format=None, colorize=None, **kwargs
+):
     """Configure Celery logging to integrate with application logging."""
     service_name = os.getenv("YOURMOMENT_SERVICE_NAME", "worker")
     setup_project_logging(service_name=service_name, log_level=loglevel)
 
 
 @task_prerun.connect
-def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None, **kwds):
+def task_prerun_handler(
+    sender=None, task_id=None, task=None, args=None, kwargs=None, **kwds
+):
     """Log task start information."""
     logger.info(
         "Starting task %s [%s] %s",
@@ -161,12 +174,22 @@ def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=
 
 
 @task_postrun.connect
-def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None,
-                        retval=None, state=None, **kwds):
+def task_postrun_handler(
+    sender=None,
+    task_id=None,
+    task=None,
+    args=None,
+    kwargs=None,
+    retval=None,
+    state=None,
+    **kwds,
+):
     """Log task completion information."""
     logger.info("Completed task %s [%s] state=%s", task.name, task_id, state)
-    if state == 'FAILURE':
-        logger.error("Task %s [%s] failed with return value: %s", task.name, task_id, retval)
+    if state == "FAILURE":
+        logger.error(
+            "Task %s [%s] failed with return value: %s", task.name, task_id, retval
+        )
 
 
 class BaseTask(celery_app.Task):
@@ -204,7 +227,9 @@ class BaseTask(celery_app.Task):
 
     def on_retry(self, exc, task_id, args, kwargs, einfo):
         """Handle task retry."""
-        logger.warning(f"Task {self.name} [{task_id}] retry attempt {self.request.retries + 1}: {exc}")
+        logger.warning(
+            f"Task {self.name} [{task_id}] retry attempt {self.request.retries + 1}: {exc}"
+        )
 
     def on_success(self, retval, task_id, args, kwargs):
         """Handle task success."""
@@ -227,16 +252,16 @@ def get_task_info() -> Dict[str, Any]:
         Dictionary with task and queue information
     """
     tasks = sorted(celery_app.tasks.keys())
-    project_tasks = [task for task in tasks if task.startswith('src.tasks.')]
+    project_tasks = [task for task in tasks if task.startswith("src.tasks.")]
     builtin_tasks = [task for task in tasks if task not in project_tasks]
 
     return {
-        'registered_tasks': tasks,
-        'project_tasks': project_tasks,
-        'builtin_tasks': builtin_tasks,
-        'queues': [queue.name for queue in CeleryConfig.task_queues],
-        'routes': CeleryConfig.task_routes,
-        'beat_schedule': list(CeleryConfig.beat_schedule.keys()),
+        "registered_tasks": tasks,
+        "project_tasks": project_tasks,
+        "builtin_tasks": builtin_tasks,
+        "queues": [queue.name for queue in CeleryConfig.task_queues],
+        "routes": CeleryConfig.task_routes,
+        "beat_schedule": list(CeleryConfig.beat_schedule.keys()),
     }
 
 
@@ -264,35 +289,30 @@ def health_check() -> Dict[str, Any]:
         all_queues = [queue.name for queue in CeleryConfig.task_queues]
 
         for queue_name in all_queues:
-            queue_info = {
-                'configured': True,
-                'workers_consuming': 0
-            }
+            queue_info = {"configured": True, "workers_consuming": 0}
 
             # Count workers consuming from this queue
             if active_queues:
                 for worker, queues in active_queues.items():
-                    if any(q['name'] == queue_name for q in queues):
-                        queue_info['workers_consuming'] += 1
+                    if any(q["name"] == queue_name for q in queues):
+                        queue_info["workers_consuming"] += 1
 
             queue_status[queue_name] = queue_info
 
         return {
-            'status': 'healthy',
-            'broker_connection': 'ok',
-            'workers': len(stats) if stats else 0,
-            'queues': all_queues,
-            'queue_details': queue_status,
-            'pipeline_queues': [
-                'discovery', 'preparation', 'generation', 'posting'
-            ]
+            "status": "healthy",
+            "broker_connection": "ok",
+            "workers": len(stats) if stats else 0,
+            "queues": all_queues,
+            "queue_details": queue_status,
+            "pipeline_queues": ["discovery", "preparation", "generation", "posting"],
         }
     except Exception as e:
         logger.error(f"Celery health check failed: {e}")
         return {
-            'status': 'unhealthy',
-            'error': str(e),
-            'broker_connection': 'failed',
+            "status": "unhealthy",
+            "error": str(e),
+            "broker_connection": "failed",
         }
 
 
@@ -331,20 +351,19 @@ def clear_queue(queue_name: str = None) -> Dict[str, Any]:
                     result[queue] = f"error: {str(e)}"
 
         return {
-            'status': 'success',
-            'cleared_queues': result,
-            'total_tasks_cleared': sum(v for v in result.values() if isinstance(v, int))
+            "status": "success",
+            "cleared_queues": result,
+            "total_tasks_cleared": sum(
+                v for v in result.values() if isinstance(v, int)
+            ),
         }
     except Exception as e:
         logger.error(f"Failed to clear queues: {e}")
-        return {
-            'status': 'failed',
-            'error': str(e)
-        }
+        return {"status": "failed", "error": str(e)}
 
 
 # CLI helper functions
-def start_worker(loglevel='info', queues=None, concurrency=None, pool=None):
+def start_worker(loglevel="info", queues=None, concurrency=None, pool=None):
     """
     Start Celery worker programmatically.
 
@@ -358,23 +377,23 @@ def start_worker(loglevel='info', queues=None, concurrency=None, pool=None):
     setup_project_logging(service_name="worker", log_level=loglevel)
 
     argv = [
-        'worker',
-        f'--loglevel={loglevel}',
+        "worker",
+        f"--loglevel={loglevel}",
     ]
 
     if queues:
-        argv.append(f'--queues={",".join(queues)}')
+        argv.append(f"--queues={','.join(queues)}")
 
     if concurrency:
-        argv.append(f'--concurrency={concurrency}')
+        argv.append(f"--concurrency={concurrency}")
 
     if pool:
-        argv.append(f'--pool={pool}')
+        argv.append(f"--pool={pool}")
 
     celery_app.worker_main(argv)
 
 
-def start_beat(loglevel='info'):
+def start_beat(loglevel="info"):
     """
     Start Celery beat scheduler programmatically.
 
@@ -385,13 +404,13 @@ def start_beat(loglevel='info'):
     setup_project_logging(service_name="scheduler", log_level=loglevel)
 
     argv = [
-        'beat',
-        f'--loglevel={loglevel}',
+        "beat",
+        f"--loglevel={loglevel}",
     ]
 
     celery_app.start(argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Start worker when running directly
     celery_app.start()

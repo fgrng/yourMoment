@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 class ProcessStatus(str, Enum):
     """Valid monitoring process status values."""
+
     CREATED = "created"
     RUNNING = "running"
     STOPPED = "stopped"
@@ -39,11 +40,13 @@ class ProcessStatus(str, Enum):
 
 class ProcessValidationError(Exception):
     """Raised when process validation fails."""
+
     pass
 
 
 class ProcessOperationError(Exception):
     """Raised when process operations fail."""
+
     pass
 
 
@@ -100,9 +103,7 @@ class MonitoringService:
     """
 
     def __init__(
-        self,
-        db_session: AsyncSession,
-        max_concurrent_processes_per_user: int = 10
+        self, db_session: AsyncSession, max_concurrent_processes_per_user: int = 10
     ):
         """
         Initialize monitoring service.
@@ -195,7 +196,7 @@ class MonitoringService:
         prompt_weights: Optional[Dict[uuid.UUID, float]] = None,
         llm_provider_id: Optional[uuid.UUID] = None,
         generate_only: bool = True,
-        hide_comments: bool = False
+        hide_comments: bool = False,
     ) -> MonitoringProcess:
         """
         Create a new monitoring process with all associations.
@@ -237,7 +238,9 @@ class MonitoringService:
 
             validated_llm_provider_id = None
             if llm_provider_id:
-                validated_llm_provider_id = await self._validate_llm_provider(user_id, llm_provider_id)
+                validated_llm_provider_id = await self._validate_llm_provider(
+                    user_id, llm_provider_id
+                )
 
             # Validate login associations
             validated_login_ids = []
@@ -264,7 +267,7 @@ class MonitoringService:
                 llm_provider_id=validated_llm_provider_id,
                 status=ProcessStatus.CREATED,
                 generate_only=generate_only,
-                hide_comments=hide_comments
+                hide_comments=hide_comments,
             )
 
             self.db_session.add(process)
@@ -275,7 +278,7 @@ class MonitoringService:
                 process_login = MonitoringProcessLogin(
                     monitoring_process_id=process.id,
                     mymoment_login_id=login_id,
-                    is_active=True
+                    is_active=True,
                 )
                 self.db_session.add(process_login)
 
@@ -286,7 +289,7 @@ class MonitoringService:
                     monitoring_process_id=process.id,
                     prompt_template_id=prompt_id,
                     weight=weight,
-                    is_active=True
+                    is_active=True,
                 )
                 self.db_session.add(process_prompt)
 
@@ -302,7 +305,9 @@ class MonitoringService:
         except Exception as e:
             await self.db_session.rollback()
             logger.error(f"Failed to create monitoring process for user {user_id}: {e}")
-            if isinstance(e, (InvalidTarget, ProcessValidationError, ProcessOperationError)):
+            if isinstance(
+                e, (InvalidTarget, ProcessValidationError, ProcessOperationError)
+            ):
                 raise
             raise ProcessOperationError(f"Process creation failed: {e}")
 
@@ -319,7 +324,7 @@ class MonitoringService:
         prompt_template_ids: Optional[List[uuid.UUID]] = None,
         llm_provider_id: Optional[uuid.UUID] = None,
         generate_only: Optional[bool] = None,
-        hide_comments: Optional[bool] = None
+        hide_comments: Optional[bool] = None,
     ) -> MonitoringProcess:
         """
         Update an existing monitoring process.
@@ -346,7 +351,9 @@ class MonitoringService:
         """
         try:
             # Checked first so an invalid target leaves the process untouched
-            validated_target = self._validate_target(target) if target is not None else None
+            validated_target = (
+                self._validate_target(target) if target is not None else None
+            )
 
             # Get existing process with ownership validation
             process = await self._get_process_with_associations(process_id, user_id)
@@ -376,15 +383,22 @@ class MonitoringService:
 
             # Update LLM provider if provided
             if llm_provider_id is not None:
-                validated_provider_id = await self._validate_llm_provider(user_id, llm_provider_id)
+                validated_provider_id = await self._validate_llm_provider(
+                    user_id, llm_provider_id
+                )
                 process.llm_provider_id = validated_provider_id
 
             # Update login associations if provided
             if login_ids is not None:
-                validated_login_ids = await self._validate_login_associations(user_id, login_ids)
-                
+                validated_login_ids = await self._validate_login_associations(
+                    user_id, login_ids
+                )
+
                 # Create a set of existing login IDs for quick lookup
-                existing_associations = {assoc.mymoment_login_id: assoc for assoc in process.monitoring_process_logins}
+                existing_associations = {
+                    assoc.mymoment_login_id: assoc
+                    for assoc in process.monitoring_process_logins
+                }
 
                 # Deactivate all existing associations first
                 for assoc in process.monitoring_process_logins:
@@ -392,6 +406,7 @@ class MonitoringService:
 
                 # Reactivate or create associations for the new login list
                 from src.models.monitoring_process_login import MonitoringProcessLogin
+
                 for login_id in validated_login_ids:
                     if login_id in existing_associations:
                         # Reactivate existing association
@@ -401,7 +416,7 @@ class MonitoringService:
                         process_login = MonitoringProcessLogin(
                             monitoring_process_id=process.id,
                             mymoment_login_id=login_id,
-                            is_active=True
+                            is_active=True,
                         )
                         self.db_session.add(process_login)
 
@@ -412,7 +427,10 @@ class MonitoringService:
                 )
 
                 # Create a set of existing prompt IDs for quick lookup
-                existing_prompt_associations = {assoc.prompt_template_id: assoc for assoc in process.monitoring_process_prompts}
+                existing_prompt_associations = {
+                    assoc.prompt_template_id: assoc
+                    for assoc in process.monitoring_process_prompts
+                }
 
                 # Deactivate all existing associations first
                 for assoc in process.monitoring_process_prompts:
@@ -420,6 +438,7 @@ class MonitoringService:
 
                 # Reactivate or create associations for the new prompt list
                 from src.models.monitoring_process_prompt import MonitoringProcessPrompt
+
                 for prompt_id in validated_prompt_ids:
                     if prompt_id in existing_prompt_associations:
                         # Reactivate existing association
@@ -430,7 +449,7 @@ class MonitoringService:
                             monitoring_process_id=process.id,
                             prompt_template_id=prompt_id,
                             weight=1.0,
-                            is_active=True
+                            is_active=True,
                         )
                         self.db_session.add(process_prompt)
 
@@ -461,9 +480,7 @@ class MonitoringService:
             raise ProcessOperationError(f"Process update failed: {e}")
 
     async def start_process(
-        self,
-        process_id: uuid.UUID,
-        user_id: uuid.UUID
+        self, process_id: uuid.UUID, user_id: uuid.UUID
     ) -> Dict[str, Any]:
         """
         Start a monitoring process by marking it as 'running'.
@@ -499,14 +516,18 @@ class MonitoringService:
                 )
 
             # Validate has associated logins (count them before any errors)
-            login_count = len([mpl for mpl in process.monitoring_process_logins if mpl.is_active])
+            login_count = len(
+                [mpl for mpl in process.monitoring_process_logins if mpl.is_active]
+            )
             if login_count == 0:
                 raise ProcessOperationError(
                     f"Process {process_id} has no associated myMoment logins"
                 )
 
             # Validate has associated prompts
-            prompt_count = len([mpp for mpp in process.monitoring_process_prompts if mpp.is_active])
+            prompt_count = len(
+                [mpp for mpp in process.monitoring_process_prompts if mpp.is_active]
+            )
             if prompt_count == 0:
                 raise ProcessOperationError(
                     f"Process {process_id} has no associated prompt templates"
@@ -540,6 +561,7 @@ class MonitoringService:
             # running processes) and still keeps the in-flight task-state guard.
             try:
                 from src.tasks.scheduler import trigger_monitoring_pipeline
+
                 trigger_monitoring_pipeline.delay(process_ids=[str(process_id)])
                 logger.info(
                     f"Spawned process-scoped immediate scheduler task for process {process_id}"
@@ -551,14 +573,14 @@ class MonitoringService:
                 )
 
             return {
-                'process_id': str(process_id),
-                'status': 'scheduled',
-                'message': 'Process marked as running. Pipeline tasks spawned (or will be within 3 minutes).',
-                'started_at': process.started_at.isoformat(),
-                'associated_logins': login_count,
-                'associated_prompts': prompt_count,
-                'max_duration_minutes': process.max_duration_minutes,
-                'generate_only': process.generate_only
+                "process_id": str(process_id),
+                "status": "scheduled",
+                "message": "Process marked as running. Pipeline tasks spawned (or will be within 3 minutes).",
+                "started_at": process.started_at.isoformat(),
+                "associated_logins": login_count,
+                "associated_prompts": prompt_count,
+                "max_duration_minutes": process.max_duration_minutes,
+                "generate_only": process.generate_only,
             }
 
         except ProcessOperationError:
@@ -575,10 +597,7 @@ class MonitoringService:
             raise ProcessOperationError(f"Process start failed: {e}")
 
     async def stop_process(
-        self,
-        process_id: uuid.UUID,
-        user_id: uuid.UUID,
-        reason: str = "user_requested"
+        self, process_id: uuid.UUID, user_id: uuid.UUID, reason: str = "user_requested"
     ) -> Dict[str, Any]:
         """
         Stop a running monitoring process in the chain-based pipeline.
@@ -604,9 +623,9 @@ class MonitoringService:
 
             if not process.is_running:
                 return {
-                    'process_id': str(process_id),
-                    'status': 'already_stopped',
-                    'current_status': process.status
+                    "process_id": str(process_id),
+                    "status": "already_stopped",
+                    "current_status": process.status,
                 }
 
             stop_result = await self._stop_process_instance(
@@ -625,9 +644,7 @@ class MonitoringService:
             raise ProcessOperationError(f"Process stop failed: {e}")
 
     async def get_process_status(
-        self,
-        process_id: uuid.UUID,
-        user_id: uuid.UUID
+        self, process_id: uuid.UUID, user_id: uuid.UUID
     ) -> Dict[str, Any]:
         """
         Get detailed status of a monitoring process from DB + Celery.
@@ -643,45 +660,50 @@ class MonitoringService:
             process = await self._get_process_with_associations(process_id, user_id)
 
             status_info = {
-                'process_id': str(process_id),
-                'name': process.name,
-                'description': process.description,
-                'status': process.status,
-                'is_active': process.is_active,
-                'started_at': process.started_at.isoformat() if process.started_at else None,
-                'stopped_at': process.stopped_at.isoformat() if process.stopped_at else None,
-                'last_activity_at': process.last_activity_at.isoformat() if process.last_activity_at else None,
-                'max_duration_minutes': process.max_duration_minutes,
-                'duration_exceeded': process.duration_exceeded,
-                'target': process.target,
-                'search_filter': process.search_filter,
-                'associations': {
-                    'login_count': len(process.get_associated_logins()),
-                    'prompt_count': len(process.get_associated_prompts())
-                }
+                "process_id": str(process_id),
+                "name": process.name,
+                "description": process.description,
+                "status": process.status,
+                "is_active": process.is_active,
+                "started_at": process.started_at.isoformat()
+                if process.started_at
+                else None,
+                "stopped_at": process.stopped_at.isoformat()
+                if process.stopped_at
+                else None,
+                "last_activity_at": process.last_activity_at.isoformat()
+                if process.last_activity_at
+                else None,
+                "max_duration_minutes": process.max_duration_minutes,
+                "duration_exceeded": process.duration_exceeded,
+                "target": process.target,
+                "search_filter": process.search_filter,
+                "associations": {
+                    "login_count": len(process.get_associated_logins()),
+                    "prompt_count": len(process.get_associated_prompts()),
+                },
             }
 
             # Discovery is the only process-level task that remains authoritative.
             if process.celery_discovery_task_id:
                 from celery.result import AsyncResult
+
                 task = AsyncResult(process.celery_discovery_task_id)
-                status_info['celery_task'] = {
-                    'task_id': process.celery_discovery_task_id,
-                    'stage': 'discovery',
-                    'state': task.state,  # PENDING, STARTED, SUCCESS, FAILURE, RETRY, REVOKED
-                    'info': str(task.info) if task.info else None
+                status_info["celery_task"] = {
+                    "task_id": process.celery_discovery_task_id,
+                    "stage": "discovery",
+                    "state": task.state,  # PENDING, STARTED, SUCCESS, FAILURE, RETRY, REVOKED
+                    "info": str(task.info) if task.info else None,
                 }
 
             return status_info
 
         except Exception as e:
             logger.error(f"Failed to get process status {process_id}: {e}")
-            return {'error': str(e)}
+            return {"error": str(e)}
 
     async def get_pipeline_status(
-        self,
-        process_id: uuid.UUID,
-        user_id: uuid.UUID
+        self, process_id: uuid.UUID, user_id: uuid.UUID
     ) -> Dict[str, Any]:
         """
         Get pipeline status with AIComment counts by status.
@@ -718,36 +740,37 @@ class MonitoringService:
             from src.models.ai_comment import AIComment
 
             # Query to count AIComments grouped by status
-            status_counts_stmt = select(
-                AIComment.status,
-                func.count(AIComment.id)
-            ).where(
-                AIComment.monitoring_process_id == process_id
-            ).group_by(AIComment.status)
+            status_counts_stmt = (
+                select(AIComment.status, func.count(AIComment.id))
+                .where(AIComment.monitoring_process_id == process_id)
+                .group_by(AIComment.status)
+            )
 
             result = await self.db_session.execute(status_counts_stmt)
             status_counts = dict(result.fetchall())
 
             # Build response with counts for each status
             pipeline_status = {
-                'process_id': str(process_id),
-                'discovered': status_counts.get('discovered', 0),
-                'prepared': status_counts.get('prepared', 0),
-                'generated': status_counts.get('generated', 0),
-                'posting': status_counts.get('posting', 0),
-                'posted': status_counts.get('posted', 0),
-                'failed': status_counts.get('failed', 0),
+                "process_id": str(process_id),
+                "discovered": status_counts.get("discovered", 0),
+                "prepared": status_counts.get("prepared", 0),
+                "generated": status_counts.get("generated", 0),
+                "posting": status_counts.get("posting", 0),
+                "posted": status_counts.get("posted", 0),
+                "failed": status_counts.get("failed", 0),
             }
 
             # Calculate total
-            pipeline_status['total'] = sum([
-                pipeline_status['discovered'],
-                pipeline_status['prepared'],
-                pipeline_status['generated'],
-                pipeline_status['posting'],
-                pipeline_status['posted'],
-                pipeline_status['failed']
-            ])
+            pipeline_status["total"] = sum(
+                [
+                    pipeline_status["discovered"],
+                    pipeline_status["prepared"],
+                    pipeline_status["generated"],
+                    pipeline_status["posting"],
+                    pipeline_status["posted"],
+                    pipeline_status["failed"],
+                ]
+            )
 
             logger.debug(
                 f"Pipeline status for process {process_id}: "
@@ -772,20 +795,28 @@ class MonitoringService:
         user_id: uuid.UUID,
         is_running: Optional[bool] = None,
         limit: int = 50,
-        offset: int = 0
+        offset: int = 0,
     ) -> List[MonitoringProcess]:
         """Return monitoring processes for a user with associations preloaded."""
         try:
             from src.models.monitoring_process_login import MonitoringProcessLogin
             from src.models.monitoring_process_prompt import MonitoringProcessPrompt
 
-            stmt = select(MonitoringProcess).options(
-                selectinload(MonitoringProcess.monitoring_process_logins).selectinload(MonitoringProcessLogin.mymoment_login),
-                selectinload(MonitoringProcess.monitoring_process_prompts).selectinload(MonitoringProcessPrompt.prompt_template)
-            ).where(
-                and_(
-                    MonitoringProcess.user_id == user_id,
-                    MonitoringProcess.is_active == True
+            stmt = (
+                select(MonitoringProcess)
+                .options(
+                    selectinload(
+                        MonitoringProcess.monitoring_process_logins
+                    ).selectinload(MonitoringProcessLogin.mymoment_login),
+                    selectinload(
+                        MonitoringProcess.monitoring_process_prompts
+                    ).selectinload(MonitoringProcessPrompt.prompt_template),
+                )
+                .where(
+                    and_(
+                        MonitoringProcess.user_id == user_id,
+                        MonitoringProcess.is_active == True,
+                    )
                 )
             )
 
@@ -795,7 +826,9 @@ class MonitoringService:
                 else:
                     stmt = stmt.where(MonitoringProcess.status != ProcessStatus.RUNNING)
 
-            stmt = stmt.order_by(MonitoringProcess.id.desc()).limit(limit).offset(offset)
+            stmt = (
+                stmt.order_by(MonitoringProcess.id.desc()).limit(limit).offset(offset)
+            )
             result = await self.db_session.execute(stmt)
             return result.scalars().all()
 
@@ -810,15 +843,19 @@ class MonitoringService:
         process_id: uuid.UUID,
         user_id: uuid.UUID,
         *,
-        include_inactive: bool = False
+        include_inactive: bool = False,
     ) -> MonitoringProcess:
         """Get process with all associations loaded."""
         from src.models.monitoring_process_login import MonitoringProcessLogin
         from src.models.monitoring_process_prompt import MonitoringProcessPrompt
 
         stmt = select(MonitoringProcess).options(
-            selectinload(MonitoringProcess.monitoring_process_logins).selectinload(MonitoringProcessLogin.mymoment_login),
-            selectinload(MonitoringProcess.monitoring_process_prompts).selectinload(MonitoringProcessPrompt.prompt_template)
+            selectinload(MonitoringProcess.monitoring_process_logins).selectinload(
+                MonitoringProcessLogin.mymoment_login
+            ),
+            selectinload(MonitoringProcess.monitoring_process_prompts).selectinload(
+                MonitoringProcessPrompt.prompt_template
+            ),
         )
 
         conditions = [
@@ -835,15 +872,13 @@ class MonitoringService:
         process = result.scalar_one_or_none()
 
         if not process:
-            raise ProcessOperationError(f"Process {process_id} not found for user {user_id}")
+            raise ProcessOperationError(
+                f"Process {process_id} not found for user {user_id}"
+            )
 
         return process
 
-    async def delete_process(
-        self,
-        process_id: uuid.UUID,
-        user_id: uuid.UUID
-    ) -> None:
+    async def delete_process(self, process_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Soft delete a monitoring process and deactivate associations."""
 
         process = await self._get_process_with_associations(process_id, user_id)
@@ -851,9 +886,7 @@ class MonitoringService:
         if process.is_running:
             await self.stop_process(process_id, user_id)
             process = await self._get_process_with_associations(
-                process_id,
-                user_id,
-                include_inactive=False
+                process_id, user_id, include_inactive=False
             )
 
         process.is_active = False
@@ -877,7 +910,7 @@ class MonitoringService:
             and_(
                 MonitoringProcess.user_id == user_id,
                 MonitoringProcess.status == ProcessStatus.RUNNING,
-                MonitoringProcess.is_active == True
+                MonitoringProcess.is_active == True,
             )
         )
 
@@ -891,9 +924,7 @@ class MonitoringService:
             )
 
     async def _validate_login_associations(
-        self,
-        user_id: uuid.UUID,
-        login_ids: List[uuid.UUID]
+        self, user_id: uuid.UUID, login_ids: List[uuid.UUID]
     ) -> List[uuid.UUID]:
         """
         Validate myMoment login associations belong to user.
@@ -909,7 +940,7 @@ class MonitoringService:
             and_(
                 MyMomentLogin.id.in_(login_ids),
                 MyMomentLogin.user_id == user_id,
-                MyMomentLogin.is_admin == True
+                MyMomentLogin.is_admin == True,
             )
         )
         admin_result = await self.db_session.execute(admin_check_stmt)
@@ -928,7 +959,7 @@ class MonitoringService:
                 MyMomentLogin.id.in_(login_ids),
                 MyMomentLogin.user_id == user_id,
                 MyMomentLogin.is_active == True,
-                MyMomentLogin.is_admin == False
+                MyMomentLogin.is_admin == False,
             )
         )
 
@@ -945,9 +976,7 @@ class MonitoringService:
         return valid_ids
 
     async def _validate_prompt_associations(
-        self,
-        user_id: uuid.UUID,
-        prompt_template_ids: List[uuid.UUID]
+        self, user_id: uuid.UUID, prompt_template_ids: List[uuid.UUID]
     ) -> List[uuid.UUID]:
         """Validate prompt template associations belong to user or are system templates."""
         if not prompt_template_ids:
@@ -959,8 +988,8 @@ class MonitoringService:
                 PromptTemplate.is_active == True,
                 or_(
                     PromptTemplate.user_id == user_id,  # User's own templates
-                    PromptTemplate.category == "SYSTEM"  # System templates
-                )
+                    PromptTemplate.category == "SYSTEM",  # System templates
+                ),
             )
         )
 
@@ -985,15 +1014,13 @@ class MonitoringService:
         return validate_target(adapter_for_platform(MYMOMENT), target)
 
     async def _validate_llm_provider(
-        self,
-        user_id: uuid.UUID,
-        provider_id: uuid.UUID
+        self, user_id: uuid.UUID, provider_id: uuid.UUID
     ) -> uuid.UUID:
         stmt = select(LLMProviderConfiguration).where(
             and_(
                 LLMProviderConfiguration.id == provider_id,
                 LLMProviderConfiguration.user_id == user_id,
-                LLMProviderConfiguration.is_active == True
+                LLMProviderConfiguration.is_active == True,
             )
         )
         result = await self.db_session.execute(stmt)

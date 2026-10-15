@@ -15,13 +15,14 @@ def development_only(func):
         async def debug_endpoint():
             return {"debug": "data"}
     """
+
     @wraps(func)
     async def wrapper(*args, **kwargs):
         settings = get_settings()
         if not settings.is_development:
             raise HTTPException(
-                status_code=404,
-                detail="Endpoint not available in production"
+                status_code=404, detail="Endpoint not available in production"
             )
         return await func(*args, **kwargs)
+
     return wrapper

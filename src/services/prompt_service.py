@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TemplateValidationResult:
     """Result of template validation."""
+
     is_valid: bool
     errors: List[str]
     warnings: List[str]
@@ -43,6 +44,7 @@ class TemplateValidationResult:
 @dataclass
 class TemplateRenderResult:
     """Result of template rendering."""
+
     rendered_prompt: str
     missing_placeholders: List[str]
     unused_placeholders: List[str]
@@ -51,6 +53,7 @@ class TemplateRenderResult:
 
 class TemplatePreviewRequest(BaseModel):
     """Request model for template preview/rendering."""
+
     template_id: Optional[uuid.UUID] = None
     system_prompt: Optional[str] = None
     user_prompt_template: Optional[str] = None
@@ -59,21 +62,25 @@ class TemplatePreviewRequest(BaseModel):
 
 class PromptServiceError(Exception):
     """Base exception for prompt service operations."""
+
     pass
 
 
 class TemplateNotFoundError(PromptServiceError):
     """Raised when a template cannot be found."""
+
     pass
 
 
 class TemplateValidationError(PromptServiceError):
     """Raised when template validation fails."""
+
     pass
 
 
 class TemplateAccessError(PromptServiceError):
     """Raised when user lacks access to a template."""
+
     pass
 
 
@@ -96,7 +103,7 @@ class PromptService:
     SUPPORTED_PLACEHOLDERS: Dict[str, PlaceholderInfo] = GLOBAL_SUPPORTED_PLACEHOLDERS
 
     # Template validation patterns
-    PLACEHOLDER_PATTERN = re.compile(r'\{([^}]+)\}')
+    PLACEHOLDER_PATTERN = re.compile(r"\{([^}]+)\}")
     INVALID_CHARS_PATTERN = re.compile(r'[<>"\'\\\x00-\x1f]')
 
     def __init__(self, db_session: AsyncSession):
@@ -116,7 +123,7 @@ class PromptService:
         user_id: Optional[uuid.UUID] = None,
         *,
         category: Optional[str] = None,
-        is_active: Optional[bool] = None
+        is_active: Optional[bool] = None,
     ) -> PromptTemplate:
         """
         Create a new prompt template.
@@ -146,7 +153,7 @@ class PromptService:
             # Validate template content
             validation_result = await self.validate_template(
                 system_prompt=request.system_prompt,
-                user_prompt_template=request.user_prompt_template
+                user_prompt_template=request.user_prompt_template,
             )
 
             if not validation_result.is_valid:
@@ -165,7 +172,7 @@ class PromptService:
                 user_prompt_template=request.user_prompt_template,
                 category=resolved_category,
                 user_id=user_id,
-                is_active=resolved_is_active
+                is_active=resolved_is_active,
             )
 
             self.db_session.add(template)
@@ -188,9 +195,7 @@ class PromptService:
             raise PromptServiceError(f"Template creation failed: {e}")
 
     async def get_template(
-        self,
-        template_id: uuid.UUID,
-        user_id: Optional[uuid.UUID] = None
+        self, template_id: uuid.UUID, user_id: Optional[uuid.UUID] = None
     ) -> PromptTemplate:
         """
         Get template by ID with access control.
@@ -214,16 +219,16 @@ class PromptService:
                     or_(
                         and_(
                             PromptTemplate.category == "USER",
-                            PromptTemplate.user_id == user_id
+                            PromptTemplate.user_id == user_id,
                         ),
-                        PromptTemplate.category == "SYSTEM"
-                    )
+                        PromptTemplate.category == "SYSTEM",
+                    ),
                 )
             else:
                 # Only system templates when no user_id provided
                 conditions = and_(
                     PromptTemplate.id == template_id,
-                    PromptTemplate.category == "SYSTEM"
+                    PromptTemplate.category == "SYSTEM",
                 )
 
             conditions = and_(conditions, PromptTemplate.is_active.is_(True))
@@ -255,7 +260,7 @@ class PromptService:
         category: Optional[str] = None,
         active_only: bool = True,
         limit: int = 100,
-        offset: int = 0
+        offset: int = 0,
     ) -> List[PromptTemplate]:
         """
         List templates with filtering and pagination.
@@ -280,10 +285,12 @@ class PromptService:
                     # Specific category requested
                     if category == "USER":
                         # User's own USER templates only
-                        conditions.append(and_(
-                            PromptTemplate.category == "USER",
-                            PromptTemplate.user_id == user_id
-                        ))
+                        conditions.append(
+                            and_(
+                                PromptTemplate.category == "USER",
+                                PromptTemplate.user_id == user_id,
+                            )
+                        )
                     elif category == "SYSTEM":
                         # SYSTEM templates only
                         conditions.append(PromptTemplate.category == "SYSTEM")
@@ -292,9 +299,9 @@ class PromptService:
                     access_conditions = or_(
                         and_(
                             PromptTemplate.category == "USER",
-                            PromptTemplate.user_id == user_id
+                            PromptTemplate.user_id == user_id,
                         ),
-                        PromptTemplate.category == "SYSTEM"
+                        PromptTemplate.category == "SYSTEM",
                     )
                     conditions.append(access_conditions)
             else:
@@ -320,10 +327,7 @@ class PromptService:
             raise PromptServiceError(f"Failed to list templates: {e}")
 
     async def update_template(
-        self,
-        template_id: uuid.UUID,
-        request: PromptTemplateUpdate,
-        user_id: uuid.UUID
+        self, template_id: uuid.UUID, request: PromptTemplateUpdate, user_id: uuid.UUID
     ) -> PromptTemplate:
         """
         Update an existing template.
@@ -362,7 +366,7 @@ class PromptService:
             if request.system_prompt or request.user_prompt_template:
                 validation_result = await self.validate_template(
                     system_prompt=system_prompt,
-                    user_prompt_template=user_prompt_template
+                    user_prompt_template=user_prompt_template,
                 )
 
                 if not validation_result.is_valid:
@@ -372,7 +376,9 @@ class PromptService:
 
             # Check for name conflicts if name is being changed
             if request.name and request.name != template.name:
-                await self._check_template_name_conflict(request.name, user_id, template_id)
+                await self._check_template_name_conflict(
+                    request.name, user_id, template_id
+                )
 
             # Apply updates
             if request.name:
@@ -398,11 +404,7 @@ class PromptService:
             logger.error(f"Error updating template {template_id}: {e}")
             raise PromptServiceError(f"Template update failed: {e}")
 
-    async def delete_template(
-        self,
-        template_id: uuid.UUID,
-        user_id: uuid.UUID
-    ) -> bool:
+    async def delete_template(self, template_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         """
         Delete a user template.
 
@@ -450,9 +452,7 @@ class PromptService:
     # Template Validation
 
     async def validate_template(
-        self,
-        system_prompt: str,
-        user_prompt_template: str
+        self, system_prompt: str, user_prompt_template: str
     ) -> TemplateValidationResult:
         """
         Validate template content and placeholders.
@@ -481,10 +481,14 @@ class PromptService:
 
             # Check for invalid characters
             if self.INVALID_CHARS_PATTERN.search(system_prompt):
-                warnings.append("System prompt contains potentially problematic characters")
+                warnings.append(
+                    "System prompt contains potentially problematic characters"
+                )
 
             if self.INVALID_CHARS_PATTERN.search(user_prompt_template):
-                warnings.append("User prompt template contains potentially problematic characters")
+                warnings.append(
+                    "User prompt template contains potentially problematic characters"
+                )
 
             # Extract and validate placeholders
             placeholders_used = self._extract_placeholders(user_prompt_template)
@@ -503,7 +507,8 @@ class PromptService:
 
             # Check for required placeholders
             required_placeholders = {
-                name for name, info in self.SUPPORTED_PLACEHOLDERS.items()
+                name
+                for name, info in self.SUPPORTED_PLACEHOLDERS.items()
                 if info.is_required
             }
             missing_required = list(required_placeholders - set(placeholders_used))
@@ -514,7 +519,9 @@ class PromptService:
                 )
 
             # Check placeholder syntax
-            placeholder_syntax_errors = self._validate_placeholder_syntax(user_prompt_template)
+            placeholder_syntax_errors = self._validate_placeholder_syntax(
+                user_prompt_template
+            )
             errors.extend(placeholder_syntax_errors)
 
             return TemplateValidationResult(
@@ -522,7 +529,7 @@ class PromptService:
                 errors=errors,
                 warnings=warnings,
                 placeholders_used=placeholders_used,
-                missing_required_placeholders=missing_required
+                missing_required_placeholders=missing_required,
             )
 
         except Exception as e:
@@ -532,7 +539,7 @@ class PromptService:
                 errors=[f"Validation error: {e}"],
                 warnings=[],
                 placeholders_used=[],
-                missing_required_placeholders=[]
+                missing_required_placeholders=[],
             )
 
     # Template Rendering
@@ -541,7 +548,7 @@ class PromptService:
         self,
         template_id: uuid.UUID,
         context: Dict[str, Any],
-        user_id: Optional[uuid.UUID] = None
+        user_id: Optional[uuid.UUID] = None,
     ) -> TemplateRenderResult:
         """
         Render template with provided context.
@@ -565,7 +572,7 @@ class PromptService:
             return await self.render_template_content(
                 system_prompt=template.system_prompt,
                 user_prompt_template=template.user_prompt_template,
-                context=context
+                context=context,
             )
 
         except TemplateNotFoundError:
@@ -575,10 +582,7 @@ class PromptService:
             raise PromptServiceError(f"Template rendering failed: {e}")
 
     async def render_template_content(
-        self,
-        system_prompt: str,
-        user_prompt_template: str,
-        context: Dict[str, Any]
+        self, system_prompt: str, user_prompt_template: str, context: Dict[str, Any]
     ) -> TemplateRenderResult:
         """
         Render template content with context (without database lookup).
@@ -605,13 +609,11 @@ class PromptService:
 
             # Check for missing and unused placeholders
             missing_placeholders = [
-                p for p in placeholders_in_template
-                if p not in string_context
+                p for p in placeholders_in_template if p not in string_context
             ]
 
             unused_placeholders = [
-                k for k in string_context.keys()
-                if k not in placeholders_in_template
+                k for k in string_context.keys() if k not in placeholders_in_template
             ]
 
             # Perform replacement
@@ -619,7 +621,9 @@ class PromptService:
             for placeholder, value in string_context.items():
                 placeholder_pattern = "{" + placeholder + "}"
                 if placeholder_pattern in rendered_prompt:
-                    rendered_prompt = rendered_prompt.replace(placeholder_pattern, value)
+                    rendered_prompt = rendered_prompt.replace(
+                        placeholder_pattern, value
+                    )
 
             # Check if any placeholders remain unresolved
             remaining_placeholders = self._extract_placeholders(rendered_prompt)
@@ -632,7 +636,7 @@ class PromptService:
                 rendered_prompt=rendered_prompt,
                 missing_placeholders=missing_placeholders,
                 unused_placeholders=unused_placeholders,
-                render_errors=render_errors
+                render_errors=render_errors,
             )
 
         except Exception as e:
@@ -641,7 +645,7 @@ class PromptService:
                 rendered_prompt=user_prompt_template,
                 missing_placeholders=[],
                 unused_placeholders=[],
-                render_errors=[f"Rendering failed: {e}"]
+                render_errors=[f"Rendering failed: {e}"],
             )
 
     async def preview_template(self, request: TemplatePreviewRequest) -> Dict[str, Any]:
@@ -674,7 +678,9 @@ class PromptService:
                 context = self.get_sample_context()
 
             # Validate template
-            validation_result = await self.validate_template(system_prompt, user_prompt_template)
+            validation_result = await self.validate_template(
+                system_prompt, user_prompt_template
+            )
 
             # Render template
             render_result = await self.render_template_content(
@@ -690,13 +696,13 @@ class PromptService:
                     "is_valid": validation_result.is_valid,
                     "errors": validation_result.errors,
                     "warnings": validation_result.warnings,
-                    "placeholders_used": validation_result.placeholders_used
+                    "placeholders_used": validation_result.placeholders_used,
                 },
                 "rendering": {
                     "missing_placeholders": render_result.missing_placeholders,
                     "unused_placeholders": render_result.unused_placeholders,
-                    "render_errors": render_result.render_errors
-                }
+                    "render_errors": render_result.render_errors,
+                },
             }
 
         except TemplateNotFoundError:
@@ -719,12 +725,16 @@ class PromptService:
         """
         try:
             # Find active system template
-            stmt = select(PromptTemplate).where(
-                and_(
-                    PromptTemplate.category == "SYSTEM",
-                    PromptTemplate.is_active.is_(True)
+            stmt = (
+                select(PromptTemplate)
+                .where(
+                    and_(
+                        PromptTemplate.category == "SYSTEM",
+                        PromptTemplate.is_active.is_(True),
+                    )
                 )
-            ).limit(1)
+                .limit(1)
+            )
 
             result = await self.db_session.execute(stmt)
             template = result.scalar_one_or_none()
@@ -767,7 +777,7 @@ class PromptService:
                 ),
                 category="SYSTEM",
                 user_id=None,
-                is_active=True
+                is_active=True,
             )
 
             self.db_session.add(default_template)
@@ -804,7 +814,7 @@ class PromptService:
                     "Titel: {article_title}\n"
                     "Inhalt: {article_content}\n\n"
                     "Stelle eine interessante Frage oder hebe einen diskussionswürdigen Aspekt hervor."
-                )
+                ),
             },
             {
                 "name": "Supportive Encourager",
@@ -820,7 +830,7 @@ class PromptService:
                     "Autor: {article_author}\n"
                     "Inhalt: {article_content}\n\n"
                     "Betone positive Aspekte und ermutige den Autor."
-                )
+                ),
             },
             {
                 "name": "Thoughtful Questioner",
@@ -835,8 +845,8 @@ class PromptService:
                     "Titel: {article_title}\n"
                     "Inhalt: {article_content}\n\n"
                     "Die Frage soll zum Nachdenken anregen oder eine neue Perspektive eröffnen."
-                )
-            }
+                ),
+            },
         ]
 
         created_templates = []
@@ -847,14 +857,16 @@ class PromptService:
                 stmt = select(PromptTemplate).where(
                     and_(
                         PromptTemplate.name == template_data["name"],
-                        PromptTemplate.category == "SYSTEM"
+                        PromptTemplate.category == "SYSTEM",
                     )
                 )
                 result = await self.db_session.execute(stmt)
                 existing = result.scalar_one_or_none()
 
                 if existing:
-                    logger.info(f"System template '{template_data['name']}' already exists")
+                    logger.info(
+                        f"System template '{template_data['name']}' already exists"
+                    )
                     created_templates.append(existing)
                     continue
 
@@ -866,7 +878,7 @@ class PromptService:
                     user_prompt_template=template_data["user_prompt_template"],
                     category="SYSTEM",
                     user_id=None,
-                    is_active=True
+                    is_active=True,
                 )
 
                 self.db_session.add(template)
@@ -909,24 +921,28 @@ class PromptService:
 
         try:
             # Check for malformed braces
-            open_count = template.count('{')
-            close_count = template.count('}')
+            open_count = template.count("{")
+            close_count = template.count("}")
 
             if open_count != close_count:
-                errors.append(f"Mismatched braces: {open_count} opening, {close_count} closing")
+                errors.append(
+                    f"Mismatched braces: {open_count} opening, {close_count} closing"
+                )
 
             # Check for empty placeholders
-            if '{}' in template:
+            if "{}" in template:
                 errors.append("Empty placeholders {} are not allowed")
 
             # Check for nested placeholders
-            if re.search(r'\{[^}]*\{', template) or re.search(r'\}[^{]*\}', template):
+            if re.search(r"\{[^}]*\{", template) or re.search(r"\}[^{]*\}", template):
                 errors.append("Nested or malformed placeholders detected")
 
             # Check for whitespace in placeholders
-            whitespace_placeholders = re.findall(r'\{\s+([^}]*)\s+\}', template)
+            whitespace_placeholders = re.findall(r"\{\s+([^}]*)\s+\}", template)
             if whitespace_placeholders:
-                errors.append("Placeholders should not contain leading/trailing whitespace")
+                errors.append(
+                    "Placeholders should not contain leading/trailing whitespace"
+                )
 
         except Exception as e:
             errors.append(f"Syntax validation error: {e}")
@@ -937,7 +953,7 @@ class PromptService:
         self,
         name: str,
         user_id: Optional[uuid.UUID],
-        exclude_template_id: Optional[uuid.UUID] = None
+        exclude_template_id: Optional[uuid.UUID] = None,
     ):
         """Check for template name conflicts within user scope."""
         try:
@@ -959,7 +975,9 @@ class PromptService:
 
             if existing:
                 scope = "system templates" if not user_id else "your templates"
-                raise TemplateValidationError(f"Template name '{name}' already exists in {scope}")
+                raise TemplateValidationError(
+                    f"Template name '{name}' already exists in {scope}"
+                )
 
         except TemplateValidationError:
             raise
@@ -980,26 +998,23 @@ class PromptService:
         try:
             # Get user templates
             user_templates = await self.list_templates(
-                user_id=user_id,
-                category="USER",
-                active_only=False
+                user_id=user_id, category="USER", active_only=False
             )
 
             # Get system templates accessible to user
             system_templates = await self.list_templates(
-                category="SYSTEM",
-                active_only=True
+                category="SYSTEM", active_only=True
             )
 
             statistics = {
                 "user_templates": {
                     "total": len(user_templates),
                     "active": sum(1 for t in user_templates if t.is_active),
-                    "inactive": sum(1 for t in user_templates if not t.is_active)
+                    "inactive": sum(1 for t in user_templates if not t.is_active),
                 },
                 "system_templates_available": len(system_templates),
                 "total_accessible": len(user_templates) + len(system_templates),
-                "templates": []
+                "templates": [],
             }
 
             # Add template details
@@ -1007,15 +1022,19 @@ class PromptService:
                 placeholders = template.extract_placeholders()
                 validation = template.validate_placeholders()
 
-                statistics["templates"].append({
-                    "id": str(template.id),
-                    "name": template.name,
-                    "category": template.category,
-                    "is_active": template.is_active,
-                    "placeholder_count": len(placeholders),
-                    "valid_placeholders": all(validation.values()),
-                    "created_at": template.created_at.isoformat() if hasattr(template, 'created_at') else None
-                })
+                statistics["templates"].append(
+                    {
+                        "id": str(template.id),
+                        "name": template.name,
+                        "category": template.category,
+                        "is_active": template.is_active,
+                        "placeholder_count": len(placeholders),
+                        "valid_placeholders": all(validation.values()),
+                        "created_at": template.created_at.isoformat()
+                        if hasattr(template, "created_at")
+                        else None,
+                    }
+                )
 
             return statistics
 
@@ -1041,7 +1060,7 @@ class PromptService:
                 and_(
                     PromptTemplate.category == "USER",
                     PromptTemplate.is_active.is_(False),
-                    PromptTemplate.updated_at < cutoff_date
+                    PromptTemplate.updated_at < cutoff_date,
                 )
             )
             result = await self.db_session.execute(stmt)

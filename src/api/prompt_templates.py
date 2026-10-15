@@ -19,7 +19,7 @@ from src.services.prompt_service import (
     PromptServiceError,
     TemplateValidationError,
     TemplateNotFoundError,
-    TemplateAccessError
+    TemplateAccessError,
 )
 from src.services.prompt_placeholders import SUPPORTED_PLACEHOLDERS
 from src.api.auth import get_current_user
@@ -33,10 +33,13 @@ logger = logging.getLogger(__name__)
 # Initialize router
 router = APIRouter(prefix="/prompt-templates", tags=["Prompt Templates"])
 
+
 class TemplateCategoryEnum(str, Enum):
     """Valid template category values."""
+
     SYSTEM = "SYSTEM"
     USER = "USER"
+
 
 def _extract_reason(message: str) -> Optional[str]:
     """Extract a user-safe reason from an exception message."""
@@ -49,7 +52,9 @@ def _extract_reason(message: str) -> Optional[str]:
     return message if message.strip() else None
 
 
-def _handle_prompt_service_error(e: Exception, operation: str, user_id: Optional[uuid.UUID] = None) -> None:
+def _handle_prompt_service_error(
+    e: Exception, operation: str, user_id: Optional[uuid.UUID] = None
+) -> None:
     """
     Convert service errors to HTTP exceptions with consistent error handling.
 
@@ -67,26 +72,24 @@ def _handle_prompt_service_error(e: Exception, operation: str, user_id: Optional
             "Prompt template validation failure during %s for user %s: %s",
             operation,
             user_id,
-            reason or str(e)
+            reason or str(e),
         )
         detail = {"reason": reason} if reason else None
         raise http_error(
             status.HTTP_400_BAD_REQUEST,
             "prompt_template_validation_error",
             "Prompt template validation failed.",
-            detail=detail
+            detail=detail,
         )
 
     if isinstance(e, TemplateNotFoundError):
         logger.info(
-            "Prompt template not found during %s for user %s",
-            operation,
-            user_id
+            "Prompt template not found during %s for user %s", operation, user_id
         )
         raise http_error(
             status.HTTP_404_NOT_FOUND,
             "prompt_template_not_found",
-            "Prompt template not found."
+            "Prompt template not found.",
         )
 
     if isinstance(e, TemplateAccessError):
@@ -95,14 +98,14 @@ def _handle_prompt_service_error(e: Exception, operation: str, user_id: Optional
             "Prompt template access denied during %s for user %s: %s",
             operation,
             user_id,
-            reason or str(e)
+            reason or str(e),
         )
         detail = {"reason": reason} if reason else None
         raise http_error(
             status.HTTP_403_FORBIDDEN,
             "prompt_template_access_denied",
             "You do not have permission to perform this action on the prompt template.",
-            detail=detail
+            detail=detail,
         )
 
     if isinstance(e, PromptServiceError):
@@ -110,31 +113,28 @@ def _handle_prompt_service_error(e: Exception, operation: str, user_id: Optional
             "Prompt service error during %s for user %s",
             operation,
             user_id,
-            exc_info=True
+            exc_info=True,
         )
         raise http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "prompt_template_service_error",
-            f"Failed to {operation}. Please try again later."
+            f"Failed to {operation}. Please try again later.",
         )
 
     logger.error(
-        "Unexpected error during %s for user %s",
-        operation,
-        user_id,
-        exc_info=True
+        "Unexpected error during %s for user %s", operation, user_id, exc_info=True
     )
     raise http_error(
         status.HTTP_500_INTERNAL_SERVER_ERROR,
         "internal_server_error",
-        "An unexpected error occurred. Please try again later."
+        "An unexpected error occurred. Please try again later.",
     )
 
 
 @router.get(
     "/placeholders",
     response_model=PlaceholderListResponse,
-    summary="List supported prompt placeholders"
+    summary="List supported prompt placeholders",
 )
 async def list_supported_placeholders() -> PlaceholderListResponse:
     """Return metadata for all supported prompt placeholders."""
@@ -153,10 +153,14 @@ async def list_supported_placeholders() -> PlaceholderListResponse:
 
 @router.get("/index", response_model=List[PromptTemplateResponse])
 async def get_prompt_templates(
-    category: Optional[TemplateCategoryEnum] = Query(None, description="Filter by template category"),
-    limit: int = Query(default=50, ge=1, le=100, description="Maximum number of templates to return"),
+    category: Optional[TemplateCategoryEnum] = Query(
+        None, description="Filter by template category"
+    ),
+    limit: int = Query(
+        default=50, ge=1, le=100, description="Maximum number of templates to return"
+    ),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Get user's prompt templates.
@@ -174,7 +178,7 @@ async def get_prompt_templates(
             user_id=current_user.id,
             category=category_value,
             limit=limit,
-            active_only=True  # Only return active templates by default
+            active_only=True,  # Only return active templates by default
         )
 
         logger.debug(f"Retrieved {len(templates)} templates for user {current_user.id}")
@@ -189,7 +193,7 @@ async def get_prompt_templates(
                 user_prompt_template=template.user_prompt_template,
                 category=template.category,
                 is_active=template.is_active,
-                created_at=template.created_at
+                created_at=template.created_at,
             )
             for template in templates
         ]
@@ -202,7 +206,7 @@ async def get_prompt_templates(
 async def get_prompt_template_by_id(
     template_id: uuid.UUID = Path(..., description="Template unique identifier"),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Get a specific prompt template by ID.
@@ -218,7 +222,7 @@ async def get_prompt_template_by_id(
             raise http_error(
                 status.HTTP_404_NOT_FOUND,
                 "prompt_template_not_found",
-                "Prompt template not found."
+                "Prompt template not found.",
             )
 
         logger.debug(f"Retrieved template {template_id} for user {current_user.id}")
@@ -231,7 +235,7 @@ async def get_prompt_template_by_id(
             user_prompt_template=template.user_prompt_template,
             category=template.category,
             is_active=template.is_active,
-            created_at=template.created_at
+            created_at=template.created_at,
         )
 
     except HTTPException:
@@ -240,11 +244,15 @@ async def get_prompt_template_by_id(
         _handle_prompt_service_error(e, "retrieve prompt template", current_user.id)
 
 
-@router.post("/create", status_code=status.HTTP_201_CREATED, response_model=PromptTemplateResponse)
+@router.post(
+    "/create",
+    status_code=status.HTTP_201_CREATED,
+    response_model=PromptTemplateResponse,
+)
 async def create_prompt_template(
     template_data: PromptTemplateCreate,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Create a new prompt template.
@@ -259,7 +267,7 @@ async def create_prompt_template(
             request=template_data,
             user_id=current_user.id,
             category="USER",  # User-created templates are always USER category
-            is_active=True
+            is_active=True,
         )
 
         logger.info(f"Created prompt template {template.id} for user {current_user.id}")
@@ -273,7 +281,7 @@ async def create_prompt_template(
             user_prompt_template=template.user_prompt_template,
             category=template.category,
             is_active=template.is_active,
-            created_at=template.created_at
+            created_at=template.created_at,
         )
 
     except Exception as e:
@@ -285,7 +293,7 @@ async def update_prompt_template(
     template_id: uuid.UUID = Path(..., description="Template unique identifier"),
     template_data: PromptTemplateUpdate = ...,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Update a prompt template.
@@ -302,13 +310,11 @@ async def update_prompt_template(
             raise http_error(
                 status.HTTP_404_NOT_FOUND,
                 "prompt_template_not_found",
-                "Prompt template not found."
+                "Prompt template not found.",
             )
 
         template = await service.update_template(
-            template_id=template_id,
-            user_id=current_user.id,
-            request=template_data
+            template_id=template_id, user_id=current_user.id, request=template_data
         )
 
         logger.info(f"Updated prompt template {template_id} for user {current_user.id}")
@@ -322,7 +328,7 @@ async def update_prompt_template(
             user_prompt_template=template.user_prompt_template,
             category=template.category,
             is_active=template.is_active,
-            created_at=template.created_at
+            created_at=template.created_at,
         )
 
     except HTTPException:
@@ -335,7 +341,7 @@ async def update_prompt_template(
 async def delete_prompt_template(
     template_id: uuid.UUID = Path(..., description="Template unique identifier"),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Delete a prompt template.
@@ -352,7 +358,7 @@ async def delete_prompt_template(
             raise http_error(
                 status.HTTP_404_NOT_FOUND,
                 "prompt_template_not_found",
-                "Prompt template not found."
+                "Prompt template not found.",
             )
 
         # Prevent deletion of system templates
@@ -360,7 +366,7 @@ async def delete_prompt_template(
             raise http_error(
                 status.HTTP_403_FORBIDDEN,
                 "prompt_template_access_denied",
-                "System templates cannot be deleted."
+                "System templates cannot be deleted.",
             )
 
         await service.delete_template(template_id, current_user.id)

@@ -18,16 +18,19 @@ from src.services.base_service import BaseService
 
 class MyMomentCredentialsServiceError(Exception):
     """Base exception for MyMoment credentials service operations."""
+
     pass
 
 
 class MyMomentCredentialsValidationError(MyMomentCredentialsServiceError):
     """Raised when credentials validation fails."""
+
     pass
 
 
 class MyMomentCredentialsNotFoundError(MyMomentCredentialsServiceError):
     """Raised when credentials are not found."""
+
     pass
 
 
@@ -57,7 +60,7 @@ class MyMomentCredentialsService(BaseService):
         username: str,
         password: str,
         name: str,
-        is_admin: bool = False
+        is_admin: bool = False,
     ) -> MyMomentLogin:
         """
         Create new myMoment credentials for a user.
@@ -88,21 +91,20 @@ class MyMomentCredentialsService(BaseService):
             and_(
                 MyMomentLogin.user_id == user_id,
                 MyMomentLogin.name == name.strip(),
-                MyMomentLogin.is_active == True
+                MyMomentLogin.is_active == True,
             )
         )
         result = await self.db_session.execute(stmt)
         existing = result.scalar_one_or_none()
 
         if existing:
-            raise MyMomentCredentialsValidationError(f"Credentials with name '{name}' already exist")
+            raise MyMomentCredentialsValidationError(
+                f"Credentials with name '{name}' already exist"
+            )
 
         # Create credentials with automatic encryption
         credentials = MyMomentLogin(
-            user_id=user_id,
-            name=name.strip(),
-            is_active=True,
-            is_admin=is_admin
+            user_id=user_id, name=name.strip(), is_active=True, is_admin=is_admin
         )
 
         # Set both username and password using the model's encryption method
@@ -119,9 +121,7 @@ class MyMomentCredentialsService(BaseService):
         return credentials
 
     async def get_credentials_by_id(
-        self,
-        credentials_id: uuid.UUID,
-        user_id: Optional[uuid.UUID] = None
+        self, credentials_id: uuid.UUID, user_id: Optional[uuid.UUID] = None
     ) -> Optional[MyMomentLogin]:
         """
         Get specific credentials by ID for a user.
@@ -139,7 +139,7 @@ class MyMomentCredentialsService(BaseService):
         """
         conditions = [
             MyMomentLogin.id == credentials_id,
-            MyMomentLogin.is_active == True
+            MyMomentLogin.is_active == True,
         ]
 
         if user_id is not None:
@@ -150,9 +150,7 @@ class MyMomentCredentialsService(BaseService):
         return result.scalar_one_or_none()
 
     async def get_user_credentials(
-        self,
-        user_id: uuid.UUID,
-        is_admin: Optional[bool] = None
+        self, user_id: uuid.UUID, is_admin: Optional[bool] = None
     ) -> List[MyMomentLogin]:
         """
         Get all active credentials for a user.
@@ -167,18 +165,17 @@ class MyMomentCredentialsService(BaseService):
         Returns:
             List of active MyMomentLogin objects
         """
-        conditions = [
-            MyMomentLogin.user_id == user_id,
-            MyMomentLogin.is_active == True
-        ]
+        conditions = [MyMomentLogin.user_id == user_id, MyMomentLogin.is_active == True]
 
         # Add is_admin filter if specified
         if is_admin is not None:
             conditions.append(MyMomentLogin.is_admin == is_admin)
 
-        stmt = select(MyMomentLogin).where(
-            and_(*conditions)
-        ).order_by(MyMomentLogin.created_at)
+        stmt = (
+            select(MyMomentLogin)
+            .where(and_(*conditions))
+            .order_by(MyMomentLogin.created_at)
+        )
 
         result = await self.db_session.execute(stmt)
         return list(result.scalars().all())
@@ -190,7 +187,7 @@ class MyMomentCredentialsService(BaseService):
         username: Optional[str] = None,
         password: Optional[str] = None,
         name: Optional[str] = None,
-        is_admin: Optional[bool] = None
+        is_admin: Optional[bool] = None,
     ) -> Optional[MyMomentLogin]:
         """
         Update existing credentials.
@@ -217,11 +214,15 @@ class MyMomentCredentialsService(BaseService):
         # Update credentials if username or password provided
         if username is not None or password is not None:
             current_username, current_password = credentials.get_credentials()
-            new_username = username.strip() if username is not None else current_username
+            new_username = (
+                username.strip() if username is not None else current_username
+            )
             new_password = password if password is not None else current_password
 
             if not new_username or not new_password:
-                raise MyMomentCredentialsValidationError("Username and password cannot be empty")
+                raise MyMomentCredentialsValidationError(
+                    "Username and password cannot be empty"
+                )
 
             credentials.set_credentials(new_username, new_password)
 
@@ -235,14 +236,16 @@ class MyMomentCredentialsService(BaseService):
                     MyMomentLogin.user_id == credentials.user_id,
                     MyMomentLogin.name == name.strip(),
                     MyMomentLogin.is_active == True,
-                    MyMomentLogin.id != credentials_id
+                    MyMomentLogin.id != credentials_id,
                 )
             )
             result = await self.db_session.execute(stmt)
             existing = result.scalar_one_or_none()
 
             if existing:
-                raise MyMomentCredentialsValidationError(f"Credentials with name '{name}' already exist")
+                raise MyMomentCredentialsValidationError(
+                    f"Credentials with name '{name}' already exist"
+                )
 
             credentials.name = name.strip()
 
@@ -260,9 +263,7 @@ class MyMomentCredentialsService(BaseService):
         return credentials
 
     async def delete_credentials(
-        self,
-        credentials_id: uuid.UUID,
-        user_id: Optional[uuid.UUID] = None
+        self, credentials_id: uuid.UUID, user_id: Optional[uuid.UUID] = None
     ) -> bool:
         """
         Delete (deactivate) credentials.
@@ -289,9 +290,7 @@ class MyMomentCredentialsService(BaseService):
             return False
 
     async def get_decrypted_credentials(
-        self,
-        credentials_id: uuid.UUID,
-        user_id: Optional[uuid.UUID] = None
+        self, credentials_id: uuid.UUID, user_id: Optional[uuid.UUID] = None
     ) -> Optional[tuple[str, str]]:
         """
         Get decrypted username and password for authentication.
@@ -319,9 +318,7 @@ class MyMomentCredentialsService(BaseService):
             return None
 
     async def validate_credentials(
-        self,
-        credentials_id: uuid.UUID,
-        user_id: Optional[uuid.UUID] = None
+        self, credentials_id: uuid.UUID, user_id: Optional[uuid.UUID] = None
     ) -> tuple[bool, Optional[str]]:
         """
         Validate myMoment credentials by attempting to decrypt.

@@ -20,7 +20,9 @@ class PlatformAccount:
     base_url: str
     username: str
     password: str = field(repr=False)
-    role: str  # "user" or "admin"; adapters ignore it, yourMoment selects accounts by it
+    role: (
+        str  # "user" or "admin"; adapters ignore it, yourMoment selects accounts by it
+    )
 
 
 @dataclass(frozen=True)
@@ -114,7 +116,9 @@ class PlatformConnection(Protocol):
         """One option per dimension of the target description, in its order, with the values this account sees."""
         ...
 
-    async def list_articles(self, target: Optional[Mapping[str, str]] = None) -> list[ArticleSummary]:
+    async def list_articles(
+        self, target: Optional[Mapping[str, str]] = None
+    ) -> list[ArticleSummary]:
         """List the articles of a target; the adapter validates the target's keys and values."""
         ...
 
@@ -122,7 +126,9 @@ class PlatformConnection(Protocol):
         """Read the article `ref.id` names; the content carries its ref with the URL the adapter builds."""
         ...
 
-    async def post_comment(self, ref: ArticleRef, text: str, *, hidden: bool = False) -> PostedComment:
+    async def post_comment(
+        self, ref: ArticleRef, text: str, *, hidden: bool = False
+    ) -> PostedComment:
         """Publish `text` under the article; `hidden` hides it from other readers."""
         ...
 

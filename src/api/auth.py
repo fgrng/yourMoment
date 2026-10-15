@@ -11,7 +11,7 @@ from src.api.schemas import (
     UserLoginRequest,
     AuthResponse,
     LogoutResponse,
-    ErrorResponse
+    ErrorResponse,
 )
 from src.services.auth_service import AuthService, AuthServiceValidationError
 from src.config.database import get_session
@@ -35,7 +35,7 @@ async def get_current_user(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     auth_service: AuthService = Depends(get_auth_service),
-    access_token: Optional[str] = Cookie(None)
+    access_token: Optional[str] = Cookie(None),
 ) -> User:
     """
     Dependency to get current authenticated user from JWT token.
@@ -69,7 +69,7 @@ async def get_current_user(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="No authentication token provided",
-                headers={"WWW-Authenticate": "Bearer"}
+                headers={"WWW-Authenticate": "Bearer"},
             )
 
         # Validate token and get user
@@ -78,7 +78,7 @@ async def get_current_user(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired token",
-                headers={"WWW-Authenticate": "Bearer"}
+                headers={"WWW-Authenticate": "Bearer"},
             )
         return user
     except HTTPException:
@@ -87,14 +87,15 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer"},
         )
+
 
 async def get_current_web_user(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     auth_service: AuthService = Depends(get_auth_service),
-    access_token: Optional[str] = Cookie(None)
+    access_token: Optional[str] = Cookie(None),
 ) -> User:
     """
     Dependency for web routes that redirects to /login if not authenticated.
@@ -106,14 +107,17 @@ async def get_current_web_user(
             raise HTTPException(
                 status_code=status.HTTP_307_TEMPORARY_REDIRECT,
                 detail=e.detail,
-                headers={"Location": "/login"}
+                headers={"Location": "/login"},
             )
         raise e
 
+
 async def get_optional_user(
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
-    access_token: Optional[str] = Cookie(None)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(
+        HTTPBearer(auto_error=False)
+    ),
+    access_token: Optional[str] = Cookie(None),
 ) -> Optional[User]:
     """
     Try to get current authenticated user, but don't fail if not authenticated.
@@ -155,15 +159,18 @@ async def get_optional_user(
     description="Create a new user account with email and password",
     responses={
         201: {"description": "User registered successfully", "model": AuthResponse},
-        400: {"description": "Validation error or invalid input", "model": ErrorResponse},
+        400: {
+            "description": "Validation error or invalid input",
+            "model": ErrorResponse,
+        },
         409: {"description": "User already exists", "model": ErrorResponse},
         422: {"description": "Unprocessable input", "model": ErrorResponse},
-    }
+    },
 )
 async def register(
     response: Response,
     user_data: UserRegisterRequest,
-    auth_service: AuthService = Depends(get_auth_service)
+    auth_service: AuthService = Depends(get_auth_service),
 ) -> AuthResponse:
     """
     Register a new user account.
@@ -175,8 +182,7 @@ async def register(
     try:
         # Register user
         user, access_token = await auth_service.register_user(
-            email=user_data.email,
-            password=user_data.password
+            email=user_data.email, password=user_data.password
         )
 
         # Set HTTP-only cookie for server-rendered pages
@@ -188,7 +194,7 @@ async def register(
             httponly=True,
             secure=settings.is_production,
             samesite="lax",
-            max_age=1800
+            max_age=1800,
         )
 
         # Return authentication response
@@ -199,18 +205,18 @@ async def register(
         if "already exists" in str(e).lower():
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={"error": "user_exists", "message": str(e)}
+                detail={"error": "user_exists", "message": str(e)},
             )
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"error": "registration_error", "message": str(e)}
+                detail={"error": "registration_error", "message": str(e)},
             )
     except Exception:
         # Handle unexpected errors
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": "internal_error", "message": "Registration failed"}
+            detail={"error": "internal_error", "message": "Registration failed"},
         )
 
 
@@ -223,13 +229,13 @@ async def register(
     responses={
         200: {"description": "Login successful", "model": AuthResponse},
         400: {"description": "Invalid request format", "model": ErrorResponse},
-        401: {"description": "Invalid credentials", "model": ErrorResponse}
-    }
+        401: {"description": "Invalid credentials", "model": ErrorResponse},
+    },
 )
 async def login(
     response: Response,
     user_data: UserLoginRequest,
-    auth_service: AuthService = Depends(get_auth_service)
+    auth_service: AuthService = Depends(get_auth_service),
 ) -> AuthResponse:
     """
     Authenticate user with email and password.
@@ -241,8 +247,7 @@ async def login(
     try:
         # Authenticate user
         user, access_token = await auth_service.authenticate_user(
-            email=user_data.email,
-            password=user_data.password
+            email=user_data.email, password=user_data.password
         )
 
         # Set HTTP-only cookie for server-rendered pages
@@ -254,8 +259,8 @@ async def login(
             value=access_token,
             httponly=True,  # Not accessible via JavaScript (XSS protection)
             secure=settings.is_production,  # Only HTTPS in production, allow HTTP in dev/test
-            samesite="lax", # CSRF protection
-            max_age=1800    # 30 minutes (match JWT expiry)
+            samesite="lax",  # CSRF protection
+            max_age=1800,  # 30 minutes (match JWT expiry)
         )
 
         # Return authentication response (for API clients and localStorage)
@@ -265,13 +270,13 @@ async def login(
         # Handle authentication errors
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"error": "invalid_credentials", "message": str(e)}
+            detail={"error": "invalid_credentials", "message": str(e)},
         )
     except Exception:
         # Handle unexpected errors
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": "internal_error", "message": "Authentication failed"}
+            detail={"error": "internal_error", "message": "Authentication failed"},
         )
 
 
@@ -283,14 +288,14 @@ async def login(
     description="Invalidate current JWT token, end user session, and clear cookie",
     responses={
         200: {"description": "Logout successful", "model": LogoutResponse},
-        401: {"description": "Invalid or expired token", "model": ErrorResponse}
-    }
+        401: {"description": "Invalid or expired token", "model": ErrorResponse},
+    },
 )
 async def logout(
     response: Response,
     current_user: User = Depends(get_current_user),
     auth_service: AuthService = Depends(get_auth_service),
-    access_token: Optional[str] = Cookie(None)
+    access_token: Optional[str] = Cookie(None),
 ) -> LogoutResponse:
     """
     Logout user by invalidating their current session.
@@ -310,10 +315,7 @@ async def logout(
 
         # Clear the authentication cookie
         response.delete_cookie(
-            key="access_token",
-            httponly=True,
-            secure=True,
-            samesite="lax"
+            key="access_token", httponly=True, secure=True, samesite="lax"
         )
 
         if success:
@@ -322,7 +324,10 @@ async def logout(
             # Token was already invalid or expired
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail={"error": "invalid_token", "message": "Invalid or expired token"}
+                detail={
+                    "error": "invalid_token",
+                    "message": "Invalid or expired token",
+                },
             )
 
     except Exception:

@@ -30,11 +30,13 @@ logger = logging.getLogger(__name__)
 
 class EncryptionError(Exception):
     """Base exception for encryption-related errors."""
+
     pass
 
 
 class DecryptionError(EncryptionError):
     """Raised when decryption fails."""
+
     pass
 
 
@@ -77,10 +79,14 @@ class EncryptionManager:
             if key_path.exists():
                 try:
                     key_b64 = key_path.read_text().strip()
-                    logger.info(f"Encryption key loaded from file: {self.key_file_path}")
+                    logger.info(
+                        f"Encryption key loaded from file: {self.key_file_path}"
+                    )
                     return Fernet(key_b64.encode())
                 except Exception as e:
-                    logger.warning(f"Failed to load key from file {self.key_file_path}: {e}")
+                    logger.warning(
+                        f"Failed to load key from file {self.key_file_path}: {e}"
+                    )
 
         # Generate new key and save to file
         return self._generate_new_key()
@@ -124,12 +130,14 @@ class EncryptionManager:
 
         try:
             # Convert string to bytes and encrypt
-            plaintext_bytes = plaintext.encode('utf-8')
+            plaintext_bytes = plaintext.encode("utf-8")
             encrypted_bytes = self._fernet.encrypt(plaintext_bytes)
 
             # Return base64-encoded result for database storage
-            encrypted_b64 = base64.urlsafe_b64encode(encrypted_bytes).decode('utf-8')
-            logger.debug(f"Successfully encrypted data (length: {len(plaintext)} chars)")
+            encrypted_b64 = base64.urlsafe_b64encode(encrypted_bytes).decode("utf-8")
+            logger.debug(
+                f"Successfully encrypted data (length: {len(plaintext)} chars)"
+            )
             return encrypted_b64
 
         except Exception as e:
@@ -154,17 +162,23 @@ class EncryptionManager:
 
         try:
             # Decode base64 and decrypt
-            encrypted_bytes = base64.urlsafe_b64decode(encrypted_data.encode('utf-8'))
+            encrypted_bytes = base64.urlsafe_b64decode(encrypted_data.encode("utf-8"))
             plaintext_bytes = self._fernet.decrypt(encrypted_bytes)
 
             # Convert bytes back to string
-            plaintext = plaintext_bytes.decode('utf-8')
-            logger.debug(f"Successfully decrypted data (length: {len(plaintext)} chars)")
+            plaintext = plaintext_bytes.decode("utf-8")
+            logger.debug(
+                f"Successfully decrypted data (length: {len(plaintext)} chars)"
+            )
             return plaintext
 
         except InvalidToken:
-            logger.error("Decryption failed: Invalid token (wrong key or corrupted data)")
-            raise DecryptionError("Invalid encryption token - data may be corrupted or key is wrong")
+            logger.error(
+                "Decryption failed: Invalid token (wrong key or corrupted data)"
+            )
+            raise DecryptionError(
+                "Invalid encryption token - data may be corrupted or key is wrong"
+            )
         except Exception as e:
             logger.error(f"Decryption failed: {e}")
             raise DecryptionError(f"Failed to decrypt data: {e}")
@@ -184,7 +198,7 @@ class EncryptionManager:
 
         try:
             # Try to decode the double-base64 encoded data (our format)
-            outer_decoded = base64.urlsafe_b64decode(data.encode('utf-8'))
+            outer_decoded = base64.urlsafe_b64decode(data.encode("utf-8"))
 
             # Encrypted data should be at least Fernet minimum length
             if len(outer_decoded) < 60:  # Fernet tokens are typically 60+ bytes
@@ -193,8 +207,8 @@ class EncryptionManager:
             # Check if this looks like a Fernet token (starts with 'gAAAAA')
             # Fernet tokens are base64 encoded and start with version byte 0x80
             # which becomes 'gA' in base64
-            fernet_token_str = outer_decoded.decode('utf-8')
-            return fernet_token_str.startswith('gAAAAA')
+            fernet_token_str = outer_decoded.decode("utf-8")
+            return fernet_token_str.startswith("gAAAAA")
 
         except Exception:
             # If we can't decode or convert, it's probably not our encrypted format
@@ -225,7 +239,7 @@ def get_encryption_manager() -> EncryptionManager:
         security_settings = get_settings().security
         _encryption_manager = EncryptionManager(
             key=security_settings.YOURMOMENT_ENCRYPTION_KEY,
-            key_file_path=security_settings.YOURMOMENT_KEY_FILE
+            key_file_path=security_settings.YOURMOMENT_KEY_FILE,
         )
     return _encryption_manager
 
@@ -270,6 +284,7 @@ def is_field_encrypted(data: str) -> bool:
 
 
 # Field-specific encryption functions for model usage
+
 
 def encrypt_api_key(api_key: str) -> str:
     """
@@ -342,7 +357,9 @@ def encrypt_mymoment_credentials(username: str, password: str) -> tuple[str, str
         raise
 
 
-def decrypt_mymoment_credentials(encrypted_username: str, encrypted_password: str) -> tuple[str, str]:
+def decrypt_mymoment_credentials(
+    encrypted_username: str, encrypted_password: str
+) -> tuple[str, str]:
     """
     Decrypt myMoment login credentials from database.
 
@@ -393,7 +410,9 @@ def encrypt_session_data(session_data: Union[str, dict]) -> str:
         raise
 
 
-def decrypt_session_data(encrypted_session_data: str, as_dict: bool = True) -> Union[str, dict]:
+def decrypt_session_data(
+    encrypted_session_data: str, as_dict: bool = True
+) -> Union[str, dict]:
     """
     Decrypt myMoment session data from database.
 

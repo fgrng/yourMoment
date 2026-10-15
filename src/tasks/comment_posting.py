@@ -51,6 +51,7 @@ class PostingDeferred(Exception):
 @dataclass
 class CommentSnapshot:
     """Lightweight snapshot of an AIComment for posting."""
+
     id: uuid.UUID
     mymoment_article_id: str
     article_url: str
@@ -75,8 +76,7 @@ class CommentPostingTask(BaseTask):
         return sessionmaker()
 
     async def _read_and_cache_for_posting(
-        self,
-        process_id: uuid.UUID
+        self, process_id: uuid.UUID
     ) -> tuple[List[CommentSnapshot], Dict[uuid.UUID, PlatformAccount]]:
         """
         Read generated AIComments and cache their platform accounts.
@@ -99,28 +99,38 @@ class CommentPostingTask(BaseTask):
                 select(AIComment).where(
                     and_(
                         AIComment.monitoring_process_id == process_id,
-                        AIComment.status == 'generated',
-                        AIComment.comment_content.isnot(None)
+                        AIComment.status == "generated",
+                        AIComment.comment_content.isnot(None),
                     )
                 )
             )
             comment_snapshots = [_snapshot(c) for c in result.scalars().all()]
         # Session closed
 
-        logger.info(f"Read {len(comment_snapshots)} generated comments for process {process_id}")
+        logger.info(
+            f"Read {len(comment_snapshots)} generated comments for process {process_id}"
+        )
 
         # Step 2: Read and cache platform accounts (decrypted once per login)
         cached_accounts: Dict[uuid.UUID, PlatformAccount] = {}
-        logins = {(c.mymoment_login_id, c.user_id) for c in comment_snapshots if c.mymoment_login_id}
+        logins = {
+            (c.mymoment_login_id, c.user_id)
+            for c in comment_snapshots
+            if c.mymoment_login_id
+        }
 
         if logins:
             session = await self.get_async_session()
             async with session:
                 for login_id, user_id in logins:
                     try:
-                        account = await load_platform_account(session, login_id, user_id)
+                        account = await load_platform_account(
+                            session, login_id, user_id
+                        )
                     except DecryptionError as e:
-                        logger.error(f"Failed to decrypt platform account {login_id}: {e}")
+                        logger.error(
+                            f"Failed to decrypt platform account {login_id}: {e}"
+                        )
                         continue
                     if account is not None:
                         cached_accounts[login_id] = account
@@ -130,14 +140,18 @@ class CommentPostingTask(BaseTask):
 
         return comment_snapshots, cached_accounts
 
-    async def _read_comment_snapshot(self, ai_comment_id: uuid.UUID) -> Optional[CommentSnapshot]:
+    async def _read_comment_snapshot(
+        self, ai_comment_id: uuid.UUID
+    ) -> Optional[CommentSnapshot]:
         """Read a single AIComment with the fields required for posting."""
         session = await self.get_async_session()
         async with session:
             ai_comment = await session.get(AIComment, ai_comment_id)
             return _snapshot(ai_comment) if ai_comment else None
 
-    async def _load_platform_account(self, snapshot: CommentSnapshot) -> PlatformAccount:
+    async def _load_platform_account(
+        self, snapshot: CommentSnapshot
+    ) -> PlatformAccount:
         """Load the comment's platform account; a missing account is final (ValueError)."""
         session = await self.get_async_session()
         async with session:
@@ -150,7 +164,9 @@ class CommentPostingTask(BaseTask):
             )
         return account
 
-    async def _publish(self, platform: PlatformConnection, snapshot: CommentSnapshot) -> PostedComment:
+    async def _publish(
+        self, platform: PlatformConnection, snapshot: CommentSnapshot
+    ) -> PostedComment:
         """
         Post one comment through the platform interface, outside any DB session.
 
@@ -161,7 +177,9 @@ class CommentPostingTask(BaseTask):
             AIComment.apply_ai_prefix(snapshot.comment_content),
             hidden=snapshot.is_hidden,
         )
-        logger.info(f"Successfully posted comment to article {snapshot.mymoment_article_id}")
+        logger.info(
+            f"Successfully posted comment to article {snapshot.mymoment_article_id}"
+        )
         return posted
 
     def _comment_id(self, posted: PostedComment, snapshot: CommentSnapshot) -> str:
@@ -175,7 +193,9 @@ class CommentPostingTask(BaseTask):
             return posted.external_id
 
         timestamp = int(utcnow().timestamp())
-        placeholder_id = f"{snapshot.mymoment_article_id}-{timestamp}-{str(snapshot.id)[:8]}"
+        placeholder_id = (
+            f"{snapshot.mymoment_article_id}-{timestamp}-{str(snapshot.id)[:8]}"
+        )
         logger.debug(f"Generated placeholder comment ID: {placeholder_id}")
         return placeholder_id
 
@@ -209,7 +229,9 @@ class CommentPostingTask(BaseTask):
                     ai_comment.status,
                 )
             else:
-                logger.info("Skipping posting claim for missing AIComment %s", ai_comment_id)
+                logger.info(
+                    "Skipping posting claim for missing AIComment %s", ai_comment_id
+                )
             return False
 
     async def _finalize_posted_comment(
@@ -264,7 +286,9 @@ class CommentPostingTask(BaseTask):
                     ai_comment.status,
                 )
             else:
-                logger.info("Skipping posting finalize for missing AIComment %s", ai_comment_id)
+                logger.info(
+                    "Skipping posting finalize for missing AIComment %s", ai_comment_id
+                )
             return False
 
     async def _revert_comment_claim(
@@ -293,7 +317,9 @@ class CommentPostingTask(BaseTask):
                 )
                 if result.rowcount:
                     await session.commit()
-                    logger.debug("Reverted posting claim for AIComment %s", ai_comment_id)
+                    logger.debug(
+                        "Reverted posting claim for AIComment %s", ai_comment_id
+                    )
                     return True
 
                 ai_comment = await session.get(AIComment, ai_comment_id)
@@ -304,10 +330,15 @@ class CommentPostingTask(BaseTask):
                         ai_comment.status,
                     )
                 else:
-                    logger.info("Skipping posting claim revert for missing AIComment %s", ai_comment_id)
+                    logger.info(
+                        "Skipping posting claim revert for missing AIComment %s",
+                        ai_comment_id,
+                    )
                 return False
         except Exception as exc:
-            logger.warning("Best-effort revert failed for AIComment %s: %s", ai_comment_id, exc)
+            logger.warning(
+                "Best-effort revert failed for AIComment %s: %s", ai_comment_id, exc
+            )
             return False
 
     async def _mark_comment_failed(
@@ -388,7 +419,9 @@ class CommentPostingTask(BaseTask):
         """Decide by error type: auth failures and refused comments do not loop through retries."""
         return not isinstance(exc, _NOT_RETRYABLE)
 
-    async def _post_single_comment_async(self, ai_comment_id: uuid.UUID) -> Dict[str, Any]:
+    async def _post_single_comment_async(
+        self, ai_comment_id: uuid.UUID
+    ) -> Dict[str, Any]:
         """Post one generated comment if the process is still allowed to publish."""
         start_time = utcnow()
         snapshot = await self._read_comment_snapshot(ai_comment_id)
@@ -467,10 +500,14 @@ class CommentPostingTask(BaseTask):
         except Exception as exc:
             if not posted_to_platform:
                 await self._revert_comment_claim(snapshot.id)
-            logger.error("Failed to post comment for AIComment %s: %s", snapshot.id, exc)
+            logger.error(
+                "Failed to post comment for AIComment %s: %s", snapshot.id, exc
+            )
             raise
 
-    async def _post_comments_async(self, process_id: uuid.UUID, final_attempt: bool = False) -> Dict[str, Any]:
+    async def _post_comments_async(
+        self, process_id: uuid.UUID, final_attempt: bool = False
+    ) -> Dict[str, Any]:
         """
         Main async method for comment posting.
 
@@ -506,36 +543,44 @@ class CommentPostingTask(BaseTask):
             )
             if skip_reason:
                 return {
-                    'posted': 0,
-                    'failed': 0,
-                    'deferred': 0,
-                    'errors': [],
-                    'execution_time_seconds': 0,
-                    'status': 'skipped',
-                    'reason': skip_reason,
+                    "posted": 0,
+                    "failed": 0,
+                    "deferred": 0,
+                    "errors": [],
+                    "execution_time_seconds": 0,
+                    "status": "skipped",
+                    "reason": skip_reason,
                 }
 
             # Step 1: Read and cache (Pattern 4)
-            comment_snapshots, cached_accounts = await self._read_and_cache_for_posting(process_id)
+            comment_snapshots, cached_accounts = await self._read_and_cache_for_posting(
+                process_id
+            )
 
             if not comment_snapshots:
                 logger.info(f"No generated comments to post for process {process_id}")
                 execution_time = (utcnow() - start_time).total_seconds()
                 return {
-                    'posted': 0,
-                    'failed': 0,
-                    'deferred': 0,
-                    'errors': [],
-                    'execution_time_seconds': execution_time,
-                    'status': 'success'
+                    "posted": 0,
+                    "failed": 0,
+                    "deferred": 0,
+                    "errors": [],
+                    "execution_time_seconds": execution_time,
+                    "status": "success",
                 }
 
-            logger.info(f"Starting comment posting for process {process_id}: "
-                       f"{len(comment_snapshots)} comments")
+            logger.info(
+                f"Starting comment posting for process {process_id}: "
+                f"{len(comment_snapshots)} comments"
+            )
 
-            async def _handle_failure(snapshot: CommentSnapshot, exc: Exception) -> None:
+            async def _handle_failure(
+                snapshot: CommentSnapshot, exc: Exception
+            ) -> None:
                 nonlocal failed_count, deferred_count
-                errors.append(f"Failed to post comment for AIComment {snapshot.id}: {exc}")
+                errors.append(
+                    f"Failed to post comment for AIComment {snapshot.id}: {exc}"
+                )
                 logger.error(errors[-1])
                 reason = str(exc)
                 if self._is_retryable_posting_error(exc):
@@ -555,11 +600,15 @@ class CommentPostingTask(BaseTask):
                 connect_errors: Dict[uuid.UUID, Exception] = {}
                 for login_id, account in cached_accounts.items():
                     try:
-                        connections[login_id] = await stack.enter_async_context(connect(account))
+                        connections[login_id] = await stack.enter_async_context(
+                            connect(account)
+                        )
                         logger.info(f"Connected platform account {login_id}")
                     except Exception as e:
                         connect_errors[login_id] = e
-                        logger.error(f"Failed to connect platform account {login_id}: {e}")
+                        logger.error(
+                            f"Failed to connect platform account {login_id}: {e}"
+                        )
 
                 # Step 3: Post comments one at a time (outside DB sessions)
                 for comment_snapshot in comment_snapshots:
@@ -582,7 +631,9 @@ class CommentPostingTask(BaseTask):
                         await _handle_failure(
                             comment_snapshot,
                             connect_errors.get(login_id)
-                            or ValueError(f"Platform account {login_id} not found or inactive"),
+                            or ValueError(
+                                f"Platform account {login_id} not found or inactive"
+                            ),
                         )
                         continue
 
@@ -633,17 +684,21 @@ class CommentPostingTask(BaseTask):
 
             execution_time = (utcnow() - start_time).total_seconds()
 
-            logger.info(f"Comment posting completed for process {process_id}: "
-                       f"{posted_count} posted, {failed_count} failed, {deferred_count} deferred, "
-                       f"{len(errors)} errors, {execution_time:.2f}s")
+            logger.info(
+                f"Comment posting completed for process {process_id}: "
+                f"{posted_count} posted, {failed_count} failed, {deferred_count} deferred, "
+                f"{len(errors)} errors, {execution_time:.2f}s"
+            )
 
             return {
-                'posted': posted_count,
-                'failed': failed_count,
-                'deferred': deferred_count,
-                'errors': errors,
-                'execution_time_seconds': execution_time,
-                'status': 'success' if failed_count == 0 and deferred_count == 0 else 'partial'
+                "posted": posted_count,
+                "failed": failed_count,
+                "deferred": deferred_count,
+                "errors": errors,
+                "execution_time_seconds": execution_time,
+                "status": "success"
+                if failed_count == 0 and deferred_count == 0
+                else "partial",
             }
 
         except Exception as e:
@@ -654,12 +709,12 @@ class CommentPostingTask(BaseTask):
             execution_time = (utcnow() - start_time).total_seconds()
 
             return {
-                'posted': posted_count,
-                'failed': failed_count,
-                'deferred': deferred_count,
-                'errors': errors,
-                'execution_time_seconds': execution_time,
-                'status': 'failed'
+                "posted": posted_count,
+                "failed": failed_count,
+                "deferred": deferred_count,
+                "errors": errors,
+                "execution_time_seconds": execution_time,
+                "status": "failed",
             }
 
 
@@ -690,22 +745,26 @@ def _normalize_identifier(identifier: Any, compat_args: tuple[Any, ...]) -> str:
 @celery_app.task(
     bind=True,
     base=CommentPostingTask,
-    name='src.tasks.comment_posting.post_comment_for_article',
-    queue='posting',
+    name="src.tasks.comment_posting.post_comment_for_article",
+    queue="posting",
     max_retries=3,
-    default_retry_delay=60
+    default_retry_delay=60,
 )
-def post_comment_for_article(self, ai_comment_id: Any, *compat_args: Any) -> Dict[str, Any]:
+def post_comment_for_article(
+    self, ai_comment_id: Any, *compat_args: Any
+) -> Dict[str, Any]:
     """Post a single generated AIComment row."""
     ai_comment_id = _normalize_identifier(ai_comment_id, compat_args)
     ai_comment_uuid = uuid.UUID(ai_comment_id)
     try:
-        logger.info(f"Starting single-comment posting task for AIComment {ai_comment_id}")
+        logger.info(
+            f"Starting single-comment posting task for AIComment {ai_comment_id}"
+        )
         result = asyncio.run(self._post_single_comment_async(ai_comment_uuid))
         logger.info(f"Single-comment posting task completed: {result}")
         return result
     except Exception as exc:
-        countdown = min(60 * (2 ** self.request.retries), 300)
+        countdown = min(60 * (2**self.request.retries), 300)
         retryable = self._is_retryable_posting_error(exc)
         retries_exhausted = self.request.retries >= self.max_retries
         retry_recovery_failed = False
@@ -717,9 +776,7 @@ def post_comment_for_article(self, ai_comment_id: Any, *compat_args: Any) -> Dic
                 f"for AIComment {ai_comment_id}: {exc}"
             )
             try:
-                reverted = asyncio.run(
-                    self._revert_comment_claim(ai_comment_uuid)
-                )
+                reverted = asyncio.run(self._revert_comment_claim(ai_comment_uuid))
             except Exception as revert_error:
                 logger.error(
                     "Failed to revert posting claim for AIComment %s before retry: %s",
@@ -730,8 +787,12 @@ def post_comment_for_article(self, ai_comment_id: Any, *compat_args: Any) -> Dic
 
             if not reverted:
                 try:
-                    retry_snapshot = asyncio.run(self._read_comment_snapshot(ai_comment_uuid))
-                    reverted = bool(retry_snapshot and retry_snapshot.status == "generated")
+                    retry_snapshot = asyncio.run(
+                        self._read_comment_snapshot(ai_comment_uuid)
+                    )
+                    reverted = bool(
+                        retry_snapshot and retry_snapshot.status == "generated"
+                    )
                 except Exception as snapshot_error:
                     logger.error(
                         "Failed to verify retry readiness for AIComment %s after revert attempt: %s",
@@ -754,7 +815,9 @@ def post_comment_for_article(self, ai_comment_id: Any, *compat_args: Any) -> Dic
             terminal_reason = f"Max retries exhausted: {exc}"
         else:
             terminal_reason = str(exc)
-        logger.error(f"Single-comment posting failed permanently for AIComment {ai_comment_id}: {terminal_reason}")
+        logger.error(
+            f"Single-comment posting failed permanently for AIComment {ai_comment_id}: {terminal_reason}"
+        )
         asyncio.run(
             self._mark_comment_failed_safe(
                 ai_comment_uuid,
@@ -772,16 +835,18 @@ def post_comment_for_article(self, ai_comment_id: Any, *compat_args: Any) -> Dic
 @celery_app.task(
     bind=True,
     base=CommentPostingTask,
-    name='src.tasks.comment_posting.post_comments_for_articles',
-    queue='posting',
+    name="src.tasks.comment_posting.post_comments_for_articles",
+    queue="posting",
     max_retries=3,
     autoretry_for=(Exception,),
     retry_backoff=True,
     retry_backoff_max=600,  # 10 minutes max backoff
     retry_jitter=True,
-    default_retry_delay=60  # Start with 60 second delay
+    default_retry_delay=60,  # Start with 60 second delay
 )
-def post_comments_for_articles(self, process_id: Any, *compat_args: Any) -> Dict[str, Any]:
+def post_comments_for_articles(
+    self, process_id: Any, *compat_args: Any
+) -> Dict[str, Any]:
     """
     Celery task wrapper for comment posting.
 
@@ -810,11 +875,15 @@ def post_comments_for_articles(self, process_id: Any, *compat_args: Any) -> Dict
         process_id = _normalize_identifier(process_id, compat_args)
         logger.info(f"Starting comment posting task for process {process_id}")
         final_attempt = self.request.retries >= self.max_retries
-        result = asyncio.run(self._post_comments_async(uuid.UUID(process_id), final_attempt))
+        result = asyncio.run(
+            self._post_comments_async(uuid.UUID(process_id), final_attempt)
+        )
         logger.info(f"Comment posting task completed: {result}")
-        if result.get('deferred'):
+        if result.get("deferred"):
             # Celery's autoretry runs the batch again; it picks up the comments still 'generated'
-            raise PostingDeferred(f"{result['deferred']} comments deferred: {result['errors']}")
+            raise PostingDeferred(
+                f"{result['deferred']} comments deferred: {result['errors']}"
+            )
         return result
 
     except Exception as exc:

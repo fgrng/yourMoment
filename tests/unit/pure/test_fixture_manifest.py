@@ -25,7 +25,13 @@ def manifest():
 
 class TestManifestStructure:
     def test_top_level_keys_present(self, manifest):
-        for key in ("captured_at", "last_schema_review", "source_policy", "fixtures", "sanitization"):
+        for key in (
+            "captured_at",
+            "last_schema_review",
+            "source_policy",
+            "fixtures",
+            "sanitization",
+        ):
             assert key in manifest, f"Missing top-level key: {key!r}"
 
     def test_fixtures_is_non_empty_list(self, manifest):
@@ -48,7 +54,12 @@ class TestManifestStructure:
             )
 
     def test_normalised_list_fields_are_lists(self, manifest):
-        list_fields = ("covers", "covered_parser_methods", "required_assertions", "known_omitted_fields")
+        list_fields = (
+            "covers",
+            "covered_parser_methods",
+            "required_assertions",
+            "known_omitted_fields",
+        )
         for entry in manifest["fixtures"]:
             for field in list_fields:
                 if field in entry:

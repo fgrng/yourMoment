@@ -20,32 +20,39 @@ class MonitoringProcessLogin(BaseModel):
     __tablename__ = "monitoring_process_logins"
 
     # Primary key
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False)
+    id = Column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False
+    )
 
     # Foreign keys
     monitoring_process_id = Column(
         UUID(as_uuid=True),
         ForeignKey("monitoring_processes.id", ondelete="CASCADE"),
-        nullable=False
+        nullable=False,
     )
     mymoment_login_id = Column(
         UUID(as_uuid=True),
         ForeignKey("mymoment_logins.id", ondelete="CASCADE"),
-        nullable=False
+        nullable=False,
     )
 
     # Status and metadata
     is_active = Column(Boolean, nullable=False, default=True)
 
     # Relationships
-    monitoring_process = relationship("MonitoringProcess", back_populates="monitoring_process_logins")
-    mymoment_login = relationship("MyMomentLogin", back_populates="monitoring_process_logins")
+    monitoring_process = relationship(
+        "MonitoringProcess", back_populates="monitoring_process_logins"
+    )
+    mymoment_login = relationship(
+        "MyMomentLogin", back_populates="monitoring_process_logins"
+    )
 
     # Constraints
     __table_args__ = (
         UniqueConstraint(
-            "monitoring_process_id", "mymoment_login_id",
-            name="uq_monitoring_process_login"
+            "monitoring_process_id",
+            "mymoment_login_id",
+            name="uq_monitoring_process_login",
         ),
     )
 

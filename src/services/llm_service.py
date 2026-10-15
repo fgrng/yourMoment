@@ -23,7 +23,7 @@ from src.config.settings import get_settings
 from src.services.llm_types import (
     AICommentSchema,
     GenerationResult,
-    LLMGenerationConfig
+    LLMGenerationConfig,
 )
 from src.utils.datetimes import utcnow
 
@@ -33,17 +33,21 @@ llm_summary_logger = logging.getLogger("yourmoment.llm")
 
 class LLMProviderError(Exception):
     """Base exception for LLM provider operations."""
+
     pass
 
 
 class LLMProviderNotFoundError(LLMProviderError):
     """Raised when LLM provider configuration is not found."""
+
     pass
 
 
 class LLMProviderValidationError(LLMProviderError):
     """Raised when LLM provider configuration validation fails."""
+
     pass
+
 
 # Provider-level metadata not available in litellm.model_cost
 _PROVIDER_META: dict[str, dict] = {
@@ -53,8 +57,7 @@ _PROVIDER_META: dict[str, dict] = {
 
 
 def _merge_log_context(
-    base_context: Dict[str, Any],
-    extra_context: Optional[Dict[str, Any]] = None
+    base_context: Dict[str, Any], extra_context: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """Combine default and caller-provided log context."""
     if extra_context:
@@ -96,7 +99,7 @@ async def generate_completion_standalone(
     provider_name = config.provider_name.lower()
     model = config.model_name
     litellm_model = f"{provider_name}/{model.removeprefix(f'{provider_name}/')}"
-    
+
     try:
         # Determine LiteLLM model string (format: "provider/model")
         # Strip any accidental provider prefix the caller may have included
@@ -124,7 +127,7 @@ async def generate_completion_standalone(
         params = {
             "model": litellm_model,
             "messages": messages,
-            "api_key": config.api_key
+            "api_key": config.api_key,
         }
 
         if not is_reasoning_model:
@@ -146,7 +149,9 @@ async def generate_completion_standalone(
                 "model": litellm_model,
                 "reasoning": is_reasoning_model,
                 "message_count": len(messages),
-                "system_prompt_chars": len(messages[0]["content"]) if messages and messages[0]["role"] == "system" else 0,
+                "system_prompt_chars": len(messages[0]["content"])
+                if messages and messages[0]["role"] == "system"
+                else 0,
                 "user_prompt_chars": len(user_prompt or ""),
                 "max_tokens": config.max_tokens,
                 "temperature": params.get("temperature"),
@@ -200,7 +205,7 @@ async def generate_completion_standalone(
             finish_reason=response.choices[0].finish_reason,
             model_used=response.model,
             provider_used=provider_name,
-            generation_time_ms=generation_time_ms
+            generation_time_ms=generation_time_ms,
         )
 
     except litellm.exceptions.AuthenticationError as e:
@@ -246,7 +251,9 @@ async def generate_completion_standalone(
                 log_context,
             ),
         )
-        logger.error(f"LiteLLM context window exceeded for {provider_name}/{model}: {e}")
+        logger.error(
+            f"LiteLLM context window exceeded for {provider_name}/{model}: {e}"
+        )
         raise LLMProviderError(f"Prompt exceeds model context window: {e}")
     except litellm.exceptions.APIConnectionError as e:
         _log_llm_failure(
@@ -306,7 +313,9 @@ async def generate_completion_standalone(
                 log_context,
             ),
         )
-        logger.error(f"Failed to parse structured output from {provider_name}/{model}: {e}")
+        logger.error(
+            f"Failed to parse structured output from {provider_name}/{model}: {e}"
+        )
         raise LLMProviderError(f"Model returned invalid structured output: {e}")
     except Exception as e:
         _log_llm_failure(
@@ -353,7 +362,7 @@ class LLMProviderService:
         api_key: str,
         model_name: str,
         max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None
+        temperature: Optional[float] = None,
     ) -> LLMProviderConfiguration:
         """
         Create new LLM provider configuration for user.
@@ -388,7 +397,9 @@ class LLMProviderService:
 
             # Validate temperature range
             if temperature is not None and not (0.0 <= temperature <= 1.0):
-                raise LLMProviderValidationError("Temperature must be between 0.0 and 1.0")
+                raise LLMProviderValidationError(
+                    "Temperature must be between 0.0 and 1.0"
+                )
 
             # Create new provider configuration
             provider_config = LLMProviderConfiguration(
@@ -397,7 +408,7 @@ class LLMProviderService:
                 model_name=model_name,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                is_active=True
+                is_active=True,
             )
 
             # Set encrypted API key (this handles encryption automatically)
@@ -408,7 +419,9 @@ class LLMProviderService:
             await self.db_session.commit()
             await self.db_session.refresh(provider_config)
 
-            logger.info(f"Created LLM provider configuration for user {user_id}: {provider_name}/{model_name}")
+            logger.info(
+                f"Created LLM provider configuration for user {user_id}: {provider_name}/{model_name}"
+            )
             return provider_config
 
         except EncryptionError as e:
@@ -423,7 +436,9 @@ class LLMProviderService:
             await self.db_session.rollback()
             raise LLMProviderError(f"Failed to create provider configuration: {e}")
 
-    async def get_user_providers(self, user_id: uuid.UUID) -> List[LLMProviderConfiguration]:
+    async def get_user_providers(
+        self, user_id: uuid.UUID
+    ) -> List[LLMProviderConfiguration]:
         """
         Get all LLM provider configurations for a user.
 
@@ -434,21 +449,29 @@ class LLMProviderService:
             List of user's LLM provider configurations
         """
         try:
-            stmt = select(LLMProviderConfiguration).where(
-                LLMProviderConfiguration.user_id == user_id
-            ).order_by(LLMProviderConfiguration.created_at.desc())
+            stmt = (
+                select(LLMProviderConfiguration)
+                .where(LLMProviderConfiguration.user_id == user_id)
+                .order_by(LLMProviderConfiguration.created_at.desc())
+            )
 
             result = await self.db_session.execute(stmt)
             providers = result.scalars().all()
 
-            logger.debug(f"Retrieved {len(providers)} provider configurations for user {user_id}")
+            logger.debug(
+                f"Retrieved {len(providers)} provider configurations for user {user_id}"
+            )
             return list(providers)
 
         except Exception as e:
-            logger.error(f"Failed to retrieve provider configurations for user {user_id}: {e}")
+            logger.error(
+                f"Failed to retrieve provider configurations for user {user_id}: {e}"
+            )
             raise LLMProviderError(f"Failed to retrieve provider configurations: {e}")
 
-    async def get_provider_by_id(self, provider_id: uuid.UUID, user_id: uuid.UUID) -> LLMProviderConfiguration:
+    async def get_provider_by_id(
+        self, provider_id: uuid.UUID, user_id: uuid.UUID
+    ) -> LLMProviderConfiguration:
         """
         Get specific LLM provider configuration by ID (with user ownership check).
 
@@ -466,7 +489,7 @@ class LLMProviderService:
             stmt = select(LLMProviderConfiguration).where(
                 and_(
                     LLMProviderConfiguration.id == provider_id,
-                    LLMProviderConfiguration.user_id == user_id
+                    LLMProviderConfiguration.user_id == user_id,
                 )
             )
 
@@ -474,21 +497,22 @@ class LLMProviderService:
             provider = result.scalar_one_or_none()
 
             if not provider:
-                raise LLMProviderNotFoundError(f"Provider configuration {provider_id} not found for user {user_id}")
+                raise LLMProviderNotFoundError(
+                    f"Provider configuration {provider_id} not found for user {user_id}"
+                )
 
             return provider
 
         except Exception as e:
             if isinstance(e, LLMProviderNotFoundError):
                 raise
-            logger.error(f"Failed to retrieve provider {provider_id} for user {user_id}: {e}")
+            logger.error(
+                f"Failed to retrieve provider {provider_id} for user {user_id}: {e}"
+            )
             raise LLMProviderError(f"Failed to retrieve provider configuration: {e}")
 
     async def update_provider_configuration(
-        self,
-        provider_id: uuid.UUID,
-        user_id: uuid.UUID,
-        **updates
+        self, provider_id: uuid.UUID, user_id: uuid.UUID, **updates
     ) -> LLMProviderConfiguration:
         """
         Update LLM provider configuration.
@@ -513,7 +537,9 @@ class LLMProviderService:
             if "temperature" in updates:
                 temp = updates["temperature"]
                 if temp is not None and not (0.0 <= temp <= 1.0):
-                    raise LLMProviderValidationError("Temperature must be between 0.0 and 1.0")
+                    raise LLMProviderValidationError(
+                        "Temperature must be between 0.0 and 1.0"
+                    )
 
             # Handle special fields
             if "api_key" in updates:
@@ -530,7 +556,9 @@ class LLMProviderService:
             await self.db_session.commit()
             await self.db_session.refresh(provider)
 
-            logger.info(f"Updated provider configuration {provider_id} for user {user_id}")
+            logger.info(
+                f"Updated provider configuration {provider_id} for user {user_id}"
+            )
             return provider
 
         except EncryptionError as e:
@@ -542,7 +570,9 @@ class LLMProviderService:
             await self.db_session.rollback()
             raise LLMProviderError(f"Failed to update provider configuration: {e}")
 
-    async def delete_provider_configuration(self, provider_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+    async def delete_provider_configuration(
+        self, provider_id: uuid.UUID, user_id: uuid.UUID
+    ) -> bool:
         """
         Delete LLM provider configuration.
 
@@ -564,7 +594,7 @@ class LLMProviderService:
             stmt = delete(LLMProviderConfiguration).where(
                 and_(
                     LLMProviderConfiguration.id == provider_id,
-                    LLMProviderConfiguration.user_id == user_id
+                    LLMProviderConfiguration.user_id == user_id,
                 )
             )
 
@@ -572,9 +602,13 @@ class LLMProviderService:
             await self.db_session.commit()
 
             if result.rowcount == 0:
-                raise LLMProviderNotFoundError(f"Provider configuration {provider_id} not found for user {user_id}")
+                raise LLMProviderNotFoundError(
+                    f"Provider configuration {provider_id} not found for user {user_id}"
+                )
 
-            logger.info(f"Deleted provider configuration {provider_id} for user {user_id}")
+            logger.info(
+                f"Deleted provider configuration {provider_id} for user {user_id}"
+            )
             return True
 
         except Exception as e:
@@ -585,9 +619,7 @@ class LLMProviderService:
             raise LLMProviderError(f"Failed to delete provider configuration: {e}")
 
     async def get_provider_for_generation(
-        self,
-        provider_id: uuid.UUID,
-        user_id: uuid.UUID
+        self, provider_id: uuid.UUID, user_id: uuid.UUID
     ) -> Dict[str, Any]:
         """
         Get provider configuration prepared for LLM generation.
@@ -605,7 +637,9 @@ class LLMProviderService:
         provider = await self.get_provider_by_id(provider_id, user_id)
 
         if not provider.is_active:
-            raise LLMProviderNotFoundError(f"Provider configuration {provider_id} is inactive")
+            raise LLMProviderNotFoundError(
+                f"Provider configuration {provider_id} is inactive"
+            )
 
         try:
             # Mark provider as used
@@ -619,7 +653,9 @@ class LLMProviderService:
             logger.error(f"Failed to decrypt API key for provider {provider_id}: {e}")
             raise LLMProviderError(f"Failed to access provider credentials: {e}")
         except Exception as e:
-            logger.error(f"Failed to prepare provider {provider_id} for generation: {e}")
+            logger.error(
+                f"Failed to prepare provider {provider_id} for generation: {e}"
+            )
             raise LLMProviderError(f"Failed to prepare provider for generation: {e}")
 
     def get_supported_providers(self) -> Dict[str, Any]:
@@ -650,7 +686,9 @@ class LLMProviderService:
             }
         return dict(sorted(catalog.items()))
 
-    async def get_active_providers(self, user_id: uuid.UUID) -> List[LLMProviderConfiguration]:
+    async def get_active_providers(
+        self, user_id: uuid.UUID
+    ) -> List[LLMProviderConfiguration]:
         """
         Get active LLM provider configurations for a user.
 
@@ -661,17 +699,23 @@ class LLMProviderService:
             List of active provider configurations
         """
         try:
-            stmt = select(LLMProviderConfiguration).where(
-                and_(
-                    LLMProviderConfiguration.user_id == user_id,
-                    LLMProviderConfiguration.is_active == True
+            stmt = (
+                select(LLMProviderConfiguration)
+                .where(
+                    and_(
+                        LLMProviderConfiguration.user_id == user_id,
+                        LLMProviderConfiguration.is_active == True,
+                    )
                 )
-            ).order_by(LLMProviderConfiguration.created_at.desc())
+                .order_by(LLMProviderConfiguration.created_at.desc())
+            )
 
             result = await self.db_session.execute(stmt)
             providers = result.scalars().all()
 
-            logger.debug(f"Retrieved {len(providers)} active provider configurations for user {user_id}")
+            logger.debug(
+                f"Retrieved {len(providers)} active provider configurations for user {user_id}"
+            )
             return list(providers)
 
         except Exception as e:
@@ -716,4 +760,3 @@ class LLMProviderService:
             system_prompt=system_prompt,
             log_context=log_context,
         )
-

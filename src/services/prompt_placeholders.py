@@ -7,6 +7,7 @@ from typing import Dict
 @dataclass(frozen=True)
 class PlaceholderInfo:
     """Information about a template placeholder."""
+
     name: str
     is_required: bool
     description: str
@@ -40,7 +41,7 @@ SUPPORTED_PLACEHOLDERS: Dict[str, PlaceholderInfo] = {
         name="article_raw_html",
         is_required=False,
         description="Vollstänige Darstellung des Artikels im HTML-Format (für weitergehende Verarbeitung)",
-        example_value="<div class=\"article\"><p>Wir sitzen zu viert in einem neu renovierten Sitzungszimmer an der PHSG in St.Gallen.</p></div>",
+        example_value='<div class="article"><p>Wir sitzen zu viert in einem neu renovierten Sitzungszimmer an der PHSG in St.Gallen.</p></div>',
     ),
 }
 

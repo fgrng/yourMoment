@@ -21,8 +21,12 @@ class UserSession(Base):
     __tablename__ = "user_sessions"
 
     # Primary fields
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    id = Column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False
+    )
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
 
     # Session identification
     token_hash = Column(String(255), nullable=False, unique=True)  # Hashed JWT token
@@ -100,7 +104,7 @@ class UserSession(Base):
         cls,
         user_id: uuid.UUID,
         token_hash: str,
-        session_duration: timedelta = timedelta(hours=24)
+        session_duration: timedelta = timedelta(hours=24),
     ) -> "UserSession":
         """
         Create a new user session.
@@ -119,5 +123,5 @@ class UserSession(Base):
             token_hash=token_hash,
             expires_at=now + session_duration,
             last_activity=now,
-            is_active=True
+            is_active=True,
         )

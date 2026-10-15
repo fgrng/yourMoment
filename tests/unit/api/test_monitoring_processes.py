@@ -34,15 +34,25 @@ async def _create(db_session, user, **fields):
         mymoment_login_ids=[login.id],
         **fields,
     )
-    return await create_monitoring_process(process_data=data, current_user=user, session=db_session)
+    return await create_monitoring_process(
+        process_data=data, current_user=user, session=db_session
+    )
 
 
 async def test_create_returns_target_and_search(db_session):
     user = await create_user(db_session)
 
-    response = await _create(db_session, user, target={"classroom": "4711", "category": "7"}, search="Rotpanda")
+    response = await _create(
+        db_session,
+        user,
+        target={"classroom": "4711", "category": "7"},
+        search="Rotpanda",
+    )
 
-    assert (response.target, response.search) == ({"classroom": "4711", "category": "7"}, "Rotpanda")
+    assert (response.target, response.search) == (
+        {"classroom": "4711", "category": "7"},
+        "Rotpanda",
+    )
 
 
 async def test_create_rejects_an_invalid_target_with_422(db_session):
@@ -58,7 +68,10 @@ async def test_create_rejects_an_invalid_target_with_422(db_session):
 async def test_update_replaces_the_target_and_clears_the_search(db_session):
     user = await create_user(db_session)
     created = await _create(
-        db_session, user, target={"classroom": "4711", "arrangement": "12"}, search="Rotpanda"
+        db_session,
+        user,
+        target={"classroom": "4711", "arrangement": "12"},
+        search="Rotpanda",
     )
 
     response = await update_monitoring_process(
@@ -73,7 +86,9 @@ async def test_update_replaces_the_target_and_clears_the_search(db_session):
 
 async def test_update_without_target_and_search_keeps_both(db_session):
     user = await create_user(db_session)
-    created = await _create(db_session, user, target={"classroom": "4711"}, search="Rotpanda")
+    created = await _create(
+        db_session, user, target={"classroom": "4711"}, search="Rotpanda"
+    )
 
     response = await update_monitoring_process(
         process_id=created.id,
@@ -82,7 +97,11 @@ async def test_update_without_target_and_search_keeps_both(db_session):
         session=db_session,
     )
 
-    assert (response.name, response.target, response.search) == ("Neu", {"classroom": "4711"}, "Rotpanda")
+    assert (response.name, response.target, response.search) == (
+        "Neu",
+        {"classroom": "4711"},
+        "Rotpanda",
+    )
 
 
 async def test_update_rejects_an_invalid_target_with_422(db_session):
@@ -104,24 +123,40 @@ def _shown(response):
     return [(entry.label, entry.value) for entry in response.target_display]
 
 
-async def test_list_and_detail_show_the_target_with_the_labels_of_the_description(db_session):
+async def test_list_and_detail_show_the_target_with_the_labels_of_the_description(
+    db_session,
+):
     user = await create_user(db_session)
-    created = await _create(db_session, user, target={"classroom": "4711", "arrangement": "10"})
+    created = await _create(
+        db_session, user, target={"classroom": "4711", "arrangement": "10"}
+    )
 
     listed = await list_monitoring_processes(
         limit=50, offset=0, is_running=None, current_user=user, session=db_session
     )
-    detail = await get_monitoring_process(process_id=created.id, current_user=user, session=db_session)
+    detail = await get_monitoring_process(
+        process_id=created.id, current_user=user, session=db_session
+    )
 
-    assert _shown(listed[0]) == _shown(detail) == [("Schreibaufgabe", "10"), ("Klasse", "4711")]
+    assert (
+        _shown(listed[0])
+        == _shown(detail)
+        == [("Schreibaufgabe", "10"), ("Klasse", "4711")]
+    )
 
 
-async def test_target_is_shown_while_the_platform_is_unreachable(db_session, fake_platform):
-    fake_platform.target_description = (TargetDimension(key="classroom", label="Klasse", required=True),)
+async def test_target_is_shown_while_the_platform_is_unreachable(
+    db_session, fake_platform
+):
+    fake_platform.target_description = (
+        TargetDimension(key="classroom", label="Klasse", required=True),
+    )
     fake_platform.fail("connect", PlatformUnavailable("myMoment ist nicht erreichbar"))
     user = await create_user(db_session)
     created = await _create(db_session, user, target={"classroom": "4711"})
 
-    detail = await get_monitoring_process(process_id=created.id, current_user=user, session=db_session)
+    detail = await get_monitoring_process(
+        process_id=created.id, current_user=user, session=db_session
+    )
 
     assert _shown(detail) == [("Klasse", "4711")]

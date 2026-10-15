@@ -26,7 +26,15 @@ console.log(JSON.stringify(formatDateTime(...JSON.parse(args))));
 
 def _format_date_time(*args, timezone: str | None = "Europe/Zurich") -> str:
     result = subprocess.run(
-        ["node", "--input-type=module", "-e", _PROBE, str(UTILS_JS), timezone or "", json.dumps(args)],
+        [
+            "node",
+            "--input-type=module",
+            "-e",
+            _PROBE,
+            str(UTILS_JS),
+            timezone or "",
+            json.dumps(args),
+        ],
         capture_output=True,
         text=True,
         check=True,
@@ -43,7 +51,9 @@ def test_winter_time_is_shown_in_zurich_time():
 
 
 def test_page_timezone_utc_shows_utc_time():
-    assert _format_date_time("2026-07-14T07:30:00Z", timezone="UTC") == "14.07.2026 07:30"
+    assert (
+        _format_date_time("2026-07-14T07:30:00Z", timezone="UTC") == "14.07.2026 07:30"
+    )
 
 
 def test_midnight_is_shown_as_hour_zero():
@@ -51,7 +61,10 @@ def test_midnight_is_shown_as_hour_zero():
 
 
 def test_date_only_uses_local_date():
-    assert _format_date_time("2026-07-14T22:30:00Z", "-", {"dateOnly": True}) == "15.07.2026"
+    assert (
+        _format_date_time("2026-07-14T22:30:00Z", "-", {"dateOnly": True})
+        == "15.07.2026"
+    )
 
 
 def test_missing_time_shows_fallback():
@@ -63,4 +76,6 @@ def test_invalid_time_shows_fallback():
 
 
 def test_page_without_timezone_shows_zurich_time():
-    assert _format_date_time("2026-07-14T07:30:00Z", timezone=None) == "14.07.2026 09:30"
+    assert (
+        _format_date_time("2026-07-14T07:30:00Z", timezone=None) == "14.07.2026 09:30"
+    )

@@ -10,7 +10,11 @@ from src.config.settings import get_settings
 from src.models.ai_comment import AIComment
 from src.utils.datetimes import utcnow
 
-from tests.fixtures.factories._shared import ensure_same_user, next_sequence, require_owner
+from tests.fixtures.factories._shared import (
+    ensure_same_user,
+    next_sequence,
+    require_owner,
+)
 
 
 def _set_default(d: dict[str, Any], key: str, value: Any) -> None:
@@ -24,7 +28,11 @@ def _apply_state_defaults(status: str, kwargs: dict[str, Any]) -> dict[str, Any]
 
     if status in {"prepared", "generated", "posting", "posted", "failed"}:
         _set_default(defaults, "article_content", "This is a prepared article body.")
-        _set_default(defaults, "article_raw_html", "<div class='article'><p>This is a prepared article body.</p></div>")
+        _set_default(
+            defaults,
+            "article_raw_html",
+            "<div class='article'><p>This is a prepared article body.</p></div>",
+        )
 
     if status in {"generated", "posting", "posted"}:
         _set_default(
@@ -32,14 +40,20 @@ def _apply_state_defaults(status: str, kwargs: dict[str, Any]) -> dict[str, Any]
             "comment_content",
             f"<p>{prefix}</p><p>Constructive feedback for the student article.</p>",
         )
-        _set_default(defaults, "reasoning_content", "The article is encouraging and specific.")
+        _set_default(
+            defaults, "reasoning_content", "The article is encouraging and specific."
+        )
         _set_default(defaults, "ai_model_name", "gpt-4o-mini")
         _set_default(defaults, "ai_provider_name", "openai")
         _set_default(defaults, "generation_tokens", 123)
         _set_default(defaults, "generation_time_ms", 456)
 
     if status == "posted":
-        _set_default(defaults, "mymoment_comment_id", f"comment-{next_sequence('posted_comment_id')}")
+        _set_default(
+            defaults,
+            "mymoment_comment_id",
+            f"comment-{next_sequence('posted_comment_id')}",
+        )
         _set_default(defaults, "posted_at", utcnow())
 
     if status == "failed":
@@ -68,35 +82,59 @@ async def create_ai_comment(
 ) -> AIComment:
     """Persist a valid `AIComment` in the requested pipeline state."""
     owner = require_owner(user=user, user_id=user_id)
-    ensure_same_user(*(record for record in (monitoring_process, mymoment_login, prompt_template, llm_provider) if record is not None))
+    ensure_same_user(
+        *(
+            record
+            for record in (
+                monitoring_process,
+                mymoment_login,
+                prompt_template,
+                llm_provider,
+            )
+            if record is not None
+        )
+    )
 
     # status=posted requires a login
     if status == "posted" and mymoment_login is None and mymoment_login_id is None:
         from tests.fixtures.factories.mymoment import create_mymoment_login
-        mymoment_login = await create_mymoment_login(session, user=owner["user"], user_id=owner["user_id"])
+
+        mymoment_login = await create_mymoment_login(
+            session, user=owner["user"], user_id=owner["user_id"]
+        )
 
     index = next_sequence("ai_comment")
-    
+
     # Start with caller-provided overrides and factory defaults
     fields = {
         "mymoment_article_id": overrides.pop("mymoment_article_id", f"article-{index}"),
         "user": owner["user"],
         "user_id": owner["user_id"],
         "mymoment_login": mymoment_login,
-        "mymoment_login_id": mymoment_login.id if mymoment_login is not None else mymoment_login_id,
+        "mymoment_login_id": mymoment_login.id
+        if mymoment_login is not None
+        else mymoment_login_id,
         "monitoring_process": monitoring_process,
         "monitoring_process_id": (
-            monitoring_process.id if monitoring_process is not None else monitoring_process_id
+            monitoring_process.id
+            if monitoring_process is not None
+            else monitoring_process_id
         ),
         "prompt_template": prompt_template,
-        "prompt_template_id": prompt_template.id if prompt_template is not None else prompt_template_id,
+        "prompt_template_id": prompt_template.id
+        if prompt_template is not None
+        else prompt_template_id,
         "llm_provider": llm_provider,
-        "llm_provider_id": llm_provider.id if llm_provider is not None else llm_provider_id,
+        "llm_provider_id": llm_provider.id
+        if llm_provider is not None
+        else llm_provider_id,
         "article_title": overrides.pop("article_title", f"Article Title {index}"),
         "article_author": overrides.pop("article_author", f"Author {index}"),
         "article_category": overrides.pop("article_category", 7),
         "article_task_id": overrides.pop("article_task_id", 4),
-        "article_url": overrides.pop("article_url", f"https://www.mymoment.ch/article/{index}/"),
+        "article_url": overrides.pop(
+            "article_url", f"https://www.mymoment.ch/article/{index}/"
+        ),
         "article_published_at": overrides.pop("article_published_at", utcnow()),
         "article_edited_at": overrides.pop("article_edited_at", utcnow()),
         "article_scraped_at": overrides.pop("article_scraped_at", utcnow()),
@@ -114,13 +152,13 @@ async def create_ai_comment(
         "retry_count": overrides.pop("retry_count", 0),
         "is_active": overrides.pop("is_active", True),
     }
-    
+
     # Handle content fields separately to allow explicit None overrides if status permits
     fields["article_content"] = overrides.pop("article_content", None)
     fields["article_raw_html"] = overrides.pop("article_raw_html", None)
     fields["comment_content"] = overrides.pop("comment_content", None)
     fields["reasoning_content"] = overrides.pop("reasoning_content", None)
-    
+
     # Merge any remaining developer-provided overrides
     fields.update(overrides)
 
@@ -133,7 +171,9 @@ async def create_ai_comment(
     return comment
 
 
-async def create_discovered_ai_comment(session: AsyncSession, **kwargs: Any) -> AIComment:
+async def create_discovered_ai_comment(
+    session: AsyncSession, **kwargs: Any
+) -> AIComment:
     """Persist a `discovered` AI comment."""
     return await create_ai_comment(session, status="discovered", **kwargs)
 
@@ -143,7 +183,9 @@ async def create_prepared_ai_comment(session: AsyncSession, **kwargs: Any) -> AI
     return await create_ai_comment(session, status="prepared", **kwargs)
 
 
-async def create_generated_ai_comment(session: AsyncSession, **kwargs: Any) -> AIComment:
+async def create_generated_ai_comment(
+    session: AsyncSession, **kwargs: Any
+) -> AIComment:
     """Persist a `generated` AI comment."""
     return await create_ai_comment(session, status="generated", **kwargs)
 

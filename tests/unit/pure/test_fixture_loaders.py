@@ -5,7 +5,6 @@ Verify that the three public loader functions work correctly and that
 they fail with a clear, narrow exception on bad input.
 """
 
-
 import pytest
 
 from tests.fixtures.loaders import (
@@ -28,6 +27,7 @@ class TestLoadHtmlFixture:
 
     def test_all_manifest_fixtures_are_loadable(self):
         from tests.fixtures.loaders import load_manifest
+
         manifest = load_manifest()
         for entry in manifest["fixtures"]:
             name = entry["file"]

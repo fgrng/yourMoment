@@ -39,6 +39,7 @@ llm_summary_logger = logging.getLogger("yourmoment.llm")
 @dataclass
 class CommentSnapshot:
     """Lightweight snapshot of an AIComment for processing."""
+
     id: uuid.UUID
     mymoment_article_id: str
     article_title: str
@@ -58,6 +59,7 @@ class CommentSnapshot:
 @dataclass
 class PromptConfig:
     """Cached prompt template configuration."""
+
     template_model: PromptTemplate
 
 
@@ -72,7 +74,9 @@ class CommentGenerationTask(BaseTask):
         sessionmaker = await self.db_manager.create_sessionmaker()
         return sessionmaker()
 
-    async def _read_comment_snapshot(self, ai_comment_id: uuid.UUID) -> Optional[CommentSnapshot]:
+    async def _read_comment_snapshot(
+        self, ai_comment_id: uuid.UUID
+    ) -> Optional[CommentSnapshot]:
         """Read a single AIComment with the fields needed for generation."""
         session = await self.get_async_session()
         async with session:
@@ -98,9 +102,7 @@ class CommentGenerationTask(BaseTask):
             )
 
     def _format_user_prompt(
-        self,
-        article_snapshot: CommentSnapshot,
-        prompt_config: PromptConfig
+        self, article_snapshot: CommentSnapshot, prompt_config: PromptConfig
     ) -> str:
         """
         Format user prompt template with article data.
@@ -114,14 +116,20 @@ class CommentGenerationTask(BaseTask):
         """
         # Build context dictionary from article snapshot
         context = {
-            'article_title': article_snapshot.article_title or '',
-            'article_content': article_snapshot.article_content or '',
-            'article_author': article_snapshot.article_author or '',
-            'article_category': str(article_snapshot.article_category) if article_snapshot.article_category else '',
-            'article_published_at': article_snapshot.article_published_at.isoformat() if article_snapshot.article_published_at else '',
-            'article_url': article_snapshot.article_url or '',
-            'article_raw_html': (article_snapshot.article_raw_html or '')[:5000],
-            'article_edited_at': article_snapshot.article_edited_at.isoformat() if article_snapshot.article_edited_at else '',
+            "article_title": article_snapshot.article_title or "",
+            "article_content": article_snapshot.article_content or "",
+            "article_author": article_snapshot.article_author or "",
+            "article_category": str(article_snapshot.article_category)
+            if article_snapshot.article_category
+            else "",
+            "article_published_at": article_snapshot.article_published_at.isoformat()
+            if article_snapshot.article_published_at
+            else "",
+            "article_url": article_snapshot.article_url or "",
+            "article_raw_html": (article_snapshot.article_raw_html or "")[:5000],
+            "article_edited_at": article_snapshot.article_edited_at.isoformat()
+            if article_snapshot.article_edited_at
+            else "",
         }
 
         # Render using model method
@@ -286,7 +294,9 @@ class CommentGenerationTask(BaseTask):
 
                 ai_comment = await session.get(AIComment, ai_comment_id)
                 if not ai_comment:
-                    logger.warning(f"AIComment {ai_comment_id} not found for failure marking")
+                    logger.warning(
+                        f"AIComment {ai_comment_id} not found for failure marking"
+                    )
                     return
                 logger.info(
                     "Skipping stale generation failure mark for AIComment %s with current status=%s",
@@ -299,7 +309,9 @@ class CommentGenerationTask(BaseTask):
                 f"(original error: {error_message!r}): {db_err}"
             )
 
-    async def _generate_single_comment_async(self, ai_comment_id: uuid.UUID) -> Dict[str, Any]:
+    async def _generate_single_comment_async(
+        self, ai_comment_id: uuid.UUID
+    ) -> Dict[str, Any]:
         """Generate one AI comment by moving prepared -> generated idempotently."""
         start_time = utcnow()
         snapshot = await self._read_comment_snapshot(ai_comment_id)
@@ -351,8 +363,12 @@ class CommentGenerationTask(BaseTask):
             )
 
         if not provider:
-            error_msg = f"LLM provider configuration not found for comment {snapshot.id}"
-            await self._mark_comment_failed(snapshot.id, error_msg, expected_status="prepared")
+            error_msg = (
+                f"LLM provider configuration not found for comment {snapshot.id}"
+            )
+            await self._mark_comment_failed(
+                snapshot.id, error_msg, expected_status="prepared"
+            )
             return {
                 "ai_comment_id": str(ai_comment_id),
                 "status": "failed",
@@ -361,7 +377,9 @@ class CommentGenerationTask(BaseTask):
             }
         if not prompt_template:
             error_msg = f"Prompt template not found for comment {snapshot.id}"
-            await self._mark_comment_failed(snapshot.id, error_msg, expected_status="prepared")
+            await self._mark_comment_failed(
+                snapshot.id, error_msg, expected_status="prepared"
+            )
             return {
                 "ai_comment_id": str(ai_comment_id),
                 "status": "failed",
@@ -390,7 +408,9 @@ class CommentGenerationTask(BaseTask):
                     f"Comment failed validation for article {snapshot.mymoment_article_id}: "
                     f"{validation['errors']}"
                 )
-                await self._mark_comment_failed(snapshot.id, error_msg, expected_status="prepared")
+                await self._mark_comment_failed(
+                    snapshot.id, error_msg, expected_status="prepared"
+                )
                 return {
                     "ai_comment_id": str(ai_comment_id),
                     "status": "failed",
@@ -452,12 +472,14 @@ def _normalize_identifier(identifier: Any, compat_args: tuple[Any, ...]) -> str:
 @celery_app.task(
     bind=True,
     base=CommentGenerationTask,
-    name='src.tasks.comment_generation.generate_comment_for_article',
-    queue='generation',
+    name="src.tasks.comment_generation.generate_comment_for_article",
+    queue="generation",
     max_retries=3,
-    default_retry_delay=60
+    default_retry_delay=60,
 )
-def generate_comment_for_article(self, ai_comment_id: Any, *compat_args: Any) -> Dict[str, Any]:
+def generate_comment_for_article(
+    self, ai_comment_id: Any, *compat_args: Any
+) -> Dict[str, Any]:
     """Generate a comment for a single AIComment row."""
     ai_comment_id = _normalize_identifier(ai_comment_id, compat_args)
     task_id = getattr(self.request, "id", None)
@@ -466,7 +488,9 @@ def generate_comment_for_article(self, ai_comment_id: Any, *compat_args: Any) ->
             "Starting single-comment generation task %s",
             format_log_context(task_id=task_id, ai_comment_id=ai_comment_id),
         )
-        result = asyncio.run(self._generate_single_comment_async(uuid.UUID(ai_comment_id)))
+        result = asyncio.run(
+            self._generate_single_comment_async(uuid.UUID(ai_comment_id))
+        )
         logger.info(
             "Single-comment generation task completed %s",
             format_log_context(
@@ -477,7 +501,7 @@ def generate_comment_for_article(self, ai_comment_id: Any, *compat_args: Any) ->
         )
         return result
     except Exception as exc:
-        countdown = min(60 * (2 ** self.request.retries), 300)
+        countdown = min(60 * (2**self.request.retries), 300)
         logger.warning(
             "Single-comment generation task failed, retrying %s",
             format_log_context(

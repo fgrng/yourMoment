@@ -11,7 +11,12 @@ from tests.fixtures.builders import build_scenario
 from tests.fixtures.stubs import CeleryTaskContextStub, build_litellm_exception
 
 
-pytestmark = [pytest.mark.unit, pytest.mark.database, pytest.mark.celery, pytest.mark.llm]
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.database,
+    pytest.mark.celery,
+    pytest.mark.llm,
+]
 
 
 def _bind_task_sessions(task, db_engine):
@@ -34,7 +39,9 @@ async def test_generate_single_comment_persists_provider_model_and_token_metadat
 
     task = _bind_task_sessions(CommentGenerationTask(), db_engine)
 
-    async def fake_generate_with_llm(*, formatted_prompt, system_prompt, llm_config, log_context):
+    async def fake_generate_with_llm(
+        *, formatted_prompt, system_prompt, llm_config, log_context
+    ):
         assert scenario["ai_comment"].article_title in formatted_prompt
         assert system_prompt == scenario["prompt"].system_prompt
         assert llm_config.provider_name == scenario["provider"].provider_name
@@ -58,7 +65,9 @@ async def test_generate_single_comment_persists_provider_model_and_token_metadat
 
     result = await task._generate_single_comment_async(scenario["ai_comment"].id)
 
-    assert_task_result_shape(result, required_keys=("status", "ai_comment_id"), expected_status="generated")
+    assert_task_result_shape(
+        result, required_keys=("status", "ai_comment_id"), expected_status="generated"
+    )
     assert result["generation_time_ms"] == 123
 
     await db_session.refresh(scenario["ai_comment"])
@@ -67,11 +76,15 @@ async def test_generate_single_comment_persists_provider_model_and_token_metadat
     assert scenario["ai_comment"].ai_provider_name == "openai"
     assert scenario["ai_comment"].generation_tokens == 77
     assert scenario["ai_comment"].generation_time_ms == 123
-    assert scenario["ai_comment"].reasoning_content.startswith("The article already has")
+    assert scenario["ai_comment"].reasoning_content.startswith(
+        "The article already has"
+    )
     assert scenario["ai_comment"].has_valid_ai_prefix is True
 
 
-async def test_generate_single_comment_skips_rows_that_are_already_generated(db_session, db_engine):
+async def test_generate_single_comment_skips_rows_that_are_already_generated(
+    db_session, db_engine
+):
     scenario = await build_scenario("generated_not_posted", db_session)
     await db_session.commit()
 
@@ -110,7 +123,9 @@ async def test_update_generated_comment_is_a_stale_no_op(db_session, db_engine):
     assert scenario["ai_comment"].generation_tokens == original_tokens
 
 
-async def test_mark_comment_failed_persists_generation_failure_metadata(db_session, db_engine):
+async def test_mark_comment_failed_persists_generation_failure_metadata(
+    db_session, db_engine
+):
     scenario = await build_scenario("prepared_not_generated", db_session)
     await db_session.commit()
 
@@ -139,7 +154,9 @@ def test_generate_single_comment_wrapper_uses_capped_backoff_and_marks_failure(
     async def fail_generation(_ai_comment_id):
         raise llm_error
 
-    async def fake_mark_failed(ai_comment_id, error_message, expected_status="prepared"):
+    async def fake_mark_failed(
+        ai_comment_id, error_message, expected_status="prepared"
+    ):
         marked_failures.append(
             {
                 "ai_comment_id": ai_comment_id,
@@ -153,7 +170,9 @@ def test_generate_single_comment_wrapper_uses_capped_backoff_and_marks_failure(
     retry_stub._mark_comment_failed = fake_mark_failed
 
     ai_comment_id = "d4de0afd-0553-4fef-9fc1-df5dd7e75c2b"
-    result = comment_generation.generate_comment_for_article.run.__func__(retry_stub, ai_comment_id)
+    result = comment_generation.generate_comment_for_article.run.__func__(
+        retry_stub, ai_comment_id
+    )
 
     assert result["status"] == "failed"
     assert retry_stub.retry_calls[0]["countdown"] == 300

@@ -17,7 +17,9 @@ from tests.fixtures.factories import (
 pytestmark = pytest.mark.database
 
 
-async def test_create_new_session_round_trip_and_safe_display_use_model_helpers(db_session):
+async def test_create_new_session_round_trip_and_safe_display_use_model_helpers(
+    db_session,
+):
     user = await create_user(db_session)
     login = await create_mymoment_login(db_session, user=user)
     session_record = await create_mymoment_session(
@@ -48,8 +50,12 @@ async def test_create_new_session_round_trip_and_safe_display_use_model_helpers(
 async def test_expiry_usability_and_remaining_hours_reflect_session_state(db_session):
     user = await create_user(db_session)
     login = await create_mymoment_login(db_session, user=user)
-    active_session = await create_mymoment_session(db_session, mymoment_login=login, duration_hours=6)
-    expired_session = await create_expired_mymoment_session(db_session, mymoment_login=login)
+    active_session = await create_mymoment_session(
+        db_session, mymoment_login=login, duration_hours=6
+    )
+    expired_session = await create_expired_mymoment_session(
+        db_session, mymoment_login=login
+    )
 
     assert active_session.is_expired() is False
     assert active_session.is_usable() is True
@@ -81,7 +87,10 @@ async def test_touch_renew_update_and_deactivate_helpers_manage_lifecycle(db_ses
     assert session_record.last_accessed >= before_touch
 
     session_record.update_session_data({"cookie": "rotated", "csrf": "new-token"})
-    assert session_record.get_session_data() == {"cookie": "rotated", "csrf": "new-token"}
+    assert session_record.get_session_data() == {
+        "cookie": "rotated",
+        "csrf": "new-token",
+    }
 
     session_record.deactivate()
     assert session_record.is_active is False

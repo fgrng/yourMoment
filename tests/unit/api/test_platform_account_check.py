@@ -36,10 +36,16 @@ async def test_check_connects_with_the_decrypted_account(db_session, fake_platfo
     response = await _check(db_session, user, login)
 
     [account] = fake_platform.connected_accounts
-    assert (response["username"], account.id, account.username) == ("teacher", login.id, "teacher")
+    assert (response["username"], account.id, account.username) == (
+        "teacher",
+        login.id,
+        "teacher",
+    )
 
 
-async def test_check_logs_in_instead_of_reusing_a_stored_session(db_session, fake_platform):
+async def test_check_logs_in_instead_of_reusing_a_stored_session(
+    db_session, fake_platform
+):
     user, login = await _stored_login(db_session)
 
     await _check(db_session, user, login)
@@ -50,8 +56,14 @@ async def test_check_logs_in_instead_of_reusing_a_stored_session(db_session, fak
 @pytest.mark.parametrize(
     ("error", "expected"),
     [
-        (PlatformAuthError("wrong password"), (401, "mymoment_credentials_authentication_failed")),
-        (PlatformUnavailable("timeout"), (503, "mymoment_credentials_platform_unavailable")),
+        (
+            PlatformAuthError("wrong password"),
+            (401, "mymoment_credentials_authentication_failed"),
+        ),
+        (
+            PlatformUnavailable("timeout"),
+            (503, "mymoment_credentials_platform_unavailable"),
+        ),
     ],
     ids=["wrong-credentials", "unavailable"],
 )

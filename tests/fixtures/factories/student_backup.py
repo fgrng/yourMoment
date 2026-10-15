@@ -10,7 +10,11 @@ from src.models.article_version import ArticleVersion
 from src.models.tracked_student import TrackedStudent
 from src.utils.datetimes import utcnow
 
-from tests.fixtures.factories._shared import ensure_same_user, next_sequence, require_owner
+from tests.fixtures.factories._shared import (
+    ensure_same_user,
+    next_sequence,
+    require_owner,
+)
 
 
 async def create_tracked_student(
@@ -25,7 +29,10 @@ async def create_tracked_student(
     """Persist a valid `TrackedStudent`."""
     owner = require_owner(user=user, user_id=user_id)
     if mymoment_login is not None:
-        ensure_same_user(owner["user"] or type("Owner", (), {"user_id": owner["user_id"]})(), mymoment_login)
+        ensure_same_user(
+            owner["user"] or type("Owner", (), {"user_id": owner["user_id"]})(),
+            mymoment_login,
+        )
         if not mymoment_login.is_admin:
             raise ValueError("tracked_student fixtures require an admin myMoment login")
 
@@ -34,7 +41,9 @@ async def create_tracked_student(
         user=owner["user"],
         user_id=owner["user_id"],
         mymoment_login=mymoment_login,
-        mymoment_login_id=mymoment_login.id if mymoment_login is not None else mymoment_login_id,
+        mymoment_login_id=mymoment_login.id
+        if mymoment_login is not None
+        else mymoment_login_id,
         mymoment_student_id=overrides.pop("mymoment_student_id", 1000 + index),
         display_name=overrides.pop("display_name", f"Tracked Student {index}"),
         notes=overrides.pop("notes", "Fixture student for backup tests."),
@@ -61,22 +70,31 @@ async def create_article_version(
     """Persist a valid `ArticleVersion` with a computed content hash."""
     owner = require_owner(user=user, user_id=user_id)
     if tracked_student is None and tracked_student_id is None:
-        raise ValueError("article_version fixtures require tracked_student or tracked_student_id")
+        raise ValueError(
+            "article_version fixtures require tracked_student or tracked_student_id"
+        )
     if tracked_student is not None:
-        ensure_same_user(owner["user"] or type("Owner", (), {"user_id": owner["user_id"]})(), tracked_student)
+        ensure_same_user(
+            owner["user"] or type("Owner", (), {"user_id": owner["user_id"]})(),
+            tracked_student,
+        )
 
     index = next_sequence("article_version")
     version = ArticleVersion(
         user=owner["user"],
         user_id=owner["user_id"],
         tracked_student=tracked_student,
-        tracked_student_id=tracked_student.id if tracked_student is not None else tracked_student_id,
+        tracked_student_id=tracked_student.id
+        if tracked_student is not None
+        else tracked_student_id,
         mymoment_article_id=overrides.pop("mymoment_article_id", 2000 + index),
         version_number=overrides.pop("version_number", 1),
         article_title=overrides.pop("article_title", f"Backed Up Article {index}"),
         article_url=overrides.pop("article_url", f"/article/{2000 + index}/"),
         article_status=overrides.pop("article_status", "Publiziert"),
-        article_visibility=overrides.pop("article_visibility", "Beispielklasse A (Testschule)"),
+        article_visibility=overrides.pop(
+            "article_visibility", "Beispielklasse A (Testschule)"
+        ),
         article_category=overrides.pop("article_category", "Informieren"),
         article_task=overrides.pop("article_task", "Fixture task"),
         article_last_modified=overrides.pop("article_last_modified", utcnow()),

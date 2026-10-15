@@ -83,19 +83,27 @@ async def test_monitoring_process_factory_uses_junction_rows(db_session):
     )
 
     login_links = (
-        await db_session.execute(
-            select(MonitoringProcessLogin).where(
-                MonitoringProcessLogin.monitoring_process_id == process.id
+        (
+            await db_session.execute(
+                select(MonitoringProcessLogin).where(
+                    MonitoringProcessLogin.monitoring_process_id == process.id
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     prompt_links = (
-        await db_session.execute(
-            select(MonitoringProcessPrompt).where(
-                MonitoringProcessPrompt.monitoring_process_id == process.id
+        (
+            await db_session.execute(
+                select(MonitoringProcessPrompt).where(
+                    MonitoringProcessPrompt.monitoring_process_id == process.id
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     assert len(login_links) == 1
     assert len(prompt_links) == 1
@@ -181,4 +189,6 @@ async def test_student_backup_factories_build_versions_with_hashes(db_session):
 
     assert_owned_by(tracked_student, user)
     assert_owned_by(version, user)
-    assert version.content_hash == version.compute_content_hash("Versioned content for hashing.")
+    assert version.content_hash == version.compute_content_hash(
+        "Versioned content for hashing."
+    )

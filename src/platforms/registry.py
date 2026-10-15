@@ -34,7 +34,9 @@ def adapter_for_platform(platform: str) -> PlatformAdapter:
     return _default_mymoment_adapter()
 
 
-def connect(account: PlatformAccount, *, fresh_login: bool = False) -> AsyncContextManager[PlatformConnection]:
+def connect(
+    account: PlatformAccount, *, fresh_login: bool = False
+) -> AsyncContextManager[PlatformConnection]:
     """Open a connection to the account's platform: `async with connect(account) as conn`.
 
     `fresh_login` checks the credentials themselves instead of reusing a stored session.

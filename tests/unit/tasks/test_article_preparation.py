@@ -6,7 +6,13 @@ import pytest
 from celery.utils.threads import LocalStack
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from src.platforms import ArticleContent, ArticleRef, PlatformAuthError, PlatformRejected, PlatformUnavailable
+from src.platforms import (
+    ArticleContent,
+    ArticleRef,
+    PlatformAuthError,
+    PlatformRejected,
+    PlatformUnavailable,
+)
 from src.tasks import article_preparation
 from src.tasks.article_preparation import ArticlePreparationTask
 from tests.fixtures.assertions import assert_task_result_shape
@@ -14,7 +20,12 @@ from tests.fixtures.builders import build_scenario
 from tests.fixtures.stubs import CeleryTaskContextStub
 
 
-pytestmark = [pytest.mark.unit, pytest.mark.database, pytest.mark.celery, pytest.mark.web_scraping]
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.database,
+    pytest.mark.celery,
+    pytest.mark.web_scraping,
+]
 
 
 def _bind_task_sessions(task, db_engine):
@@ -39,7 +50,9 @@ async def _run_prepare_task(task, ai_comment_id):
         task.push_request(id="fixture-task-id", retries=0)
         task.retry = _retry
         try:
-            return article_preparation.prepare_article_content.run.__func__(task, str(ai_comment_id))
+            return article_preparation.prepare_article_content.run.__func__(
+                task, str(ai_comment_id)
+            )
         finally:
             task.pop_request()
 
@@ -65,11 +78,16 @@ async def test_prepare_single_article_transitions_discovered_to_prepared(
     task = _bind_task_sessions(ArticlePreparationTask(), db_engine)
     result = await task._prepare_single_article_async(scenario["ai_comment"].id)
 
-    assert_task_result_shape(result, required_keys=("status", "ai_comment_id"), expected_status="prepared")
+    assert_task_result_shape(
+        result, required_keys=("status", "ai_comment_id"), expected_status="prepared"
+    )
 
     await db_session.refresh(scenario["ai_comment"])
     assert scenario["ai_comment"].status == "prepared"
-    assert scenario["ai_comment"].article_content == "Prepared article body captured from the platform."
+    assert (
+        scenario["ai_comment"].article_content
+        == "Prepared article body captured from the platform."
+    )
     assert scenario["ai_comment"].article_raw_html == (
         "<article><p>Prepared article body captured from the platform.</p></article>"
     )
@@ -112,7 +130,9 @@ async def test_prepare_single_article_propagates_platform_errors_for_retry(
     assert scenario["ai_comment"].status == "discovered"
 
 
-async def test_prepare_single_article_ignores_a_category_that_is_no_number(db_session, db_engine, fake_platform):
+async def test_prepare_single_article_ignores_a_category_that_is_no_number(
+    db_session, db_engine, fake_platform
+):
     scenario = await build_scenario("article_discovered_not_prepared", db_session)
     await db_session.commit()
     fake_platform.add_article(scenario["ai_comment"].mymoment_article_id, category="²")
@@ -143,12 +163,19 @@ async def test_final_platform_errors_mark_the_article_failed_without_retry(
     await _run_prepare_task(task, scenario["ai_comment"].id)
 
     await db_session.refresh(scenario["ai_comment"])
-    assert (scenario["ai_comment"].status, scenario["ai_comment"].error_message) == ("failed", str(error))
+    assert (scenario["ai_comment"].status, scenario["ai_comment"].error_message) == (
+        "failed",
+        str(error),
+    )
 
 
-async def test_inactive_platform_account_marks_the_article_failed_without_retry(db_session, db_engine, fake_platform):
+async def test_inactive_platform_account_marks_the_article_failed_without_retry(
+    db_session, db_engine, fake_platform
+):
     scenario = await build_scenario(
-        "article_discovered_not_prepared", db_session, overrides={"login": {"is_active": False}}
+        "article_discovered_not_prepared",
+        db_session,
+        overrides={"login": {"is_active": False}},
     )
     await db_session.commit()
 
@@ -159,7 +186,9 @@ async def test_inactive_platform_account_marks_the_article_failed_without_retry(
     assert scenario["ai_comment"].status == "failed"
 
 
-async def test_prepare_single_article_skips_rows_that_already_advanced(db_session, db_engine):
+async def test_prepare_single_article_skips_rows_that_already_advanced(
+    db_session, db_engine
+):
     scenario = await build_scenario("prepared_not_generated", db_session)
     await db_session.commit()
 
@@ -170,7 +199,9 @@ async def test_prepare_single_article_skips_rows_that_already_advanced(db_sessio
     assert result["reason"] == "already_prepared"
 
 
-async def test_update_article_content_is_idempotent_for_stale_rows(db_session, db_engine):
+async def test_update_article_content_is_idempotent_for_stale_rows(
+    db_session, db_engine
+):
     scenario = await build_scenario("prepared_not_generated", db_session)
     original_content = scenario["ai_comment"].article_content
     await db_session.commit()
@@ -208,7 +239,9 @@ async def test_mark_article_failed_persists_failure_metadata(db_session, db_engi
     assert marked is True
     await db_session.refresh(scenario["ai_comment"])
     assert scenario["ai_comment"].status == "failed"
-    assert scenario["ai_comment"].error_message == "Max retries exhausted: scraper blew up"
+    assert (
+        scenario["ai_comment"].error_message == "Max retries exhausted: scraper blew up"
+    )
     assert scenario["ai_comment"].failed_at is not None
 
 
@@ -221,7 +254,9 @@ def test_prepare_single_article_wrapper_uses_exponential_backoff(
     async def fail_prepare(_ai_comment_id):
         raise RuntimeError("scraper blew up")
 
-    async def fake_mark_failed(ai_comment_id, error_message, expected_status="discovered"):
+    async def fake_mark_failed(
+        ai_comment_id, error_message, expected_status="discovered"
+    ):
         marked_failures.append(
             {
                 "ai_comment_id": ai_comment_id,
@@ -235,9 +270,13 @@ def test_prepare_single_article_wrapper_uses_exponential_backoff(
     retry_stub._mark_article_failed = fake_mark_failed
 
     ai_comment_id = "4b4fce69-df53-41e1-a3d9-46f0afdbf8a9"
-    result = article_preparation.prepare_article_content.run.__func__(retry_stub, ai_comment_id)
+    result = article_preparation.prepare_article_content.run.__func__(
+        retry_stub, ai_comment_id
+    )
 
     assert result["status"] == "failed"
     assert retry_stub.retry_calls[0]["countdown"] == 240
     assert marked_failures[0]["expected_status"] == "discovered"
-    assert "Max retries exhausted: scraper blew up" in marked_failures[0]["error_message"]
+    assert (
+        "Max retries exhausted: scraper blew up" in marked_failures[0]["error_message"]
+    )

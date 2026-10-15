@@ -34,7 +34,7 @@ class User(Base):
         UUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
-        doc="Unique user identifier"
+        doc="Unique user identifier",
     )
 
     # Authentication fields
@@ -43,28 +43,25 @@ class User(Base):
         unique=True,
         nullable=False,
         index=True,
-        doc="User email address - unique across system"
+        doc="User email address - unique across system",
     )
 
     password_hash = Column(
         String(255),
         nullable=False,
-        doc="Bcrypt hashed password - never store plaintext (FR-017)"
+        doc="Bcrypt hashed password - never store plaintext (FR-017)",
     )
 
     # User status fields
     is_active = Column(
-        Boolean,
-        default=True,
-        nullable=False,
-        doc="Whether user account is active"
+        Boolean, default=True, nullable=False, doc="Whether user account is active"
     )
 
     is_verified = Column(
         Boolean,
         default=False,
         nullable=False,
-        doc="Whether user email has been verified"
+        doc="Whether user email has been verified",
     )
 
     # Timestamp fields for audit and tracking
@@ -72,7 +69,7 @@ class User(Base):
         UTCDateTime,
         server_default=func.now(),
         nullable=False,
-        doc="Account creation timestamp"
+        doc="Account creation timestamp",
     )
 
     updated_at = Column(
@@ -80,7 +77,7 @@ class User(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
-        doc="Last account update timestamp"
+        doc="Last account update timestamp",
     )
 
     # Relationships to other entities
@@ -88,42 +85,42 @@ class User(Base):
         "LLMProviderConfiguration",
         back_populates="user",
         cascade="all, delete-orphan",
-        doc="User's LLM provider configurations"
+        doc="User's LLM provider configurations",
     )
 
     monitoring_processes = relationship(
         "MonitoringProcess",
         back_populates="user",
         cascade="all, delete-orphan",
-        doc="User's monitoring processes"
+        doc="User's monitoring processes",
     )
 
     mymoment_logins = relationship(
         "MyMomentLogin",
         back_populates="user",
         cascade="all, delete-orphan",
-        doc="User's myMoment platform login credentials"
+        doc="User's myMoment platform login credentials",
     )
 
     user_sessions = relationship(
         "UserSession",
         back_populates="user",
         cascade="all, delete-orphan",
-        doc="User's application sessions"
+        doc="User's application sessions",
     )
 
     prompt_templates = relationship(
         "PromptTemplate",
         back_populates="user",
         cascade="all, delete-orphan",
-        doc="User's custom prompt templates"
+        doc="User's custom prompt templates",
     )
 
     ai_comments = relationship(
         "AIComment",
         back_populates="user",
         cascade="all, delete-orphan",
-        doc="User's AI-generated comments with article snapshots"
+        doc="User's AI-generated comments with article snapshots",
     )
 
     # Student Backup feature relationships
@@ -131,14 +128,14 @@ class User(Base):
         "TrackedStudent",
         back_populates="user",
         cascade="all, delete-orphan",
-        doc="User's tracked students for backup"
+        doc="User's tracked students for backup",
     )
 
     article_versions = relationship(
         "ArticleVersion",
         back_populates="user",
         cascade="all, delete-orphan",
-        doc="User's backed up article versions"
+        doc="User's backed up article versions",
     )
 
     def __repr__(self) -> str:
@@ -183,11 +180,12 @@ class User(Base):
             True if email format is valid, False otherwise
         """
         from pydantic import BaseModel, EmailStr
+
         class EmailDummy(BaseModel):
             email: EmailStr
 
         try:
-            EmailDummy(email = email)
+            EmailDummy(email=email)
             return True
         except ValueError:
             return False

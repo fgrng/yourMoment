@@ -77,7 +77,11 @@ TARGET_VALUES = {
 
 class FakeHarness:
     # The default target description of the fake platform
-    target_dimensions = [("category", "Category"), ("arrangement", "Arrangement"), ("classroom", "Classroom")]
+    target_dimensions = [
+        ("category", "Category"),
+        ("arrangement", "Arrangement"),
+        ("classroom", "Classroom"),
+    ]
 
     def __init__(self) -> None:
         self.adapter = FakePlatform()
@@ -93,11 +97,15 @@ class FakeHarness:
         self.adapter.fail("connect", PlatformUnavailable("connection refused"))
 
     def given_article(self) -> tuple[ArticleRef, str]:
-        ref = self.adapter.add_article("3170", title="Beispieldialog", body_text="Hallo.")
+        ref = self.adapter.add_article(
+            "3170", title="Beispieldialog", body_text="Hallo."
+        )
         return ref, "Beispieldialog"
 
     def given_target_values(self) -> None:
-        self.adapter.target_values = {key: list(values) for key, values in TARGET_VALUES.items()}
+        self.adapter.target_values = {
+            key: list(values) for key, values in TARGET_VALUES.items()
+        }
 
     def given_listed_articles(self, target=None) -> None:
         # Mirrors the "alle" classroom of articles_index.html: two Unterhalten (9), one Informieren (7)
@@ -116,7 +124,11 @@ class FakeHarness:
     def given_student_articles(self) -> StudentRef:
         # Mirrors student_dashboard.html: three articles of student 1042
         for article_id in ("2695", "2711", "2730"):
-            self.adapter.add_article(article_id, student="1042", edited_at=datetime(2026, 1, 28, 8, 24, tzinfo=UTC))
+            self.adapter.add_article(
+                article_id,
+                student="1042",
+                edited_at=datetime(2026, 1, 28, 8, 24, tzinfo=UTC),
+            )
         self.adapter.add_article("3170", student="1043")
         return StudentRef(id="1042")
 
@@ -125,7 +137,11 @@ class FakeHarness:
 
 
 class MyMomentHarness:
-    target_dimensions = [("category", "Kategorie"), ("arrangement", "Schreibaufgabe"), ("classroom", "Klasse")]
+    target_dimensions = [
+        ("category", "Kategorie"),
+        ("arrangement", "Schreibaufgabe"),
+        ("classroom", "Klasse"),
+    ]
 
     def __init__(self) -> None:
         self.http = AiohttpStubSession()
@@ -142,11 +158,15 @@ class MyMomentHarness:
         queue_login(self.http, succeed=False)
 
     def given_unreachable(self) -> None:
-        self.http.queue_response("GET", LOGIN_URL, aiohttp.ClientConnectionError("connection refused"))
+        self.http.queue_response(
+            "GET", LOGIN_URL, aiohttp.ClientConnectionError("connection refused")
+        )
 
     def given_article(self) -> tuple[ArticleRef, str]:
         queue_article(self.http, "3170")
-        return ArticleRef(id="3170", url=f"{MYMOMENT_BASE_URL}/article/3170/"), "Beispieldialog"
+        return ArticleRef(
+            id="3170", url=f"{MYMOMENT_BASE_URL}/article/3170/"
+        ), "Beispieldialog"
 
     def given_target_values(self) -> None:
         queue_targets(self.http)
@@ -161,7 +181,9 @@ class MyMomentHarness:
 
     def given_article_refusing_comments(self) -> ArticleRef:
         # A deleted article: myMoment answers 404 for its page
-        self.http.queue_response("GET", f"{MYMOMENT_BASE_URL}/article/3170/", AiohttpStubResponse(status=404))
+        self.http.queue_response(
+            "GET", f"{MYMOMENT_BASE_URL}/article/3170/", AiohttpStubResponse(status=404)
+        )
         return ArticleRef(id="3170", url=f"{MYMOMENT_BASE_URL}/article/3170/")
 
     def given_student_articles(self) -> StudentRef:
@@ -169,7 +191,11 @@ class MyMomentHarness:
         return StudentRef(id="1042")
 
     def posted_texts(self) -> list[str]:
-        return [r["kwargs"]["data"]["text"] for r in self.http.requests if r["method"] == "POST" and "/comment/" in r["url"]]
+        return [
+            r["kwargs"]["data"]["text"]
+            for r in self.http.requests
+            if r["method"] == "POST" and "/comment/" in r["url"]
+        ]
 
 
 @pytest.fixture(params=["fake", "mymoment"])
@@ -207,7 +233,11 @@ async def test_fetch_article_returns_its_content(harness):
     async with harness.adapter.connect(harness.account) as connection:
         content = await connection.fetch_article(ref)
 
-    assert (content.ref.id, content.title, bool(content.body_text)) == (ref.id, expected_title, True)
+    assert (content.ref.id, content.title, bool(content.body_text)) == (
+        ref.id,
+        expected_title,
+        True,
+    )
 
 
 async def test_fetched_article_url_is_absolute(harness):
@@ -363,9 +393,18 @@ def test_valid_target_with_every_dimension_is_accepted(harness):
         ({"classroom": "   "}, "classroom"),
         ({"classroom": 82}, "classroom"),
     ],
-    ids=["unknown-key", "non-string-key", "missing-required-key", "empty-value", "blank-value", "non-string-value"],
+    ids=[
+        "unknown-key",
+        "non-string-key",
+        "missing-required-key",
+        "empty-value",
+        "blank-value",
+        "non-string-value",
+    ],
 )
-def test_invalid_target_is_rejected_with_a_message_naming_the_key(harness, target, message):
+def test_invalid_target_is_rejected_with_a_message_naming_the_key(
+    harness, target, message
+):
     with pytest.raises(InvalidTarget, match=message):
         validate_target(harness.adapter, target)
 

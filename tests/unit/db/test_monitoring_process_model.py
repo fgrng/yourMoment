@@ -38,7 +38,9 @@ async def _create_process_bundle(db_session):
         target={"category": "7", "arrangement": "13", "classroom": "class-a"},
         search_filter="revision",
     )
-    await db_session.refresh(process, ["monitoring_process_logins", "monitoring_process_prompts"])
+    await db_session.refresh(
+        process, ["monitoring_process_logins", "monitoring_process_prompts"]
+    )
     return {
         "user": user,
         "provider": provider,
@@ -50,14 +52,18 @@ async def _create_process_bundle(db_session):
 
 async def test_status_helpers_and_timestamps_reflect_current_process_state(db_session):
     user = await create_user(db_session)
-    created_process = await create_monitoring_process(db_session, user=user, status="created")
+    created_process = await create_monitoring_process(
+        db_session, user=user, status="created"
+    )
     running_process = await create_monitoring_process(
         db_session,
         user=user,
         status="running",
         started_at=utcnow(),
     )
-    failed_process = await create_monitoring_process(db_session, user=user, status="failed")
+    failed_process = await create_monitoring_process(
+        db_session, user=user, status="failed"
+    )
 
     assert created_process.created_at is not None
     assert created_process.updated_at is not None
@@ -114,10 +120,14 @@ async def test_association_helpers_only_expose_active_links(db_session):
     process = bundle["process"]
     login_primary, login_secondary = bundle["logins"]
     prompt_primary, prompt_secondary = bundle["prompts"]
-    login_link_map = {link.mymoment_login_id: link for link in process.monitoring_process_logins}
+    login_link_map = {
+        link.mymoment_login_id: link for link in process.monitoring_process_logins
+    }
     login_link_primary = login_link_map[login_primary.id]
     login_link_secondary = login_link_map[login_secondary.id]
-    prompt_link_map = {p.prompt_template_id: p for p in process.monitoring_process_prompts}
+    prompt_link_map = {
+        p.prompt_template_id: p for p in process.monitoring_process_prompts
+    }
     prompt_link_secondary = prompt_link_map[prompt_secondary.id]
 
     assert login_link_primary.is_valid_association is True

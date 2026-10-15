@@ -14,7 +14,9 @@ pytestmark = [pytest.mark.unit, pytest.mark.database]
 
 
 async def _generated_comment_on_platform(db_session, fake_platform, **ai_comment):
-    scenario = await build_scenario("generated_not_posted", db_session, overrides={"ai_comment": ai_comment})
+    scenario = await build_scenario(
+        "generated_not_posted", db_session, overrides={"ai_comment": ai_comment}
+    )
     await db_session.commit()
     fake_platform.add_article(scenario["ai_comment"].mymoment_article_id)
     return scenario
@@ -33,13 +35,20 @@ async def test_manual_posting_marks_the_comment_posted(db_session, fake_platform
 
     response = await _post(scenario, db_session)
 
-    assert (response.status, response.mymoment_comment_id.startswith(f"{scenario['ai_comment'].mymoment_article_id}-")) == (
+    assert (
+        response.status,
+        response.mymoment_comment_id.startswith(
+            f"{scenario['ai_comment'].mymoment_article_id}-"
+        ),
+    ) == (
         "posted",
         True,
     )
 
 
-async def test_manual_posting_publishes_the_text_with_ai_prefix_and_hide_flag(db_session, fake_platform):
+async def test_manual_posting_publishes_the_text_with_ai_prefix_and_hide_flag(
+    db_session, fake_platform
+):
     scenario = await _generated_comment_on_platform(
         db_session, fake_platform, comment_content="<p>Gut gemacht.</p>", is_hidden=True
     )
@@ -59,8 +68,18 @@ async def test_manual_posting_publishes_the_text_with_ai_prefix_and_hide_flag(db
     ("given", "expected_status"),
     [
         (lambda platform, article_id: platform.reject_comments(article_id), 422),
-        (lambda platform, _: platform.fail("connect", PlatformAuthError("wrong password")), 502),
-        (lambda platform, _: platform.fail("post_comment", PlatformUnavailable("timeout")), 503),
+        (
+            lambda platform, _: platform.fail(
+                "connect", PlatformAuthError("wrong password")
+            ),
+            502,
+        ),
+        (
+            lambda platform, _: platform.fail(
+                "post_comment", PlatformUnavailable("timeout")
+            ),
+            503,
+        ),
     ],
     ids=["rejected", "wrong-credentials", "unavailable"],
 )
@@ -74,4 +93,7 @@ async def test_manual_posting_reports_platform_errors_and_keeps_the_comment_gene
         await _post(scenario, db_session)
 
     await db_session.refresh(scenario["ai_comment"])
-    assert (raised.value.status_code, scenario["ai_comment"].status) == (expected_status, "generated")
+    assert (raised.value.status_code, scenario["ai_comment"].status) == (
+        expected_status,
+        "generated",
+    )

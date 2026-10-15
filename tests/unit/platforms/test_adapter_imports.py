@@ -21,7 +21,11 @@ def test_mymoment_adapter_imports_no_orm_or_encryption():
         "if m.split('.')[0] == 'sqlalchemy' or m.startswith(('src.models', 'src.config.encryption'))))"
     )
     result = subprocess.run(
-        [sys.executable, "-c", probe], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+        [sys.executable, "-c", probe],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
     )
 
     assert result.stdout.strip() == "[]"

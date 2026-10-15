@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from fastapi import FastAPI
@@ -19,7 +20,10 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from src.middleware.error_handler import ErrorHandlerMiddleware
-from src.middleware.validation import RequestValidationMiddleware, RequestValidationConfig
+from src.middleware.validation import (
+    RequestValidationMiddleware,
+    RequestValidationConfig,
+)
 from src.config.logging import setup_logging
 from src.config.settings import get_settings
 
@@ -60,6 +64,7 @@ async def lifespan(app: FastAPI):
         engine = await db_manager.create_engine()
         async with engine.begin() as conn:
             from src.models.base import Base
+
             await conn.run_sync(Base.metadata.create_all)
 
     logger.info("yourMoment API startup complete")
@@ -87,7 +92,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         debug=debug,
         docs_url="/docs" if debug else None,
-        redoc_url="/redoc" if debug else None
+        redoc_url="/redoc" if debug else None,
     )
 
     # Configure validation middleware
@@ -97,7 +102,7 @@ def create_app() -> FastAPI:
         max_array_length=1000,
         max_string_length=10000,
         require_content_length=True,
-        validate_json_structure=True
+        validate_json_structure=True,
     )
 
     # Add middleware in reverse order (last added is first executed)
@@ -146,6 +151,7 @@ def create_app() -> FastAPI:
     # Development-only endpoints
     if debug:
         from src.api.dev import router as dev_router
+
         app.include_router(dev_router, prefix="/api/v1")
 
     # Health check endpoint
@@ -157,9 +163,11 @@ def create_app() -> FastAPI:
             "celery_worker": await check_celery_health(),
         }
 
-        overall_status = "healthy" if all(
-            check.get("status") == "healthy" for check in checks.values()
-        ) else "degraded"
+        overall_status = (
+            "healthy"
+            if all(check.get("status") == "healthy" for check in checks.values())
+            else "degraded"
+        )
 
         return {
             "status": overall_status,
@@ -179,4 +187,5 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

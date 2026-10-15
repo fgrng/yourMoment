@@ -49,7 +49,9 @@ async def test_timeout_enforcer_stops_only_overdue_processes(
     )
     await db_session.commit()
 
-    monkeypatch.setattr(MonitoringService, "_revoke_process_tasks", lambda self, process: {})
+    monkeypatch.setattr(
+        MonitoringService, "_revoke_process_tasks", lambda self, process: {}
+    )
 
     task = _bind_task_sessions(TimeoutEnforcementTask(), db_engine)
     result = await task._check_process_timeouts_async()

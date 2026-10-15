@@ -22,7 +22,9 @@ def _page_app_timezone(path: str) -> str:
     app.include_router(router)
     app.mount("/static", StaticFiles(directory="static"), name="static")
     html = TestClient(app).get(path).text
-    return BeautifulSoup(html, "html.parser").find("meta", attrs={"name": "app-timezone"})["content"]
+    return BeautifulSoup(html, "html.parser").find(
+        "meta", attrs={"name": "app-timezone"}
+    )["content"]
 
 
 def test_summer_time_is_shown_in_zurich_time():
@@ -51,7 +53,10 @@ def test_missing_time_shows_placeholder_chosen_by_template():
 def test_date_only_format_uses_local_date():
     value = datetime(2026, 7, 14, 22, 30, tzinfo=UTC)
 
-    assert _render("{{ value | format_datetime('%d.%m.%Y') }}", value=value) == "15.07.2026"
+    assert (
+        _render("{{ value | format_datetime('%d.%m.%Y') }}", value=value)
+        == "15.07.2026"
+    )
 
 
 def test_unknown_app_timezone_is_rejected_when_settings_load(monkeypatch):

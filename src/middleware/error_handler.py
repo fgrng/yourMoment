@@ -13,23 +13,18 @@ from typing import Any, Dict, Optional
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from sqlalchemy.exc import (
-    IntegrityError,
-    SQLAlchemyError,
-    OperationalError,
-    DataError
-)
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError, OperationalError, DataError
 
 from src.services.auth_service import AuthServiceValidationError
 from src.services.llm_service import (
     LLMProviderError,
     LLMProviderNotFoundError,
-    LLMProviderValidationError
+    LLMProviderValidationError,
 )
 from src.services.mymoment_credentials_service import MyMomentCredentialsServiceError
 from src.services.monitoring_service import (
     ProcessValidationError,
-    ProcessOperationError
+    ProcessOperationError,
 )
 from src.services.prompt_service import PromptServiceError
 from src.utils.datetimes import utcnow
@@ -87,8 +82,8 @@ class ErrorHandlerMiddleware:
                 "request_query": str(request.url.query) if request.url.query else None,
                 "exception_type": type(exc).__name__,
                 "exception_message": str(exc),
-                "traceback": traceback.format_exc()
-            }
+                "traceback": traceback.format_exc(),
+            },
         )
 
         # Determine error response based on exception type
@@ -96,21 +91,18 @@ class ErrorHandlerMiddleware:
             return self._handle_validation_error(exc, error_id, timestamp)
         elif isinstance(exc, AuthServiceValidationError):
             return self._handle_auth_error(exc, error_id, timestamp)
-        elif isinstance(exc, (
-            LLMProviderValidationError,
-            ProcessValidationError,
-            MyMomentCredentialsServiceError
-        )):
+        elif isinstance(
+            exc,
+            (
+                LLMProviderValidationError,
+                ProcessValidationError,
+                MyMomentCredentialsServiceError,
+            ),
+        ):
             return self._handle_business_validation_error(exc, error_id, timestamp)
-        elif isinstance(exc, (
-            LLMProviderNotFoundError,
-            ProcessOperationError
-        )):
+        elif isinstance(exc, (LLMProviderNotFoundError, ProcessOperationError)):
             return self._handle_not_found_error(exc, error_id, timestamp)
-        elif isinstance(exc, (
-            LLMProviderError,
-            PromptServiceError
-        )):
+        elif isinstance(exc, (LLMProviderError, PromptServiceError)):
             return self._handle_service_error(exc, error_id, timestamp)
         elif isinstance(exc, IntegrityError):
             return self._handle_database_integrity_error(exc, error_id, timestamp)
@@ -123,16 +115,16 @@ class ErrorHandlerMiddleware:
         else:
             return self._handle_unexpected_error(exc, error_id, timestamp)
 
-    def _handle_validation_error(self, exc: ValidationError, error_id: str, timestamp: str) -> JSONResponse:
+    def _handle_validation_error(
+        self, exc: ValidationError, error_id: str, timestamp: str
+    ) -> JSONResponse:
         """Handle Pydantic validation errors."""
         errors = []
         for error in exc.errors():
             field_path = " -> ".join(str(loc) for loc in error["loc"])
-            errors.append({
-                "field": field_path,
-                "message": error["msg"],
-                "type": error["type"]
-            })
+            errors.append(
+                {"field": field_path, "message": error["msg"], "type": error["type"]}
+            )
 
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -141,11 +133,13 @@ class ErrorHandlerMiddleware:
                 "message": "Request validation failed",
                 "detail": errors,
                 "error_id": error_id,
-                "timestamp": timestamp
-            }
+                "timestamp": timestamp,
+            },
         )
 
-    def _handle_auth_error(self, exc: AuthServiceValidationError, error_id: str, timestamp: str) -> JSONResponse:
+    def _handle_auth_error(
+        self, exc: AuthServiceValidationError, error_id: str, timestamp: str
+    ) -> JSONResponse:
         """Handle authentication errors."""
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -153,12 +147,14 @@ class ErrorHandlerMiddleware:
                 "error": "authentication_error",
                 "message": "Authentication failed",
                 "error_id": error_id,
-                "timestamp": timestamp
+                "timestamp": timestamp,
             },
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
-    def _handle_business_validation_error(self, exc: Exception, error_id: str, timestamp: str) -> JSONResponse:
+    def _handle_business_validation_error(
+        self, exc: Exception, error_id: str, timestamp: str
+    ) -> JSONResponse:
         """Handle business logic validation errors."""
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -166,11 +162,13 @@ class ErrorHandlerMiddleware:
                 "error": "business_validation_error",
                 "message": str(exc),
                 "error_id": error_id,
-                "timestamp": timestamp
-            }
+                "timestamp": timestamp,
+            },
         )
 
-    def _handle_not_found_error(self, exc: Exception, error_id: str, timestamp: str) -> JSONResponse:
+    def _handle_not_found_error(
+        self, exc: Exception, error_id: str, timestamp: str
+    ) -> JSONResponse:
         """Handle resource not found errors."""
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -178,11 +176,13 @@ class ErrorHandlerMiddleware:
                 "error": "resource_not_found",
                 "message": str(exc),
                 "error_id": error_id,
-                "timestamp": timestamp
-            }
+                "timestamp": timestamp,
+            },
         )
 
-    def _handle_service_error(self, exc: Exception, error_id: str, timestamp: str) -> JSONResponse:
+    def _handle_service_error(
+        self, exc: Exception, error_id: str, timestamp: str
+    ) -> JSONResponse:
         """Handle service-level errors."""
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -190,11 +190,13 @@ class ErrorHandlerMiddleware:
                 "error": "service_error",
                 "message": "An internal service error occurred",
                 "error_id": error_id,
-                "timestamp": timestamp
-            }
+                "timestamp": timestamp,
+            },
         )
 
-    def _handle_database_integrity_error(self, exc: IntegrityError, error_id: str, timestamp: str) -> JSONResponse:
+    def _handle_database_integrity_error(
+        self, exc: IntegrityError, error_id: str, timestamp: str
+    ) -> JSONResponse:
         """Handle database integrity constraint violations."""
         message = "Resource already exists or constraint violation"
         if "unique" in str(exc).lower():
@@ -208,11 +210,13 @@ class ErrorHandlerMiddleware:
                 "error": "database_constraint_error",
                 "message": message,
                 "error_id": error_id,
-                "timestamp": timestamp
-            }
+                "timestamp": timestamp,
+            },
         )
 
-    def _handle_database_operational_error(self, exc: OperationalError, error_id: str, timestamp: str) -> JSONResponse:
+    def _handle_database_operational_error(
+        self, exc: OperationalError, error_id: str, timestamp: str
+    ) -> JSONResponse:
         """Handle database operational errors."""
         logger.critical(f"Database operational error {error_id}: {exc}")
         return JSONResponse(
@@ -221,11 +225,13 @@ class ErrorHandlerMiddleware:
                 "error": "database_unavailable",
                 "message": "Database service temporarily unavailable",
                 "error_id": error_id,
-                "timestamp": timestamp
-            }
+                "timestamp": timestamp,
+            },
         )
 
-    def _handle_database_data_error(self, exc: DataError, error_id: str, timestamp: str) -> JSONResponse:
+    def _handle_database_data_error(
+        self, exc: DataError, error_id: str, timestamp: str
+    ) -> JSONResponse:
         """Handle database data format errors."""
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -233,11 +239,13 @@ class ErrorHandlerMiddleware:
                 "error": "invalid_data_format",
                 "message": "Invalid data format provided",
                 "error_id": error_id,
-                "timestamp": timestamp
-            }
+                "timestamp": timestamp,
+            },
         )
 
-    def _handle_database_error(self, exc: SQLAlchemyError, error_id: str, timestamp: str) -> JSONResponse:
+    def _handle_database_error(
+        self, exc: SQLAlchemyError, error_id: str, timestamp: str
+    ) -> JSONResponse:
         """Handle general database errors."""
         logger.error(f"Database error {error_id}: {exc}")
         return JSONResponse(
@@ -246,11 +254,13 @@ class ErrorHandlerMiddleware:
                 "error": "database_error",
                 "message": "A database error occurred",
                 "error_id": error_id,
-                "timestamp": timestamp
-            }
+                "timestamp": timestamp,
+            },
         )
 
-    def _handle_unexpected_error(self, exc: Exception, error_id: str, timestamp: str) -> JSONResponse:
+    def _handle_unexpected_error(
+        self, exc: Exception, error_id: str, timestamp: str
+    ) -> JSONResponse:
         """Handle unexpected/unclassified errors."""
         logger.critical(f"Unexpected error {error_id}: {type(exc).__name__}: {exc}")
         return JSONResponse(
@@ -259,8 +269,8 @@ class ErrorHandlerMiddleware:
                 "error": "internal_server_error",
                 "message": "An unexpected error occurred",
                 "error_id": error_id,
-                "timestamp": timestamp
-            }
+                "timestamp": timestamp,
+            },
         )
 
 
@@ -268,7 +278,7 @@ def create_error_response(
     error_type: str,
     message: str,
     status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR,
-    detail: Optional[Dict[str, Any]] = None
+    detail: Optional[Dict[str, Any]] = None,
 ) -> JSONResponse:
     """
     Create a standardized error response.
@@ -291,7 +301,7 @@ def create_error_response(
         "error": error_type,
         "message": message,
         "error_id": error_id,
-        "timestamp": timestamp
+        "timestamp": timestamp,
     }
 
     if detail:
@@ -301,9 +311,13 @@ def create_error_response(
 
 
 # Convenience functions for common error types
-def validation_error_response(message: str, detail: Optional[Dict[str, Any]] = None) -> JSONResponse:
+def validation_error_response(
+    message: str, detail: Optional[Dict[str, Any]] = None
+) -> JSONResponse:
     """Create a validation error response."""
-    return create_error_response("validation_error", message, status.HTTP_400_BAD_REQUEST, detail)
+    return create_error_response(
+        "validation_error", message, status.HTTP_400_BAD_REQUEST, detail
+    )
 
 
 def not_found_error_response(message: str = "Resource not found") -> JSONResponse:
@@ -311,9 +325,13 @@ def not_found_error_response(message: str = "Resource not found") -> JSONRespons
     return create_error_response("not_found", message, status.HTTP_404_NOT_FOUND)
 
 
-def unauthorized_error_response(message: str = "Authentication required") -> JSONResponse:
+def unauthorized_error_response(
+    message: str = "Authentication required",
+) -> JSONResponse:
     """Create an unauthorized error response."""
-    response = create_error_response("authentication_error", message, status.HTTP_401_UNAUTHORIZED)
+    response = create_error_response(
+        "authentication_error", message, status.HTTP_401_UNAUTHORIZED
+    )
     response.headers["WWW-Authenticate"] = "Bearer"
     return response
 
@@ -330,4 +348,6 @@ def conflict_error_response(message: str = "Resource conflict") -> JSONResponse:
 
 def internal_error_response(message: str = "Internal server error") -> JSONResponse:
     """Create an internal server error response."""
-    return create_error_response("internal_server_error", message, status.HTTP_500_INTERNAL_SERVER_ERROR)
+    return create_error_response(
+        "internal_server_error", message, status.HTTP_500_INTERNAL_SERVER_ERROR
+    )

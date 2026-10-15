@@ -26,15 +26,20 @@ def _active_sessions_of(account_id: uuid.UUID) -> Select:
     return select(MyMomentSession).where(
         and_(
             MyMomentSession.mymoment_login_id == account_id,
-            MyMomentSession.is_active == True
+            MyMomentSession.is_active == True,
         )
     )
 
 
-async def _usable_session(db_session: AsyncSession, account_id: uuid.UUID) -> Optional[MyMomentSession]:
-    stmt = _active_sessions_of(account_id).where(
-        MyMomentSession.expires_at > utcnow()
-    ).order_by(MyMomentSession.created_at.desc()).limit(1)
+async def _usable_session(
+    db_session: AsyncSession, account_id: uuid.UUID
+) -> Optional[MyMomentSession]:
+    stmt = (
+        _active_sessions_of(account_id)
+        .where(MyMomentSession.expires_at > utcnow())
+        .order_by(MyMomentSession.created_at.desc())
+        .limit(1)
+    )
     result = await db_session.execute(stmt)
     record = result.scalar_one_or_none()
     if record is None or not record.is_usable():
@@ -56,7 +61,9 @@ class MyMomentSessionCookieStore:
     held while the adapter talks HTTP.
     """
 
-    def __init__(self, new_db_session: Callable[[], Awaitable[AsyncSession]] = _new_db_session):
+    def __init__(
+        self, new_db_session: Callable[[], Awaitable[AsyncSession]] = _new_db_session
+    ):
         self._new_db_session = new_db_session
 
     async def load(self, account_id: uuid.UUID) -> Optional[Dict[str, Any]]:
@@ -75,10 +82,11 @@ class MyMomentSessionCookieStore:
             record = await _usable_session(db_session, account_id)
             if record is None:
                 await _deactivate_sessions(db_session, account_id)
-                db_session.add(MyMomentSession.create_new_session(
-                    mymoment_login_id=account_id,
-                    session_data=data
-                ))
+                db_session.add(
+                    MyMomentSession.create_new_session(
+                        mymoment_login_id=account_id, session_data=data
+                    )
+                )
             else:
                 record.update_session_data(data)
                 record.renew_session()

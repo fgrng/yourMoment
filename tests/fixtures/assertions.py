@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 
-def assert_mymoment_credentials_round_trip(login: Any, *, username: str, password: str) -> None:
+def assert_mymoment_credentials_round_trip(
+    login: Any, *, username: str, password: str
+) -> None:
     """Assert that a myMoment login encrypted and decrypts its credentials correctly."""
     assert login.username_encrypted != username
     assert login.password_encrypted != password
@@ -18,10 +20,15 @@ def assert_api_key_round_trip(provider: Any, *, api_key: str) -> None:
     assert provider.get_api_key() == api_key
 
 
-def assert_session_data_round_trip(session_record: Any, *, expected_data: dict[str, Any] | str) -> None:
+def assert_session_data_round_trip(
+    session_record: Any, *, expected_data: dict[str, Any] | str
+) -> None:
     """Assert that a myMoment session decrypts back to its original payload."""
     assert session_record.session_data_encrypted != expected_data
-    assert session_record.get_session_data(as_dict=isinstance(expected_data, dict)) == expected_data
+    assert (
+        session_record.get_session_data(as_dict=isinstance(expected_data, dict))
+        == expected_data
+    )
 
 
 def assert_owned_by(record: Any, owner: Any) -> None:

@@ -23,16 +23,19 @@ from src.utils.datetimes import utcnow
 
 class UserServiceError(ServiceValidationError):
     """Base exception for user service operations."""
+
     pass
 
 
 class UserNotFoundError(ServiceNotFoundError):
     """Raised when a user is not found."""
+
     pass
 
 
 class UserAccessError(ServiceAccessError):
     """Raised when user access is denied."""
+
     pass
 
 
@@ -60,7 +63,7 @@ class UserService(BaseService):
         self,
         user_id: uuid.UUID,
         require_active: bool = True,
-        require_verified: bool = False
+        require_verified: bool = False,
     ) -> User:
         """
         Get current user with validation (primary method for dependency injection).
@@ -81,14 +84,11 @@ class UserService(BaseService):
         """
         try:
             user = await self.validate_user_exists(
-                user_id=user_id,
-                require_active=require_active
+                user_id=user_id, require_active=require_active
             )
 
             if require_verified and not user.is_verified:
-                raise UserNotFoundError(
-                    f"User {user_id} not found (verified)"
-                )
+                raise UserNotFoundError(f"User {user_id} not found (verified)")
 
             return user
 
@@ -102,7 +102,7 @@ class UserService(BaseService):
         self,
         user_id: uuid.UUID,
         resource_user_id: Optional[uuid.UUID],
-        resource_type: str = "resource"
+        resource_type: str = "resource",
     ) -> User:
         """
         Validate that a user owns a specific resource.
@@ -132,9 +132,7 @@ class UserService(BaseService):
         return user
 
     async def get_user_by_email(
-        self,
-        email: str,
-        require_active: bool = True
+        self, email: str, require_active: bool = True
     ) -> Optional[User]:
         """
         Get user by email address.
@@ -161,9 +159,7 @@ class UserService(BaseService):
             return None
 
     async def check_user_exists(
-        self,
-        user_id: uuid.UUID,
-        require_active: bool = True
+        self, user_id: uuid.UUID, require_active: bool = True
     ) -> bool:
         """
         Check if a user exists without returning the user object.
@@ -182,9 +178,7 @@ class UserService(BaseService):
             return False
 
     async def get_users_by_ids(
-        self,
-        user_ids: List[uuid.UUID],
-        require_active: bool = True
+        self, user_ids: List[uuid.UUID], require_active: bool = True
     ) -> List[User]:
         """
         Get multiple users by their IDs.
@@ -232,8 +226,10 @@ class UserService(BaseService):
                 "email": user.email,
                 "is_active": user.is_active,
                 "is_verified": user.is_verified,
-                "created_at": user.created_at.isoformat() if hasattr(user, 'created_at') else None,
-                "last_login": None  # Would need session tracking
+                "created_at": user.created_at.isoformat()
+                if hasattr(user, "created_at")
+                else None,
+                "last_login": None,  # Would need session tracking
             }
 
             # Additional statistics would be added here
@@ -247,9 +243,7 @@ class UserService(BaseService):
             return {"error": str(e)}
 
     async def validate_multiple_users(
-        self,
-        user_ids: List[uuid.UUID],
-        require_active: bool = True
+        self, user_ids: List[uuid.UUID], require_active: bool = True
     ) -> Dict[uuid.UUID, bool]:
         """
         Validate multiple users and return validation results.
@@ -268,10 +262,7 @@ class UserService(BaseService):
             existing_users = await self.get_users_by_ids(user_ids, require_active)
             existing_ids = {user.id for user in existing_users}
 
-            return {
-                user_id: user_id in existing_ids
-                for user_id in user_ids
-            }
+            return {user_id: user_id in existing_ids for user_id in user_ids}
 
         except Exception as e:
             self.logger.error(f"Failed to validate multiple users: {e}")
@@ -294,10 +285,7 @@ class UserService(BaseService):
             return 0
 
     async def search_users(
-        self,
-        search_term: str,
-        limit: int = 20,
-        require_active: bool = True
+        self, search_term: str, limit: int = 20, require_active: bool = True
     ) -> List[User]:
         """
         Search users by email or other criteria.
@@ -343,14 +331,14 @@ class UserService(BaseService):
             "email": user.email,
             "is_active": user.is_active,
             "is_verified": user.is_verified,
-            "timestamp": utcnow().isoformat()
+            "timestamp": utcnow().isoformat(),
         }
 
     async def ensure_user_access(
         self,
         user_id: uuid.UUID,
         resource_user_id: Optional[uuid.UUID] = None,
-        require_verified: bool = False
+        require_verified: bool = False,
     ) -> Dict[str, Any]:
         """
         Comprehensive user access validation with context creation.
@@ -372,17 +360,13 @@ class UserService(BaseService):
         """
         # Validate user exists and meets requirements
         user = await self.get_current_user(
-            user_id,
-            require_active=True,
-            require_verified=require_verified
+            user_id, require_active=True, require_verified=require_verified
         )
 
         # Validate resource access if needed
         if resource_user_id is not None:
             await self.validate_user_owns_resource(
-                user_id,
-                resource_user_id,
-                "resource"
+                user_id, resource_user_id, "resource"
             )
 
         # Create and return user context

@@ -10,7 +10,17 @@ import uuid
 import hashlib
 from typing import Optional
 
-from sqlalchemy import Column, String, Integer, Boolean, ForeignKey, Text, func, UUID, JSON
+from sqlalchemy import (
+    Column,
+    String,
+    Integer,
+    Boolean,
+    ForeignKey,
+    Text,
+    func,
+    UUID,
+    JSON,
+)
 from sqlalchemy.orm import relationship
 
 from src.models.base import Base, UTCDateTime
@@ -34,7 +44,7 @@ class ArticleVersion(Base):
         UUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
-        doc="Unique identifier for this article version"
+        doc="Unique identifier for this article version",
     )
 
     # Foreign key to User (who owns this backup)
@@ -43,7 +53,7 @@ class ArticleVersion(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
-        doc="User who owns this backup"
+        doc="User who owns this backup",
     )
 
     # Foreign key to TrackedStudent
@@ -52,7 +62,7 @@ class ArticleVersion(Base):
         ForeignKey("tracked_students.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
-        doc="Tracked student this article belongs to"
+        doc="Tracked student this article belongs to",
     )
 
     # myMoment article ID
@@ -60,7 +70,7 @@ class ArticleVersion(Base):
         Integer,
         nullable=False,
         index=True,
-        doc="Article ID on myMoment platform (e.g., 2695)"
+        doc="Article ID on myMoment platform (e.g., 2695)",
     )
 
     # Version number (sequential per article)
@@ -68,65 +78,55 @@ class ArticleVersion(Base):
         Integer,
         nullable=False,
         default=1,
-        doc="Sequential version number for this article"
+        doc="Sequential version number for this article",
     )
 
     # Article metadata
-    article_title = Column(
-        String(500),
-        nullable=True,
-        doc="Article title"
-    )
+    article_title = Column(String(500), nullable=True, doc="Article title")
 
     article_url = Column(
         String(500),
         nullable=True,
-        doc="View URL for the article (e.g., /article/2695/)"
+        doc="View URL for the article (e.g., /article/2695/)",
     )
 
     # Article content
     article_content = Column(
-        Text,
-        nullable=True,
-        doc="Plain text content of the article"
+        Text, nullable=True, doc="Plain text content of the article"
     )
 
     article_raw_html = Column(
-        Text,
-        nullable=True,
-        doc="Original HTML content of the article"
+        Text, nullable=True, doc="Original HTML content of the article"
     )
 
     # Article status and visibility
     article_status = Column(
         String(100),
         nullable=True,
-        doc="Publication status (Publiziert, Entwurf, Lehrpersonenkontrolle)"
+        doc="Publication status (Publiziert, Entwurf, Lehrpersonenkontrolle)",
     )
 
     article_visibility = Column(
         String(255),
         nullable=True,
-        doc="Visibility/class info (e.g., '3. Klasse (Primarschule Schachen)')"
+        doc="Visibility/class info (e.g., '3. Klasse (Primarschule Schachen)')",
     )
 
     article_category = Column(
         String(100),
         nullable=True,
-        doc="Article category (e.g., 'Unterhalten', 'Informieren')"
+        doc="Article category (e.g., 'Unterhalten', 'Informieren')",
     )
 
     article_task = Column(
         String(255),
         nullable=True,
-        doc="Writing task if article was published to a task"
+        doc="Writing task if article was published to a task",
     )
 
     # Timestamps from myMoment
     article_last_modified = Column(
-        UTCDateTime,
-        nullable=True,
-        doc="Last modification timestamp from myMoment"
+        UTCDateTime, nullable=True, doc="Last modification timestamp from myMoment"
     )
 
     # Scraping metadata
@@ -134,7 +134,7 @@ class ArticleVersion(Base):
         UTCDateTime,
         server_default=func.now(),
         nullable=False,
-        doc="When this version was captured"
+        doc="When this version was captured",
     )
 
     # Content hash for change detection
@@ -142,35 +142,29 @@ class ArticleVersion(Base):
         String(64),
         nullable=True,
         index=True,
-        doc="SHA-256 hash of article_content for change detection"
+        doc="SHA-256 hash of article_content for change detection",
     )
 
     # Additional metadata (JSON)
-    extra_metadata = Column(
-        JSON,
-        nullable=True,
-        doc="Additional metadata as JSON"
-    )
+    extra_metadata = Column(JSON, nullable=True, doc="Additional metadata as JSON")
 
     # Status
     is_active = Column(
         Boolean,
         default=True,
         nullable=False,
-        doc="Whether this version is active (soft delete)"
+        doc="Whether this version is active (soft delete)",
     )
 
     # Relationships
     user = relationship(
-        "User",
-        back_populates="article_versions",
-        doc="User who owns this backup"
+        "User", back_populates="article_versions", doc="User who owns this backup"
     )
 
     tracked_student = relationship(
         "TrackedStudent",
         back_populates="article_versions",
-        doc="Tracked student this article belongs to"
+        doc="Tracked student this article belongs to",
     )
 
     def __repr__(self) -> str:
@@ -203,7 +197,9 @@ class ArticleVersion(Base):
             "article_category": self.article_category,
             "article_task": self.article_task,
             "article_last_modified": (
-                self.article_last_modified.isoformat() if self.article_last_modified else None
+                self.article_last_modified.isoformat()
+                if self.article_last_modified
+                else None
             ),
             "scraped_at": self.scraped_at.isoformat() if self.scraped_at else None,
             "content_hash": self.content_hash,

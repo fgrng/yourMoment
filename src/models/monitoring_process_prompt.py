@@ -8,7 +8,15 @@ prompts with weighted selection.
 
 import uuid
 
-from sqlalchemy import Column, Float, Boolean, UUID, ForeignKey, UniqueConstraint, CheckConstraint
+from sqlalchemy import (
+    Column,
+    Float,
+    Boolean,
+    UUID,
+    ForeignKey,
+    UniqueConstraint,
+    CheckConstraint,
+)
 from sqlalchemy.orm import relationship
 
 from src.models.base import BaseModel
@@ -20,18 +28,20 @@ class MonitoringProcessPrompt(BaseModel):
     __tablename__ = "monitoring_process_prompts"
 
     # Primary key
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False)
+    id = Column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, nullable=False
+    )
 
     # Foreign keys
     monitoring_process_id = Column(
         UUID(as_uuid=True),
         ForeignKey("monitoring_processes.id", ondelete="CASCADE"),
-        nullable=False
+        nullable=False,
     )
     prompt_template_id = Column(
         UUID(as_uuid=True),
         ForeignKey("prompt_templates.id", ondelete="CASCADE"),
-        nullable=False
+        nullable=False,
     )
 
     # Weighting for prompt selection
@@ -41,14 +51,19 @@ class MonitoringProcessPrompt(BaseModel):
     is_active = Column(Boolean, nullable=False, default=True)
 
     # Relationships
-    monitoring_process = relationship("MonitoringProcess", back_populates="monitoring_process_prompts")
-    prompt_template = relationship("PromptTemplate", back_populates="monitoring_process_prompts")
+    monitoring_process = relationship(
+        "MonitoringProcess", back_populates="monitoring_process_prompts"
+    )
+    prompt_template = relationship(
+        "PromptTemplate", back_populates="monitoring_process_prompts"
+    )
 
     # Constraints
     __table_args__ = (
         UniqueConstraint(
-            "monitoring_process_id", "prompt_template_id",
-            name="uq_monitoring_process_prompt"
+            "monitoring_process_id",
+            "prompt_template_id",
+            name="uq_monitoring_process_prompt",
         ),
         CheckConstraint("weight > 0.0", name="check_positive_weight"),
     )

@@ -46,13 +46,17 @@ class SessionService:
         Returns:
             List of active UserSession objects
         """
-        stmt = select(UserSession).where(
-            and_(
-                UserSession.user_id == user_id,
-                UserSession.is_active == True,
-                UserSession.expires_at > utcnow()
+        stmt = (
+            select(UserSession)
+            .where(
+                and_(
+                    UserSession.user_id == user_id,
+                    UserSession.is_active == True,
+                    UserSession.expires_at > utcnow(),
+                )
             )
-        ).order_by(UserSession.last_activity.desc())
+            .order_by(UserSession.last_activity.desc())
+        )
 
         result = await self.db.execute(stmt)
         return result.scalars().all()
@@ -71,7 +75,7 @@ class SessionService:
             and_(
                 UserSession.token_hash == token_hash,
                 UserSession.is_active == True,
-                UserSession.expires_at > utcnow()
+                UserSession.expires_at > utcnow(),
             )
         )
 
@@ -93,7 +97,7 @@ class SessionService:
             and_(
                 UserSession.id == session_id,
                 UserSession.user_id == user_id,
-                UserSession.is_active == True
+                UserSession.is_active == True,
             )
         )
 
@@ -107,7 +111,9 @@ class SessionService:
 
         return False
 
-    async def revoke_all_sessions(self, user_id: uuid.UUID, except_session_id: Optional[uuid.UUID] = None) -> int:
+    async def revoke_all_sessions(
+        self, user_id: uuid.UUID, except_session_id: Optional[uuid.UUID] = None
+    ) -> int:
         """
         Revoke all sessions for a user.
 
@@ -118,10 +124,7 @@ class SessionService:
         Returns:
             Number of sessions revoked
         """
-        conditions = [
-            UserSession.user_id == user_id,
-            UserSession.is_active == True
-        ]
+        conditions = [UserSession.user_id == user_id, UserSession.is_active == True]
 
         if except_session_id:
             conditions.append(UserSession.id != except_session_id)
@@ -144,7 +147,7 @@ class SessionService:
         self,
         session_id: uuid.UUID,
         user_id: uuid.UUID,
-        additional_time: timedelta = timedelta(hours=1)
+        additional_time: timedelta = timedelta(hours=1),
     ) -> bool:
         """
         Extend session expiry time.
@@ -161,7 +164,7 @@ class SessionService:
             and_(
                 UserSession.id == session_id,
                 UserSession.user_id == user_id,
-                UserSession.is_active == True
+                UserSession.is_active == True,
             )
         )
 
@@ -182,16 +185,16 @@ class SessionService:
         Returns:
             Number of sessions cleaned up
         """
-        stmt = delete(UserSession).where(
-            UserSession.expires_at < utcnow()
-        )
+        stmt = delete(UserSession).where(UserSession.expires_at < utcnow())
 
         result = await self.db.execute(stmt)
         await self.db.commit()
 
         return result.rowcount
 
-    async def cleanup_inactive_sessions(self, inactive_threshold: timedelta = timedelta(days=7)) -> int:
+    async def cleanup_inactive_sessions(
+        self, inactive_threshold: timedelta = timedelta(days=7)
+    ) -> int:
         """
         Remove sessions that have been inactive for too long.
 
@@ -203,16 +206,16 @@ class SessionService:
         """
         cutoff_time = utcnow() - inactive_threshold
 
-        stmt = delete(UserSession).where(
-            UserSession.last_activity < cutoff_time
-        )
+        stmt = delete(UserSession).where(UserSession.last_activity < cutoff_time)
 
         result = await self.db.execute(stmt)
         await self.db.commit()
 
         return result.rowcount
 
-    async def get_session_statistics(self, user_id: Optional[uuid.UUID] = None) -> Dict[str, Any]:
+    async def get_session_statistics(
+        self, user_id: Optional[uuid.UUID] = None
+    ) -> Dict[str, Any]:
         """
         Get session statistics.
 
@@ -231,7 +234,7 @@ class SessionService:
             and_(
                 UserSession.is_active == True,
                 UserSession.expires_at > utcnow(),
-                *base_conditions
+                *base_conditions,
             )
         )
         active_result = await self.db.execute(active_stmt)
@@ -239,10 +242,7 @@ class SessionService:
 
         # Expired sessions count
         expired_stmt = select(func.count(UserSession.id)).where(
-            and_(
-                UserSession.expires_at <= utcnow(),
-                *base_conditions
-            )
+            and_(UserSession.expires_at <= utcnow(), *base_conditions)
         )
         expired_result = await self.db.execute(expired_stmt)
         expired_count = expired_result.scalar()
@@ -258,13 +258,11 @@ class SessionService:
             "active_sessions": active_count,
             "expired_sessions": expired_count,
             "total_sessions": total_count,
-            "user_id": str(user_id) if user_id else None
+            "user_id": str(user_id) if user_id else None,
         }
 
     async def detect_concurrent_sessions(
-        self,
-        user_id: uuid.UUID,
-        max_concurrent: int = 5
+        self, user_id: uuid.UUID, max_concurrent: int = 5
     ) -> Dict[str, Any]:
         """
         Detect if user has too many concurrent sessions.
@@ -288,17 +286,17 @@ class SessionService:
                 {
                     "id": str(session.id),
                     "last_activity": session.last_activity.isoformat(),
-                    "expires_at": session.expires_at.isoformat()
+                    "expires_at": session.expires_at.isoformat(),
                 }
                 for session in active_sessions
-            ]
+            ],
         }
 
     async def detect_rapid_session_creation(
         self,
         user_id: uuid.UUID,
         time_window: timedelta = timedelta(hours=1),
-        max_sessions: int = 10
+        max_sessions: int = 10,
     ) -> Dict[str, Any]:
         """
         Detect rapid session creation which may indicate suspicious activity.
@@ -314,12 +312,16 @@ class SessionService:
         cutoff_time = utcnow() - time_window
 
         # Get recent sessions
-        stmt = select(UserSession).where(
-            and_(
-                UserSession.user_id == user_id,
-                UserSession.created_at >= cutoff_time
+        stmt = (
+            select(UserSession)
+            .where(
+                and_(
+                    UserSession.user_id == user_id,
+                    UserSession.created_at >= cutoff_time,
+                )
             )
-        ).order_by(UserSession.created_at.desc())
+            .order_by(UserSession.created_at.desc())
+        )
 
         result = await self.db.execute(stmt)
         recent_sessions = result.scalars().all()
@@ -338,17 +340,14 @@ class SessionService:
                     "id": str(session.id),
                     "created_at": session.created_at.isoformat(),
                     "is_active": session.is_active,
-                    "expires_at": session.expires_at.isoformat()
+                    "expires_at": session.expires_at.isoformat(),
                 }
                 for session in recent_sessions[:10]  # Limit to 10 most recent
-            ]
+            ],
         }
 
     async def get_session_history(
-        self,
-        user_id: uuid.UUID,
-        limit: int = 50,
-        offset: int = 0
+        self, user_id: uuid.UUID, limit: int = 50, offset: int = 0
     ) -> List[Dict[str, Any]]:
         """
         Get session history for a user.
@@ -361,9 +360,13 @@ class SessionService:
         Returns:
             List of session history records
         """
-        stmt = select(UserSession).where(
-            UserSession.user_id == user_id
-        ).order_by(UserSession.created_at.desc()).limit(limit).offset(offset)
+        stmt = (
+            select(UserSession)
+            .where(UserSession.user_id == user_id)
+            .order_by(UserSession.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
 
         result = await self.db.execute(stmt)
         sessions = result.scalars().all()
@@ -375,7 +378,7 @@ class SessionService:
                 "expires_at": session.expires_at.isoformat(),
                 "last_activity": session.last_activity.isoformat(),
                 "is_active": session.is_active,
-                "is_expired": session.is_expired
+                "is_expired": session.is_expired,
             }
             for session in sessions
         ]

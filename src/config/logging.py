@@ -144,7 +144,9 @@ def setup_logging(
         "Logging system initialized for %s (level=%s, file=%s)",
         service_name,
         logging.getLevelName(resolved_level),
-        settings.get_service_log_path(service_name) if settings.LOG_FILE_ENABLED else "disabled",
+        settings.get_service_log_path(service_name)
+        if settings.LOG_FILE_ENABLED
+        else "disabled",
     )
     return settings
 

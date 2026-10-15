@@ -18,7 +18,7 @@ def ensure_html_paragraphs(text: str) -> str:
     stripped = text.strip()
     if "<p>" in stripped.lower():
         return stripped
-    paragraphs = [p.strip() for p in re.split(r'\n\s*\n|\n', stripped) if p.strip()]
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n|\n", stripped) if p.strip()]
     return "".join(f"<p>{p}</p>" for p in paragraphs) if paragraphs else stripped
 
 
@@ -26,7 +26,7 @@ def validate_comment(
     comment_content: str,
     min_length: int = None,
     max_length: Optional[int] = None,
-    enable_content_validation: bool = True
+    enable_content_validation: bool = True,
 ) -> Dict[str, Any]:
     """
     Validate a generated comment against quality and requirement criteria.
@@ -50,15 +50,17 @@ def validate_comment(
     if max_length is None:
         max_length = settings.monitoring.COMMENT_MAX_LENGTH
     ai_prefix = settings.monitoring.AI_COMMENT_PREFIX
-    has_ai_prefix = (comment_content.startswith(ai_prefix) or
-                     comment_content.startswith(f"<p>{ai_prefix}</p>"))
+    has_ai_prefix = comment_content.startswith(ai_prefix) or comment_content.startswith(
+        f"<p>{ai_prefix}</p>"
+    )
     if not has_ai_prefix:
         errors.append("Missing required German AI prefix")
 
-    content_without_prefix = (comment_content
-                               .replace(f"<p>{ai_prefix}</p>", "")
-                               .replace(ai_prefix, "")
-                               .strip())
+    content_without_prefix = (
+        comment_content.replace(f"<p>{ai_prefix}</p>", "")
+        .replace(ai_prefix, "")
+        .strip()
+    )
     content_length = len(content_without_prefix)
 
     if content_length < min_length:
@@ -75,7 +77,7 @@ def validate_comment(
         if len(words) > 5 and len(set(words)) < len(words) * 0.5:
             errors.append("Comment appears to be repetitive")
 
-        placeholder_patterns = [r'\{[^}]+\}']
+        placeholder_patterns = [r"\{[^}]+\}"]
         for pattern in placeholder_patterns:
             if re.search(pattern, content_without_prefix):
                 errors.append("Comment contains unresolved placeholders")
@@ -85,5 +87,5 @@ def validate_comment(
         "is_valid": len(errors) == 0,
         "has_ai_prefix": has_ai_prefix,
         "errors": errors,
-        "content_length": content_length
+        "content_length": content_length,
     }

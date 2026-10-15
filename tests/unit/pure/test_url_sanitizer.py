@@ -38,4 +38,3 @@ def test_is_url_malformed():
     assert is_url_malformed("https://host/path") is False
     assert is_url_malformed("") is False
     assert is_url_malformed(None) is False
-

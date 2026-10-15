@@ -33,7 +33,9 @@ def client(fake_platform) -> TestClient:
 def _target_fields(html: str) -> list[str]:
     """The labels of the fields under "Ziel des Prozesses", as the user reads them."""
     soup = BeautifulSoup(html, "html.parser")
-    heading = soup.find(lambda tag: tag.name == "label" and "Ziel des Prozesses" in tag.get_text())
+    heading = soup.find(
+        lambda tag: tag.name == "label" and "Ziel des Prozesses" in tag.get_text()
+    )
     block = heading.parent
     return [
         block.find("label", attrs={"for": select["id"]}).get_text(" ", strip=True)
@@ -50,14 +52,20 @@ def wordpress_like(fake_platform):
     return fake_platform
 
 
-@pytest.mark.parametrize("path", ["/processes/new", f"/processes/{uuid.uuid4()}/edit"], ids=["new", "edit"])
-def test_form_offers_one_labelled_field_per_dimension_of_the_target_description(client, wordpress_like, path):
+@pytest.mark.parametrize(
+    "path", ["/processes/new", f"/processes/{uuid.uuid4()}/edit"], ids=["new", "edit"]
+)
+def test_form_offers_one_labelled_field_per_dimension_of_the_target_description(
+    client, wordpress_like, path
+):
     html = client.get(path).text
 
     assert _target_fields(html) == ["Rubrik *", "Schlagwort"]
 
 
-@pytest.mark.parametrize("path", ["/processes/new", f"/processes/{uuid.uuid4()}/edit"], ids=["new", "edit"])
+@pytest.mark.parametrize(
+    "path", ["/processes/new", f"/processes/{uuid.uuid4()}/edit"], ids=["new", "edit"]
+)
 def test_form_offers_an_editable_search_term(client, path):
     soup = BeautifulSoup(client.get(path).text, "html.parser")
 

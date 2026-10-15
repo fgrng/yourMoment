@@ -44,7 +44,9 @@ def ensure_same_user(*records: Any) -> None:
         raise ValueError("fixture records must belong to the same user")
 
 
-def merge_kwargs(defaults: dict[str, Any], overrides: Mapping[str, Any] | None) -> dict[str, Any]:
+def merge_kwargs(
+    defaults: dict[str, Any], overrides: Mapping[str, Any] | None
+) -> dict[str, Any]:
     """Return defaults updated by a shallow overrides mapping."""
     merged = dict(defaults)
     if overrides:

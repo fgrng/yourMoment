@@ -27,26 +27,31 @@ from src.utils.datetimes import utcnow
 
 class StudentBackupServiceError(Exception):
     """Base exception for Student Backup service operations."""
+
     pass
 
 
 class StudentBackupValidationError(StudentBackupServiceError):
     """Raised when validation fails."""
+
     pass
 
 
 class StudentBackupNotFoundError(StudentBackupServiceError):
     """Raised when a resource is not found."""
+
     pass
 
 
 class StudentBackupDisabledError(StudentBackupServiceError):
     """Raised when the Student Backup feature is disabled."""
+
     pass
 
 
 class StudentBackupLimitError(StudentBackupServiceError):
     """Raised when a user limit is exceeded."""
+
     pass
 
 
@@ -94,7 +99,7 @@ class StudentBackupService(BaseService):
         mymoment_student_id: int,
         mymoment_login_id: uuid.UUID,
         display_name: Optional[str] = None,
-        notes: Optional[str] = None
+        notes: Optional[str] = None,
     ) -> TrackedStudent:
         """
         Create a new tracked student record.
@@ -148,7 +153,7 @@ class StudentBackupService(BaseService):
             mymoment_student_id=mymoment_student_id,
             display_name=display_name.strip() if display_name else None,
             notes=notes.strip() if notes else None,
-            is_active=True
+            is_active=True,
         )
 
         try:
@@ -159,7 +164,7 @@ class StudentBackupService(BaseService):
                 "create_tracked_student",
                 user_id=user_id,
                 resource_id=tracked_student.id,
-                additional_data={"mymoment_student_id": mymoment_student_id}
+                additional_data={"mymoment_student_id": mymoment_student_id},
             )
         except IntegrityError as e:
             await self.db_session.rollback()
@@ -171,7 +176,7 @@ class StudentBackupService(BaseService):
         self,
         tracked_student_id: uuid.UUID,
         user_id: Optional[uuid.UUID] = None,
-        include_versions: bool = False
+        include_versions: bool = False,
     ) -> Optional[TrackedStudent]:
         """
         Get a tracked student by ID.
@@ -188,7 +193,7 @@ class StudentBackupService(BaseService):
 
         conditions = [
             TrackedStudent.id == tracked_student_id,
-            TrackedStudent.is_active == True
+            TrackedStudent.is_active == True,
         ]
 
         if user_id is not None:
@@ -203,9 +208,7 @@ class StudentBackupService(BaseService):
         return result.scalar_one_or_none()
 
     async def get_user_tracked_students(
-        self,
-        user_id: uuid.UUID,
-        include_inactive: bool = False
+        self, user_id: uuid.UUID, include_inactive: bool = False
     ) -> List[TrackedStudent]:
         """
         Get all tracked students for a user.
@@ -240,7 +243,7 @@ class StudentBackupService(BaseService):
         mymoment_login_id: Optional[uuid.UUID] = None,
         display_name: Optional[str] = None,
         notes: Optional[str] = None,
-        is_active: Optional[bool] = None
+        is_active: Optional[bool] = None,
     ) -> Optional[TrackedStudent]:
         """
         Update a tracked student record.
@@ -274,7 +277,9 @@ class StudentBackupService(BaseService):
 
         # Update optional fields
         if display_name is not None:
-            tracked_student.display_name = display_name.strip() if display_name else None
+            tracked_student.display_name = (
+                display_name.strip() if display_name else None
+            )
 
         if notes is not None:
             tracked_student.notes = notes.strip() if notes else None
@@ -290,7 +295,7 @@ class StudentBackupService(BaseService):
             self.log_operation(
                 "update_tracked_student",
                 user_id=user_id,
-                resource_id=tracked_student_id
+                resource_id=tracked_student_id,
             )
         except IntegrityError as e:
             await self.db_session.rollback()
@@ -299,9 +304,7 @@ class StudentBackupService(BaseService):
         return tracked_student
 
     async def delete_tracked_student(
-        self,
-        tracked_student_id: uuid.UUID,
-        user_id: uuid.UUID
+        self, tracked_student_id: uuid.UUID, user_id: uuid.UUID
     ) -> bool:
         """
         Soft-delete a tracked student (marks as inactive).
@@ -329,7 +332,7 @@ class StudentBackupService(BaseService):
             self.log_operation(
                 "delete_tracked_student",
                 user_id=user_id,
-                resource_id=tracked_student_id
+                resource_id=tracked_student_id,
             )
             return True
         except Exception:
@@ -354,7 +357,7 @@ class StudentBackupService(BaseService):
         article_category: Optional[str] = None,
         article_task: Optional[str] = None,
         article_last_modified: Optional[datetime] = None,
-        extra_metadata: Optional[Dict[str, Any]] = None
+        extra_metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[ArticleVersion]:
         """
         Create a new article version if content has changed.
@@ -401,24 +404,44 @@ class StudentBackupService(BaseService):
         # Dashboard scraping does not always return every metadata field.
         # Preserve the latest known value when the current scrape omits it.
         if latest_version:
-            article_title = article_title if article_title is not None else latest_version.article_title
-            article_url = article_url if article_url is not None else latest_version.article_url
-            article_status = article_status if article_status is not None else latest_version.article_status
+            article_title = (
+                article_title
+                if article_title is not None
+                else latest_version.article_title
+            )
+            article_url = (
+                article_url if article_url is not None else latest_version.article_url
+            )
+            article_status = (
+                article_status
+                if article_status is not None
+                else latest_version.article_status
+            )
             article_visibility = (
                 article_visibility
                 if article_visibility is not None
                 else latest_version.article_visibility
             )
             article_category = (
-                article_category if article_category is not None else latest_version.article_category
+                article_category
+                if article_category is not None
+                else latest_version.article_category
             )
-            article_task = article_task if article_task is not None else latest_version.article_task
+            article_task = (
+                article_task
+                if article_task is not None
+                else latest_version.article_task
+            )
             article_last_modified = (
                 article_last_modified
                 if article_last_modified is not None
                 else latest_version.article_last_modified
             )
-            extra_metadata = extra_metadata if extra_metadata is not None else latest_version.extra_metadata
+            extra_metadata = (
+                extra_metadata
+                if extra_metadata is not None
+                else latest_version.extra_metadata
+            )
 
         # Compute content hash
         content_hash = ArticleVersion.compute_content_hash(article_content or "")
@@ -427,11 +450,11 @@ class StudentBackupService(BaseService):
         if self.settings.STUDENT_BACKUP_CONTENT_CHANGES_ONLY and latest_version:
             content_changed = latest_version.content_hash != content_hash
             metadata_changed = (
-                latest_version.article_title != article_title or
-                latest_version.article_status != article_status or
-                latest_version.article_visibility != article_visibility or
-                latest_version.article_category != article_category or
-                latest_version.article_task != article_task
+                latest_version.article_title != article_title
+                or latest_version.article_status != article_status
+                or latest_version.article_visibility != article_visibility
+                or latest_version.article_category != article_category
+                or latest_version.article_task != article_task
             )
 
             if not (content_changed or metadata_changed):
@@ -468,7 +491,7 @@ class StudentBackupService(BaseService):
             article_last_modified=article_last_modified,
             content_hash=content_hash,
             extra_metadata=extra_metadata,
-            is_active=True
+            is_active=True,
         )
 
         try:
@@ -482,8 +505,8 @@ class StudentBackupService(BaseService):
                 resource_id=article_version.id,
                 additional_data={
                     "mymoment_article_id": mymoment_article_id,
-                    "version_number": version_number
-                }
+                    "version_number": version_number,
+                },
             )
         except IntegrityError as e:
             await self.db_session.rollback()
@@ -499,9 +522,7 @@ class StudentBackupService(BaseService):
         return article_version
 
     async def get_article_version_by_id(
-        self,
-        version_id: uuid.UUID,
-        user_id: Optional[uuid.UUID] = None
+        self, version_id: uuid.UUID, user_id: Optional[uuid.UUID] = None
     ) -> Optional[ArticleVersion]:
         """
         Get an article version by ID.
@@ -515,10 +536,7 @@ class StudentBackupService(BaseService):
         """
         self._check_feature_enabled()
 
-        conditions = [
-            ArticleVersion.id == version_id,
-            ArticleVersion.is_active == True
-        ]
+        conditions = [ArticleVersion.id == version_id, ArticleVersion.is_active == True]
 
         if user_id is not None:
             conditions.append(ArticleVersion.user_id == user_id)
@@ -533,7 +551,7 @@ class StudentBackupService(BaseService):
         user_id: uuid.UUID,
         mymoment_article_id: Optional[int] = None,
         limit: int = 50,
-        offset: int = 0
+        offset: int = 0,
     ) -> List[ArticleVersion]:
         """
         Get article versions for a tracked student.
@@ -560,7 +578,7 @@ class StudentBackupService(BaseService):
         conditions = [
             ArticleVersion.tracked_student_id == tracked_student_id,
             ArticleVersion.user_id == user_id,
-            ArticleVersion.is_active == True
+            ArticleVersion.is_active == True,
         ]
 
         if mymoment_article_id is not None:
@@ -570,8 +588,7 @@ class StudentBackupService(BaseService):
             select(ArticleVersion)
             .where(and_(*conditions))
             .order_by(
-                ArticleVersion.mymoment_article_id,
-                ArticleVersion.version_number.desc()
+                ArticleVersion.mymoment_article_id, ArticleVersion.version_number.desc()
             )
             .limit(limit)
             .offset(offset)
@@ -581,9 +598,7 @@ class StudentBackupService(BaseService):
         return list(result.scalars().all())
 
     async def get_articles_summary(
-        self,
-        tracked_student_id: uuid.UUID,
-        user_id: uuid.UUID
+        self, tracked_student_id: uuid.UUID, user_id: uuid.UUID
     ) -> List[Dict[str, Any]]:
         """
         Get a summary of articles for a tracked student.
@@ -616,13 +631,13 @@ class StudentBackupService(BaseService):
                 func.max(ArticleVersion.article_task).label("article_task"),
                 func.count(ArticleVersion.id).label("version_count"),
                 func.max(ArticleVersion.scraped_at).label("latest_scraped_at"),
-                func.max(ArticleVersion.article_status).label("article_status")
+                func.max(ArticleVersion.article_status).label("article_status"),
             )
             .where(
                 and_(
                     ArticleVersion.tracked_student_id == tracked_student_id,
                     ArticleVersion.user_id == user_id,
-                    ArticleVersion.is_active == True
+                    ArticleVersion.is_active == True,
                 )
             )
             .group_by(ArticleVersion.mymoment_article_id)
@@ -639,9 +654,11 @@ class StudentBackupService(BaseService):
                 "article_category": row.article_category,
                 "article_task": row.article_task,
                 "version_count": row.version_count,
-                "latest_scraped_at": row.latest_scraped_at.isoformat() if row.latest_scraped_at else None,
+                "latest_scraped_at": row.latest_scraped_at.isoformat()
+                if row.latest_scraped_at
+                else None,
                 "article_status": row.article_status,
-                "view_url": f"https://www.mymoment.ch/article/{row.mymoment_article_id}/"
+                "view_url": f"https://www.mymoment.ch/article/{row.mymoment_article_id}/",
             }
             for row in rows
         ]
@@ -651,9 +668,7 @@ class StudentBackupService(BaseService):
     # =========================================================================
 
     async def _validate_admin_login(
-        self,
-        login_id: uuid.UUID,
-        user_id: uuid.UUID
+        self, login_id: uuid.UUID, user_id: uuid.UUID
     ) -> MyMomentLogin:
         """
         Validate that a login exists, belongs to the user, and is an admin login.
@@ -672,7 +687,7 @@ class StudentBackupService(BaseService):
             and_(
                 MyMomentLogin.id == login_id,
                 MyMomentLogin.user_id == user_id,
-                MyMomentLogin.is_active == True
+                MyMomentLogin.is_active == True,
             )
         )
         result = await self.db_session.execute(stmt)
@@ -694,38 +709,28 @@ class StudentBackupService(BaseService):
 
     async def _get_user_tracked_students_count(self, user_id: uuid.UUID) -> int:
         """Get count of active tracked students for a user."""
-        stmt = (
-            select(func.count(TrackedStudent.id))
-            .where(
-                and_(
-                    TrackedStudent.user_id == user_id,
-                    TrackedStudent.is_active == True
-                )
-            )
+        stmt = select(func.count(TrackedStudent.id)).where(
+            and_(TrackedStudent.user_id == user_id, TrackedStudent.is_active == True)
         )
         result = await self.db_session.execute(stmt)
         return result.scalar_one() or 0
 
     async def _get_existing_tracking(
-        self,
-        user_id: uuid.UUID,
-        mymoment_student_id: int
+        self, user_id: uuid.UUID, mymoment_student_id: int
     ) -> Optional[TrackedStudent]:
         """Check if user is already tracking a specific myMoment student."""
         stmt = select(TrackedStudent).where(
             and_(
                 TrackedStudent.user_id == user_id,
                 TrackedStudent.mymoment_student_id == mymoment_student_id,
-                TrackedStudent.is_active == True
+                TrackedStudent.is_active == True,
             )
         )
         result = await self.db_session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def _get_latest_article_version(
-        self,
-        tracked_student_id: uuid.UUID,
-        mymoment_article_id: int
+        self, tracked_student_id: uuid.UUID, mymoment_article_id: int
     ) -> Optional[ArticleVersion]:
         """Get the latest version of an article for a tracked student."""
         stmt = (
@@ -734,7 +739,7 @@ class StudentBackupService(BaseService):
                 and_(
                     ArticleVersion.tracked_student_id == tracked_student_id,
                     ArticleVersion.mymoment_article_id == mymoment_article_id,
-                    ArticleVersion.is_active == True
+                    ArticleVersion.is_active == True,
                 )
             )
             .order_by(ArticleVersion.version_number.desc())
@@ -744,18 +749,13 @@ class StudentBackupService(BaseService):
         return result.scalar_one_or_none()
 
     async def _get_next_version_number(
-        self,
-        tracked_student_id: uuid.UUID,
-        mymoment_article_id: int
+        self, tracked_student_id: uuid.UUID, mymoment_article_id: int
     ) -> int:
         """Get the next version number for an article."""
-        stmt = (
-            select(func.max(ArticleVersion.version_number))
-            .where(
-                and_(
-                    ArticleVersion.tracked_student_id == tracked_student_id,
-                    ArticleVersion.mymoment_article_id == mymoment_article_id
-                )
+        stmt = select(func.max(ArticleVersion.version_number)).where(
+            and_(
+                ArticleVersion.tracked_student_id == tracked_student_id,
+                ArticleVersion.mymoment_article_id == mymoment_article_id,
             )
         )
         result = await self.db_session.execute(stmt)
@@ -763,9 +763,7 @@ class StudentBackupService(BaseService):
         return (max_version or 0) + 1
 
     async def _enforce_version_limit(
-        self,
-        tracked_student_id: uuid.UUID,
-        mymoment_article_id: int
+        self, tracked_student_id: uuid.UUID, mymoment_article_id: int
     ) -> int:
         """
         Enforce the maximum versions per article limit.
@@ -782,14 +780,11 @@ class StudentBackupService(BaseService):
         max_versions = self.settings.STUDENT_BACKUP_MAX_VERSIONS_PER_ARTICLE
 
         # Get count of active versions
-        count_stmt = (
-            select(func.count(ArticleVersion.id))
-            .where(
-                and_(
-                    ArticleVersion.tracked_student_id == tracked_student_id,
-                    ArticleVersion.mymoment_article_id == mymoment_article_id,
-                    ArticleVersion.is_active == True
-                )
+        count_stmt = select(func.count(ArticleVersion.id)).where(
+            and_(
+                ArticleVersion.tracked_student_id == tracked_student_id,
+                ArticleVersion.mymoment_article_id == mymoment_article_id,
+                ArticleVersion.is_active == True,
             )
         )
         result = await self.db_session.execute(count_stmt)
@@ -806,7 +801,7 @@ class StudentBackupService(BaseService):
                 and_(
                     ArticleVersion.tracked_student_id == tracked_student_id,
                     ArticleVersion.mymoment_article_id == mymoment_article_id,
-                    ArticleVersion.is_active == True
+                    ArticleVersion.is_active == True,
                 )
             )
             .order_by(ArticleVersion.version_number.asc())

@@ -11,7 +11,11 @@ from src.models.monitoring_process_login import MonitoringProcessLogin
 from src.models.monitoring_process_prompt import MonitoringProcessPrompt
 from src.utils.datetimes import utcnow
 
-from tests.fixtures.factories._shared import ensure_same_user, next_sequence, require_owner
+from tests.fixtures.factories._shared import (
+    ensure_same_user,
+    next_sequence,
+    require_owner,
+)
 
 
 async def create_monitoring_process_login(
@@ -71,7 +75,10 @@ async def create_monitoring_process(
     """Persist a valid `MonitoringProcess` and optional junction rows."""
     owner = require_owner(user=user, user_id=user_id)
     if llm_provider is not None:
-        ensure_same_user(owner["user"] or type("Owner", (), {"user_id": owner["user_id"]})(), llm_provider)
+        ensure_same_user(
+            owner["user"] or type("Owner", (), {"user_id": owner["user_id"]})(),
+            llm_provider,
+        )
         llm_provider_id = llm_provider.id
 
     index = next_sequence("monitoring_process")

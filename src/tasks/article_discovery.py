@@ -24,7 +24,14 @@ from src.models.llm_provider import LLMProviderConfiguration
 from src.models.ai_comment import AIComment
 from src.models.monitoring_process_login import MonitoringProcessLogin
 from src.models.monitoring_process_prompt import MonitoringProcessPrompt
-from src.platforms import MYMOMENT, ArticleSummary, InvalidTarget, adapter_for_platform, connect, validate_target
+from src.platforms import (
+    MYMOMENT,
+    ArticleSummary,
+    InvalidTarget,
+    adapter_for_platform,
+    connect,
+    validate_target,
+)
 from src.platforms.accounts import load_platform_account
 from src.config.database import get_database_manager
 from src.utils.ids import as_int
@@ -38,6 +45,7 @@ ARTICLES_PER_LOGIN = 20
 @dataclass
 class ProcessConfig:
     """Configuration snapshot for a monitoring process."""
+
     process_id: uuid.UUID
     user_id: uuid.UUID
     login_ids: List[uuid.UUID]
@@ -86,11 +94,10 @@ class ArticleDiscoveryTask(BaseTask):
 
             # Extract login IDs from junction table
             login_result = await session.execute(
-                select(MonitoringProcessLogin.mymoment_login_id)
-                .where(
+                select(MonitoringProcessLogin.mymoment_login_id).where(
                     and_(
                         MonitoringProcessLogin.monitoring_process_id == process_id,
-                        MonitoringProcessLogin.is_active == True
+                        MonitoringProcessLogin.is_active == True,
                     )
                 )
             )
@@ -98,11 +105,10 @@ class ArticleDiscoveryTask(BaseTask):
 
             # Extract prompt template IDs from junction table
             prompt_result = await session.execute(
-                select(MonitoringProcessPrompt.prompt_template_id)
-                .where(
+                select(MonitoringProcessPrompt.prompt_template_id).where(
                     and_(
                         MonitoringProcessPrompt.monitoring_process_id == process_id,
-                        MonitoringProcessPrompt.is_active == True
+                        MonitoringProcessPrompt.is_active == True,
                     )
                 )
             )
@@ -117,7 +123,7 @@ class ArticleDiscoveryTask(BaseTask):
                     .where(
                         and_(
                             LLMProviderConfiguration.user_id == process.user_id,
-                            LLMProviderConfiguration.is_active == True
+                            LLMProviderConfiguration.is_active == True,
                         )
                     )
                     .limit(1)
@@ -139,14 +145,14 @@ class ArticleDiscoveryTask(BaseTask):
             )
 
         # Session closed automatically (< 100ms total)
-        logger.info(f"Read config for process {process_id}: "
-                   f"{len(login_ids)} logins, {len(prompt_ids)} prompts")
+        logger.info(
+            f"Read config for process {process_id}: "
+            f"{len(login_ids)} logins, {len(prompt_ids)} prompts"
+        )
         return config_snapshot
 
     async def _list_articles_for_login(
-        self,
-        login_id: uuid.UUID,
-        config_snapshot: ProcessConfig
+        self, login_id: uuid.UUID, config_snapshot: ProcessConfig
     ) -> List[ArticleSummary]:
         """
         List the articles of the process target for a single platform account.
@@ -165,12 +171,16 @@ class ArticleDiscoveryTask(BaseTask):
         try:
             validate_target(adapter_for_platform(MYMOMENT), config_snapshot.target)
         except InvalidTarget as e:
-            logger.warning(f"Invalid target for process {config_snapshot.process_id}, skipping article discovery: {e}")
+            logger.warning(
+                f"Invalid target for process {config_snapshot.process_id}, skipping article discovery: {e}"
+            )
             return []
 
         session = await self.get_async_session()
         async with session:
-            account = await load_platform_account(session, login_id, config_snapshot.user_id)
+            account = await load_platform_account(
+                session, login_id, config_snapshot.user_id
+            )
         if account is None:
             logger.warning(f"Login {login_id} not found or inactive")
             return []
@@ -181,7 +191,9 @@ class ArticleDiscoveryTask(BaseTask):
         # The search term is a title filter of the process, not part of the target
         search = (config_snapshot.search_filter or "").lower()
         if search:
-            articles = [article for article in articles if search in article.title.lower()]
+            articles = [
+                article for article in articles if search in article.title.lower()
+            ]
 
         logger.info(f"Listed {len(articles)} articles for login {login_id}")
         return articles[:ARTICLES_PER_LOGIN]
@@ -189,7 +201,7 @@ class ArticleDiscoveryTask(BaseTask):
     async def _create_ai_comment_records(
         self,
         articles_metadata: List[tuple[ArticleSummary, uuid.UUID, Optional[uuid.UUID]]],
-        config: ProcessConfig
+        config: ProcessConfig,
     ) -> List[uuid.UUID]:
         """
         Create AIComment records from article summaries.
@@ -218,14 +230,16 @@ class ArticleDiscoveryTask(BaseTask):
                                 AIComment.mymoment_article_id == article.ref.id,
                                 AIComment.monitoring_process_id == config.process_id,
                                 AIComment.mymoment_login_id == login_id,
-                                AIComment.prompt_template_id == prompt_id
+                                AIComment.prompt_template_id == prompt_id,
                             )
                         )
                     )
 
                     if existing.scalar_one_or_none():
-                        logger.debug(f"Article {article.ref.id} already exists for "
-                                   f"login {login_id}, prompt {prompt_id}")
+                        logger.debug(
+                            f"Article {article.ref.id} already exists for "
+                            f"login {login_id}, prompt {prompt_id}"
+                        )
                         continue
 
                     # Create AIComment record with metadata only
@@ -240,29 +254,24 @@ class ArticleDiscoveryTask(BaseTask):
                         article_url=article.ref.url,
                         article_edited_at=None,  # Not available from index
                         article_scraped_at=utcnow(),
-
                         # Content fields - empty for now (filled in preparation stage)
                         article_content="",
                         article_raw_html="",
                         article_published_at=None,
-
                         # Process and login attribution
                         monitoring_process_id=config.process_id,
                         user_id=config.user_id,
                         mymoment_login_id=login_id,
                         llm_provider_id=config.llm_provider_id,
                         prompt_template_id=prompt_id,
-
                         # Status
-                        status='discovered',
-
+                        status="discovered",
                         # Comment fields (will be filled later)
                         comment_content=None,
                         ai_model_name=None,
                         ai_provider_name=None,
-
                         # Visibility
-                        is_hidden=config.hide_comments
+                        is_hidden=config.hide_comments,
                     )
 
                     try:
@@ -281,7 +290,9 @@ class ArticleDiscoveryTask(BaseTask):
                         continue
 
                 except Exception as e:
-                    logger.error(f"Failed to create AIComment for article {article.ref.id}: {e}")
+                    logger.error(
+                        f"Failed to create AIComment for article {article.ref.id}: {e}"
+                    )
                     continue
 
             if created_ids:
@@ -319,10 +330,14 @@ class ArticleDiscoveryTask(BaseTask):
                 raise ValueError(f"No active logins found for process {process_id}")
 
             if not config.prompt_ids:
-                raise ValueError(f"No active prompt templates found for process {process_id}")
+                raise ValueError(
+                    f"No active prompt templates found for process {process_id}"
+                )
 
-            logger.info(f"Starting article discovery for process {process_id}: "
-                       f"{len(config.login_ids)} logins × {len(config.prompt_ids)} prompts")
+            logger.info(
+                f"Starting article discovery for process {process_id}: "
+                f"{len(config.login_ids)} logins × {len(config.prompt_ids)} prompts"
+            )
 
             # Step 2: List articles for each login (outside DB sessions)
             all_articles_metadata = []
@@ -330,8 +345,7 @@ class ArticleDiscoveryTask(BaseTask):
             for login_id in config.login_ids:
                 try:
                     articles = await self._list_articles_for_login(
-                        login_id=login_id,
-                        config_snapshot=config
+                        login_id=login_id, config_snapshot=config
                     )
 
                     # For each article, create entries for each prompt template
@@ -343,7 +357,9 @@ class ArticleDiscoveryTask(BaseTask):
                     logger.info(f"Found {len(articles)} articles for login {login_id}")
 
                 except Exception as e:
-                    error_msg = f"Listing articles failed for login {login_id}: {str(e)}"
+                    error_msg = (
+                        f"Listing articles failed for login {login_id}: {str(e)}"
+                    )
                     errors.append(error_msg)
                     logger.error(error_msg)
                     # Continue with other logins
@@ -351,25 +367,28 @@ class ArticleDiscoveryTask(BaseTask):
             # Step 3: Batch create AIComment records (single transaction)
             if all_articles_metadata:
                 created_ai_comment_ids = await self._create_ai_comment_records(
-                    all_articles_metadata,
-                    config
+                    all_articles_metadata, config
                 )
                 total_discovered = len(created_ai_comment_ids)
 
             execution_time = (utcnow() - start_time).total_seconds()
 
-            logger.info(f"Article discovery completed for process {process_id}: "
-                       f"{total_discovered} records created, "
-                       f"{len(errors)} errors, "
-                       f"{execution_time:.2f}s")
+            logger.info(
+                f"Article discovery completed for process {process_id}: "
+                f"{total_discovered} records created, "
+                f"{len(errors)} errors, "
+                f"{execution_time:.2f}s"
+            )
 
             return {
-                'discovered': total_discovered,
-                'generate_only': config.generate_only,
-                'created_ai_comment_ids': [str(ai_comment_id) for ai_comment_id in created_ai_comment_ids],
-                'errors': errors,
-                'execution_time_seconds': execution_time,
-                'status': 'success' if not errors else 'partial'
+                "discovered": total_discovered,
+                "generate_only": config.generate_only,
+                "created_ai_comment_ids": [
+                    str(ai_comment_id) for ai_comment_id in created_ai_comment_ids
+                ],
+                "errors": errors,
+                "execution_time_seconds": execution_time,
+                "status": "success" if not errors else "partial",
             }
 
         except Exception as e:
@@ -380,12 +399,12 @@ class ArticleDiscoveryTask(BaseTask):
             execution_time = (utcnow() - start_time).total_seconds()
 
             return {
-                'discovered': total_discovered,
-                'generate_only': False,
-                'created_ai_comment_ids': [],
-                'errors': errors,
-                'execution_time_seconds': execution_time,
-                'status': 'failed'
+                "discovered": total_discovered,
+                "generate_only": False,
+                "created_ai_comment_ids": [],
+                "errors": errors,
+                "execution_time_seconds": execution_time,
+                "status": "failed",
             }
 
 
@@ -431,10 +450,10 @@ def _normalize_process_id(process_id: Any, compat_args: tuple[Any, ...]) -> str:
 @celery_app.task(
     bind=True,
     base=ArticleDiscoveryTask,
-    name='src.tasks.article_discovery.discover_articles',
-    queue='discovery',
+    name="src.tasks.article_discovery.discover_articles",
+    queue="discovery",
     max_retries=3,
-    default_retry_delay=120
+    default_retry_delay=120,
 )
 def discover_articles(self, process_id: Any, *compat_args: Any) -> Dict[str, Any]:
     """

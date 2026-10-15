@@ -115,7 +115,9 @@ async def test_pipeline_state_factories_cover_current_status_helpers(db_session)
     assert failed.posting_status_display == "Posting failed"
 
 
-async def test_ai_prefix_helpers_and_requirement_validation_use_current_rules(db_session):
+async def test_ai_prefix_helpers_and_requirement_validation_use_current_rules(
+    db_session,
+):
     bundle = await _create_comment_bundle(db_session)
     prefix = get_settings().monitoring.AI_COMMENT_PREFIX
 
@@ -151,7 +153,9 @@ async def test_ai_prefix_helpers_and_requirement_validation_use_current_rules(db
     assert AIComment.apply_ai_prefix(plain_text) == plain_text
 
 
-async def test_mark_as_posted_and_failed_update_comment_state_and_timestamps(db_session):
+async def test_mark_as_posted_and_failed_update_comment_state_and_timestamps(
+    db_session,
+):
     bundle = await _create_comment_bundle(db_session)
     comment = await create_generated_ai_comment(
         db_session,
@@ -181,7 +185,9 @@ async def test_mark_as_posted_and_failed_update_comment_state_and_timestamps(db_
     assert comment.failed_at >= before_failure
 
 
-async def test_snapshot_dicts_and_uniqueness_constraint_follow_current_schema(db_session):
+async def test_snapshot_dicts_and_uniqueness_constraint_follow_current_schema(
+    db_session,
+):
     bundle = await _create_comment_bundle(db_session)
     generated = await create_generated_ai_comment(
         db_session,

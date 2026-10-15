@@ -78,11 +78,15 @@ class FakeConnection:
             for dimension in self._platform.target_description
         ]
 
-    async def list_articles(self, target: Optional[Mapping[str, str]] = None) -> list[ArticleSummary]:
+    async def list_articles(
+        self, target: Optional[Mapping[str, str]] = None
+    ) -> list[ArticleSummary]:
         self._platform._raise_injected("list_articles")
         target = dict(target or {})
         self._platform.listed_targets.append(target)
-        unknown = set(target) - {dimension.key for dimension in self._platform.target_description}
+        unknown = set(target) - {
+            dimension.key for dimension in self._platform.target_description
+        }
         if unknown:
             raise PlatformRejected(f"unknown target keys: {sorted(unknown)}")
         return [
@@ -94,7 +98,9 @@ class FakeConnection:
                 extra=article.extra,
             )
             for article in self._platform.articles.values()
-            if all(_target_value(article, key) == value for key, value in target.items())
+            if all(
+                _target_value(article, key) == value for key, value in target.items()
+            )
         ]
 
     async def fetch_article(self, ref: ArticleRef) -> ArticleContent:
@@ -104,13 +110,17 @@ class FakeConnection:
         except KeyError:
             raise PlatformRejected(f"article {ref.id} not found") from None
 
-    async def post_comment(self, ref: ArticleRef, text: str, *, hidden: bool = False) -> PostedComment:
+    async def post_comment(
+        self, ref: ArticleRef, text: str, *, hidden: bool = False
+    ) -> PostedComment:
         self._platform._raise_injected("post_comment")
         if ref.id not in self._platform.articles:
             raise PlatformRejected(f"article {ref.id} not found")
         if ref.id in self._platform.closed_articles:
             raise PlatformRejected(f"article {ref.id} does not accept comments")
-        self._platform.posted_comments.append(FakePostedComment(self.account, ref, text, hidden))
+        self._platform.posted_comments.append(
+            FakePostedComment(self.account, ref, text, hidden)
+        )
         return PostedComment()
 
     async def list_student_articles(self, student: StudentRef) -> list[ArticleSummary]:
@@ -135,16 +145,28 @@ class FakePlatform:
     def __init__(self, base_url: str = "https://fake.example") -> None:
         self.base_url = base_url
         self.articles: dict[str, ArticleContent] = {}
-        self.target_description: tuple[TargetDimension, ...] = DEFAULT_TARGET_DESCRIPTION
-        self.target_rules: list[Callable[[Mapping[str, str]], None]] = []  # the platform's own target checks
-        self.target_values: dict[str, list[TargetValue]] = {}  # what `list_targets` offers per dimension key
-        self.listed_targets: list[dict[str, str]] = []  # every target `list_articles` was called with
+        self.target_description: tuple[TargetDimension, ...] = (
+            DEFAULT_TARGET_DESCRIPTION
+        )
+        self.target_rules: list[
+            Callable[[Mapping[str, str]], None]
+        ] = []  # the platform's own target checks
+        self.target_values: dict[
+            str, list[TargetValue]
+        ] = {}  # what `list_targets` offers per dimension key
+        self.listed_targets: list[
+            dict[str, str]
+        ] = []  # every target `list_articles` was called with
         self.connected_accounts: list[PlatformAccount] = []
-        self.fresh_logins: list[PlatformAccount] = []  # accounts connected without reusing a session
+        self.fresh_logins: list[
+            PlatformAccount
+        ] = []  # accounts connected without reusing a session
         self.posted_comments: list[FakePostedComment] = []
         self.closed_articles: set[str] = set()
         self.article_students: dict[str, str] = {}
-        self.on_call: Optional[Callable[[str], None]] = None  # observes every operation before it runs
+        self.on_call: Optional[Callable[[str], None]] = (
+            None  # observes every operation before it runs
+        )
         self._errors: dict[str, Exception] = {}
 
     def fail(self, operation: str, error: Exception) -> None:
@@ -192,7 +214,9 @@ class FakePlatform:
             rule(target)
 
     @asynccontextmanager
-    async def connect(self, account: PlatformAccount, *, fresh_login: bool = False) -> AsyncIterator[FakeConnection]:
+    async def connect(
+        self, account: PlatformAccount, *, fresh_login: bool = False
+    ) -> AsyncIterator[FakeConnection]:
         self._raise_injected("connect")
         self.connected_accounts.append(account)
         if fresh_login:

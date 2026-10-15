@@ -8,7 +8,9 @@ from src.platforms.errors import InvalidTarget
 from src.platforms.types import PlatformAdapter, TargetDimension, TargetEntry
 
 
-def validate_target(adapter: PlatformAdapter, target: Mapping[str, Any]) -> dict[str, str]:
+def validate_target(
+    adapter: PlatformAdapter, target: Mapping[str, Any]
+) -> dict[str, str]:
     """Check `target` without a connection and return it as a plain dict; raise InvalidTarget.
 
     Only keys of the description, every required key present, every value a
@@ -21,7 +23,10 @@ def validate_target(adapter: PlatformAdapter, target: Mapping[str, Any]) -> dict
 
 
 def check_target_shape(
-    description: Sequence[TargetDimension], target: Mapping[str, Any], *, complete: bool = True
+    description: Sequence[TargetDimension],
+    target: Mapping[str, Any],
+    *,
+    complete: bool = True,
 ) -> None:
     """Check `target` against `description` alone; raise InvalidTarget.
 
@@ -37,13 +42,19 @@ def check_target_shape(
     if complete:
         for dimension in description:
             if dimension.required and dimension.key not in target:
-                raise InvalidTarget(f"Pflichtangabe „{dimension.label}“ ({dimension.key}) fehlt")
+                raise InvalidTarget(
+                    f"Pflichtangabe „{dimension.label}“ ({dimension.key}) fehlt"
+                )
     for key, value in target.items():
         if not isinstance(value, str) or not value.strip():
-            raise InvalidTarget(f"„{labels[key]}“ ({key}) braucht einen nicht-leeren Text als Wert")
+            raise InvalidTarget(
+                f"„{labels[key]}“ ({key}) braucht einen nicht-leeren Text als Wert"
+            )
 
 
-def label_target(adapter: PlatformAdapter, target: Mapping[str, str]) -> tuple[TargetEntry, ...]:
+def label_target(
+    adapter: PlatformAdapter, target: Mapping[str, str]
+) -> tuple[TargetEntry, ...]:
     """The set dimensions of `target` with their labels, without a connection.
 
     Description order first; unset dimensions are left out. A key the
@@ -52,9 +63,15 @@ def label_target(adapter: PlatformAdapter, target: Mapping[str, str]) -> tuple[T
     description = adapter.describe_target()
     known = {dimension.key for dimension in description}
     entries = [
-        TargetEntry(key=dimension.key, label=dimension.label, value=target[dimension.key])
+        TargetEntry(
+            key=dimension.key, label=dimension.label, value=target[dimension.key]
+        )
         for dimension in description
         if dimension.key in target
     ]
-    entries += [TargetEntry(key=key, label=key, value=target[key]) for key in target if key not in known]
+    entries += [
+        TargetEntry(key=key, label=key, value=target[key])
+        for key in target
+        if key not in known
+    ]
     return tuple(entries)

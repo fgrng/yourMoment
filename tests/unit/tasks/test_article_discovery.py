@@ -15,7 +15,12 @@ from tests.fixtures.assertions import assert_task_result_shape
 from tests.fixtures.builders import build_scenario
 
 
-pytestmark = [pytest.mark.unit, pytest.mark.database, pytest.mark.celery, pytest.mark.web_scraping]
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.database,
+    pytest.mark.celery,
+    pytest.mark.web_scraping,
+]
 
 
 def _bind_task_sessions(task, db_engine):
@@ -42,18 +47,26 @@ async def _run_discovery_task(task, process_id):
         raise AssertionError(f"retry() should not have been called for {exc!r}")
 
     task.retry = _retry
-    return await asyncio.to_thread(article_discovery.discover_articles.run.__func__, task, str(process_id))
+    return await asyncio.to_thread(
+        article_discovery.discover_articles.run.__func__, task, str(process_id)
+    )
 
 
 async def _comments_of(db_session, process_id):
-    result = await db_session.execute(select(AIComment).where(AIComment.monitoring_process_id == process_id))
+    result = await db_session.execute(
+        select(AIComment).where(AIComment.monitoring_process_id == process_id)
+    )
     return result.scalars().all()
 
 
-async def test_discovery_creates_rows_and_skips_duplicates(db_session, db_engine, fake_platform):
+async def test_discovery_creates_rows_and_skips_duplicates(
+    db_session, db_engine, fake_platform
+):
     scenario = await build_scenario("minimal_happy_path", db_session)
     await db_session.commit()
-    ref = _add_target_article(fake_platform, "1234", title="Sample Discovery", author="Fixture Student")
+    ref = _add_target_article(
+        fake_platform, "1234", title="Sample Discovery", author="Fixture Student"
+    )
 
     task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
     first_result = await task._discover_articles_async(scenario["process"].id)
@@ -84,26 +97,55 @@ async def test_discovery_creates_rows_and_skips_duplicates(db_session, db_engine
     assert comment.is_hidden is scenario["process"].hide_comments
 
 
-async def test_discovery_creates_rows_only_for_the_process_target(db_session, db_engine, fake_platform):
+async def test_discovery_creates_rows_only_for_the_process_target(
+    db_session, db_engine, fake_platform
+):
     # Process target: classroom "home", category 7, arrangement 10
     target = {"classroom": "home", "category": "7", "arrangement": "10"}
-    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"target": target}})
+    scenario = await build_scenario(
+        "minimal_happy_path", db_session, {"process": {"target": target}}
+    )
     await db_session.commit()
-    fake_platform.add_article("1", title="Sample", category="7", extra={"classroom": "home", "arrangement": "10"})
-    fake_platform.add_article("2", title="Sample", category="9", extra={"classroom": "home", "arrangement": "10"})
-    fake_platform.add_article("3", title="Sample", category="7", extra={"classroom": "82", "arrangement": "10"})
-    fake_platform.add_article("4", title="Sample", category="7", extra={"classroom": "home", "arrangement": "4"})
+    fake_platform.add_article(
+        "1",
+        title="Sample",
+        category="7",
+        extra={"classroom": "home", "arrangement": "10"},
+    )
+    fake_platform.add_article(
+        "2",
+        title="Sample",
+        category="9",
+        extra={"classroom": "home", "arrangement": "10"},
+    )
+    fake_platform.add_article(
+        "3",
+        title="Sample",
+        category="7",
+        extra={"classroom": "82", "arrangement": "10"},
+    )
+    fake_platform.add_article(
+        "4",
+        title="Sample",
+        category="7",
+        extra={"classroom": "home", "arrangement": "4"},
+    )
 
     task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
     await task._discover_articles_async(scenario["process"].id)
 
-    assert [c.mymoment_article_id for c in await _comments_of(db_session, scenario["process"].id)] == ["1"]
+    assert [
+        c.mymoment_article_id
+        for c in await _comments_of(db_session, scenario["process"].id)
+    ] == ["1"]
 
 
 async def test_discovery_stores_no_category_when_the_platform_reports_a_non_numeric_one(
     db_session, db_engine, fake_platform
 ):
-    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"target": {"classroom": "home"}}})
+    scenario = await build_scenario(
+        "minimal_happy_path", db_session, {"process": {"target": {"classroom": "home"}}}
+    )
     await db_session.commit()
     _add_target_article(fake_platform, "1", category="²")
 
@@ -115,12 +157,16 @@ async def test_discovery_stores_no_category_when_the_platform_reports_a_non_nume
 
 
 @pytest.mark.parametrize(
-    ("search_filter", "kept_ids"), [("rotpanda", ["1"]), (None, ["1", "2"])], ids=["search-term", "no-search-term"]
+    ("search_filter", "kept_ids"),
+    [("rotpanda", ["1"]), (None, ["1", "2"])],
+    ids=["search-term", "no-search-term"],
 )
 async def test_discovery_keeps_only_titles_with_the_search_term(
     db_session, db_engine, fake_platform, search_filter, kept_ids
 ):
-    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"search_filter": search_filter}})
+    scenario = await build_scenario(
+        "minimal_happy_path", db_session, {"process": {"search_filter": search_filter}}
+    )
     await db_session.commit()
     _add_target_article(fake_platform, "1", title="Der Rotpanda")
     _add_target_article(fake_platform, "2", title="Der Eisbär")
@@ -128,12 +174,22 @@ async def test_discovery_keeps_only_titles_with_the_search_term(
     task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
     await task._discover_articles_async(scenario["process"].id)
 
-    assert sorted(c.mymoment_article_id for c in await _comments_of(db_session, scenario["process"].id)) == kept_ids
+    assert (
+        sorted(
+            c.mymoment_article_id
+            for c in await _comments_of(db_session, scenario["process"].id)
+        )
+        == kept_ids
+    )
 
 
-async def test_discovery_does_not_pass_the_search_term_to_the_platform(db_session, db_engine, fake_platform):
+async def test_discovery_does_not_pass_the_search_term_to_the_platform(
+    db_session, db_engine, fake_platform
+):
     process = {"target": {"classroom": "home"}, "search_filter": "rotpanda"}
-    scenario = await build_scenario("minimal_happy_path", db_session, {"process": process})
+    scenario = await build_scenario(
+        "minimal_happy_path", db_session, {"process": process}
+    )
     await db_session.commit()
 
     task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
@@ -142,7 +198,9 @@ async def test_discovery_does_not_pass_the_search_term_to_the_platform(db_sessio
     assert fake_platform.listed_targets == [{"classroom": "home"}]
 
 
-async def test_discovery_creates_at_most_20_rows_per_login(db_session, db_engine, fake_platform):
+async def test_discovery_creates_at_most_20_rows_per_login(
+    db_session, db_engine, fake_platform
+):
     scenario = await build_scenario("minimal_happy_path", db_session)
     await db_session.commit()
     for article_id in range(25):
@@ -154,9 +212,13 @@ async def test_discovery_creates_at_most_20_rows_per_login(db_session, db_engine
     assert result["discovered"] == 20
 
 
-async def test_discovery_passes_the_stored_target_unchanged_to_the_platform(db_session, db_engine, fake_platform):
+async def test_discovery_passes_the_stored_target_unchanged_to_the_platform(
+    db_session, db_engine, fake_platform
+):
     target = {"classroom": "4711", "category": "7", "arrangement": "10"}
-    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"target": target}})
+    scenario = await build_scenario(
+        "minimal_happy_path", db_session, {"process": {"target": target}}
+    )
     await db_session.commit()
 
     task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
@@ -165,9 +227,13 @@ async def test_discovery_passes_the_stored_target_unchanged_to_the_platform(db_s
     assert fake_platform.listed_targets == [target]
 
 
-async def test_discovery_without_classroom_does_not_contact_the_platform(db_session, db_engine, fake_platform):
+async def test_discovery_without_classroom_does_not_contact_the_platform(
+    db_session, db_engine, fake_platform
+):
     # A process migrated from an empty tab_filter column has no classroom in its target
-    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"target": {"category": "7"}}})
+    scenario = await build_scenario(
+        "minimal_happy_path", db_session, {"process": {"target": {"category": "7"}}}
+    )
     await db_session.commit()
     _add_target_article(fake_platform, "1")
 
@@ -177,9 +243,13 @@ async def test_discovery_without_classroom_does_not_contact_the_platform(db_sess
     assert (result["discovered"], fake_platform.connected_accounts) == (0, [])
 
 
-async def test_discovery_connects_with_the_decrypted_platform_account(db_session, db_engine, fake_platform):
+async def test_discovery_connects_with_the_decrypted_platform_account(
+    db_session, db_engine, fake_platform
+):
     scenario = await build_scenario(
-        "minimal_happy_path", db_session, {"login": {"username": "teacher", "password": "Secret-1!"}}
+        "minimal_happy_path",
+        db_session,
+        {"login": {"username": "teacher", "password": "Secret-1!"}},
     )
     await db_session.commit()
 
@@ -187,10 +257,16 @@ async def test_discovery_connects_with_the_decrypted_platform_account(db_session
     await task._discover_articles_async(scenario["process"].id)
 
     [account] = fake_platform.connected_accounts
-    assert (account.id, account.username, account.password) == (scenario["login"].id, "teacher", "Secret-1!")
+    assert (account.id, account.username, account.password) == (
+        scenario["login"].id,
+        "teacher",
+        "Secret-1!",
+    )
 
 
-async def test_discovery_reports_unavailable_platform_as_error(db_session, db_engine, fake_platform):
+async def test_discovery_reports_unavailable_platform_as_error(
+    db_session, db_engine, fake_platform
+):
     scenario = await build_scenario("minimal_happy_path", db_session)
     await db_session.commit()
     fake_platform.fail("list_articles", PlatformUnavailable("myMoment down"))
@@ -232,6 +308,8 @@ def test_discovery_wrapper_dispatches_processing_chains(generate_only, monkeypat
 
     result = article_discovery.discover_articles.run.__func__(task, str(process_id))
 
-    assert_task_result_shape(result, required_keys=("status", "spawned_chains"), expected_status="success")
+    assert_task_result_shape(
+        result, required_keys=("status", "spawned_chains"), expected_status="success"
+    )
     assert captured == {"ai_comment_ids": created_ids, "generate_only": generate_only}
     assert [row["ai_comment_id"] for row in result["spawned_chains"]] == created_ids

@@ -58,9 +58,17 @@ async def create_mymoment_session(
 ) -> MyMomentSession:
     """Persist a valid `MyMomentSession` with encrypted session data."""
     if mymoment_login is None and mymoment_login_id is None:
-        raise ValueError("mymoment_session fixtures require mymoment_login or mymoment_login_id")
-    if mymoment_login is not None and mymoment_login_id is not None and mymoment_login.id != mymoment_login_id:
-        raise ValueError("mymoment_login and mymoment_login_id refer to different logins")
+        raise ValueError(
+            "mymoment_session fixtures require mymoment_login or mymoment_login_id"
+        )
+    if (
+        mymoment_login is not None
+        and mymoment_login_id is not None
+        and mymoment_login.id != mymoment_login_id
+    ):
+        raise ValueError(
+            "mymoment_login and mymoment_login_id refer to different logins"
+        )
 
     login_id = mymoment_login.id if mymoment_login is not None else mymoment_login_id
     index = next_sequence("mymoment_session")

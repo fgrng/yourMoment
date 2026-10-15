@@ -36,7 +36,7 @@ class TrackedStudent(Base):
         UUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
-        doc="Unique identifier for the tracked student record"
+        doc="Unique identifier for the tracked student record",
     )
 
     # Foreign key to User (who is tracking this student)
@@ -45,7 +45,7 @@ class TrackedStudent(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
-        doc="User who is tracking this student"
+        doc="User who is tracking this student",
     )
 
     # Foreign key to MyMomentLogin (admin account for scraping)
@@ -54,7 +54,7 @@ class TrackedStudent(Base):
         ForeignKey("mymoment_logins.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-        doc="Admin login credentials for accessing student dashboard"
+        doc="Admin login credentials for accessing student dashboard",
     )
 
     # myMoment student ID (the student being tracked)
@@ -62,29 +62,22 @@ class TrackedStudent(Base):
         Integer,
         nullable=False,
         index=True,
-        doc="Student's user ID on myMoment platform (e.g., 1417)"
+        doc="Student's user ID on myMoment platform (e.g., 1417)",
     )
 
     # Optional display name for easy identification
     display_name = Column(
         String(255),
         nullable=True,
-        doc="Optional friendly name for this tracked student"
+        doc="Optional friendly name for this tracked student",
     )
 
     # Optional notes
-    notes = Column(
-        Text,
-        nullable=True,
-        doc="Optional notes about this tracked student"
-    )
+    notes = Column(Text, nullable=True, doc="Optional notes about this tracked student")
 
     # Status fields
     is_active = Column(
-        Boolean,
-        default=True,
-        nullable=False,
-        doc="Whether this tracking is active"
+        Boolean, default=True, nullable=False, doc="Whether this tracking is active"
     )
 
     # Timestamp fields
@@ -92,7 +85,7 @@ class TrackedStudent(Base):
         UTCDateTime,
         server_default=func.now(),
         nullable=False,
-        doc="When tracking was created"
+        doc="When tracking was created",
     )
 
     updated_at = Column(
@@ -100,33 +93,29 @@ class TrackedStudent(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
-        doc="Last update timestamp"
+        doc="Last update timestamp",
     )
 
     last_backup_at = Column(
-        UTCDateTime,
-        nullable=True,
-        doc="When the last successful backup was performed"
+        UTCDateTime, nullable=True, doc="When the last successful backup was performed"
     )
 
     # Relationships
     user = relationship(
-        "User",
-        back_populates="tracked_students",
-        doc="User who owns this tracking"
+        "User", back_populates="tracked_students", doc="User who owns this tracking"
     )
 
     mymoment_login = relationship(
         "MyMomentLogin",
         back_populates="tracked_students",
-        doc="Admin login used for accessing student dashboard"
+        doc="Admin login used for accessing student dashboard",
     )
 
     article_versions = relationship(
         "ArticleVersion",
         back_populates="tracked_student",
         cascade="all, delete-orphan",
-        doc="Versioned articles for this tracked student"
+        doc="Versioned articles for this tracked student",
     )
 
     def __repr__(self) -> str:
@@ -146,14 +135,18 @@ class TrackedStudent(Base):
         return {
             "id": str(self.id),
             "user_id": str(self.user_id),
-            "mymoment_login_id": str(self.mymoment_login_id) if self.mymoment_login_id else None,
+            "mymoment_login_id": str(self.mymoment_login_id)
+            if self.mymoment_login_id
+            else None,
             "mymoment_student_id": self.mymoment_student_id,
             "display_name": self.display_name,
             "notes": self.notes,
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "last_backup_at": self.last_backup_at.isoformat() if self.last_backup_at else None,
+            "last_backup_at": self.last_backup_at.isoformat()
+            if self.last_backup_at
+            else None,
         }
 
     def mark_backup_completed(self) -> None:
@@ -177,7 +170,7 @@ class TrackedStudent(Base):
         Returns:
             Number of unique mymoment_article_ids
         """
-        if 'article_versions' not in self.__dict__:
+        if "article_versions" not in self.__dict__:
             return 0
 
         if not self.article_versions:
@@ -195,7 +188,7 @@ class TrackedStudent(Base):
         Returns:
             Total number of active article versions
         """
-        if 'article_versions' not in self.__dict__:
+        if "article_versions" not in self.__dict__:
             return 0
 
         if not self.article_versions:

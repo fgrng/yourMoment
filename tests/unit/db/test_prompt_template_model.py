@@ -15,7 +15,9 @@ from tests.fixtures.factories import (
 pytestmark = pytest.mark.database
 
 
-async def test_factory_variants_match_category_helpers_and_persist_timestamps(db_session):
+async def test_factory_variants_match_category_helpers_and_persist_timestamps(
+    db_session,
+):
     user = await create_user(db_session)
     user_prompt = await create_user_prompt_template(db_session, user=user)
     system_prompt = await create_system_prompt_template(db_session)
@@ -58,13 +60,16 @@ async def test_placeholder_helpers_render_and_validate_persisted_templates(db_se
         "article_author",
         "mymoment_username",
     }
-    assert prompt.render_prompt(
-        {
-            "article_title": "My Story",
-            "article_author": "Alex",
-            "mymoment_username": "teacher.one",
-        }
-    ) == "Title: My Story; Author: Alex; Account: teacher.one."
+    assert (
+        prompt.render_prompt(
+            {
+                "article_title": "My Story",
+                "article_author": "Alex",
+                "mymoment_username": "teacher.one",
+            }
+        )
+        == "Title: My Story; Author: Alex; Account: teacher.one."
+    )
     assert prompt.is_valid_template() is True
 
 

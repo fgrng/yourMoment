@@ -10,13 +10,13 @@ from src.api.schemas import (
     LLMProviderCreate,
     LLMProviderUpdate,
     LLMProviderResponse,
-    ErrorResponse
+    ErrorResponse,
 )
 from src.services.llm_service import (
     LLMProviderService,
     LLMProviderError,
     LLMProviderNotFoundError,
-    LLMProviderValidationError
+    LLMProviderValidationError,
 )
 from src.api.auth import get_current_user
 from src.config.database import get_session
@@ -28,7 +28,10 @@ logger = logging.getLogger(__name__)
 # Initialize router
 router = APIRouter(prefix="/llm-providers", tags=["LLM Providers"])
 
-async def get_llm_service(db: AsyncSession = Depends(get_session)) -> LLMProviderService:
+
+async def get_llm_service(
+    db: AsyncSession = Depends(get_session),
+) -> LLMProviderService:
     """Dependency to get LLM provider service."""
     return LLMProviderService(db)
 
@@ -40,13 +43,16 @@ async def get_llm_service(db: AsyncSession = Depends(get_session)) -> LLMProvide
     description="Retrieve all LLM provider configurations for the authenticated user",
     responses={
         200: {"description": "LLM provider configurations retrieved successfully"},
-        401: {"model": ErrorResponse, "description": "Unauthorized - invalid or missing token"},
-        500: {"model": ErrorResponse, "description": "Internal server error"}
-    }
+        401: {
+            "model": ErrorResponse,
+            "description": "Unauthorized - invalid or missing token",
+        },
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
 )
 async def get_llm_providers(
     current_user: User = Depends(get_current_user),
-    llm_service: LLMProviderService = Depends(get_llm_service)
+    llm_service: LLMProviderService = Depends(get_llm_service),
 ):
     """
     Get all LLM provider configurations for the authenticated user.
@@ -60,30 +66,36 @@ async def get_llm_providers(
         # Convert to response models
         provider_responses = []
         for provider in providers:
-            provider_responses.append(LLMProviderResponse(
-                id=provider.id,
-                provider_name=provider.provider_name,
-                model_name=provider.model_name,
-                max_tokens=provider.max_tokens,
-                temperature=provider.temperature,
-                is_active=provider.is_active,
-                created_at=provider.created_at
-            ))
+            provider_responses.append(
+                LLMProviderResponse(
+                    id=provider.id,
+                    provider_name=provider.provider_name,
+                    model_name=provider.model_name,
+                    max_tokens=provider.max_tokens,
+                    temperature=provider.temperature,
+                    is_active=provider.is_active,
+                    created_at=provider.created_at,
+                )
+            )
 
-        logger.info(f"Retrieved {len(provider_responses)} provider configurations for user {current_user.id}")
+        logger.info(
+            f"Retrieved {len(provider_responses)} provider configurations for user {current_user.id}"
+        )
         return provider_responses
 
     except LLMProviderError as e:
         logger.error(f"LLM provider service error for user {current_user.id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve provider configurations: {e}"
+            detail=f"Failed to retrieve provider configurations: {e}",
         )
     except Exception as e:
-        logger.error(f"Unexpected error retrieving providers for user {current_user.id}: {e}")
+        logger.error(
+            f"Unexpected error retrieving providers for user {current_user.id}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve provider configurations"
+            detail="Failed to retrieve provider configurations",
         )
 
 
@@ -92,13 +104,11 @@ async def get_llm_providers(
     "/supported",
     summary="Get supported LLM providers",
     description="Get model catalog for supported providers (OpenAI, Mistral) with capability flags.",
-    responses={
-        200: {"description": "Model catalog retrieved successfully"}
-    }
+    responses={200: {"description": "Model catalog retrieved successfully"}},
 )
 async def get_supported_providers(
     current_user: User = Depends(get_current_user),
-    llm_service: LLMProviderService = Depends(get_llm_service)
+    llm_service: LLMProviderService = Depends(get_llm_service),
 ):
     """
     Get information about supported LLM providers.
@@ -115,7 +125,7 @@ async def get_supported_providers(
         logger.error(f"Error retrieving supported providers: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve supported providers information"
+            detail="Failed to retrieve supported providers information",
         )
 
 
@@ -126,15 +136,21 @@ async def get_supported_providers(
     description="Retrieve a specific LLM provider configuration by ID",
     responses={
         200: {"description": "LLM provider configuration retrieved successfully"},
-        401: {"model": ErrorResponse, "description": "Unauthorized - invalid or missing token"},
-        404: {"model": ErrorResponse, "description": "LLM provider configuration not found"},
-        500: {"model": ErrorResponse, "description": "Internal server error"}
-    }
+        401: {
+            "model": ErrorResponse,
+            "description": "Unauthorized - invalid or missing token",
+        },
+        404: {
+            "model": ErrorResponse,
+            "description": "LLM provider configuration not found",
+        },
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
 )
 async def get_llm_provider(
     provider_id: uuid.UUID = Path(..., description="LLM provider configuration ID"),
     current_user: User = Depends(get_current_user),
-    llm_service: LLMProviderService = Depends(get_llm_service)
+    llm_service: LLMProviderService = Depends(get_llm_service),
 ):
     """
     Get a specific LLM provider configuration by ID.
@@ -153,7 +169,7 @@ async def get_llm_provider(
         if not provider:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="LLM provider configuration not found"
+                detail="LLM provider configuration not found",
             )
 
         response = LLMProviderResponse(
@@ -163,7 +179,7 @@ async def get_llm_provider(
             max_tokens=provider.max_tokens,
             temperature=provider.temperature,
             is_active=provider.is_active,
-            created_at=provider.created_at
+            created_at=provider.created_at,
         )
 
         logger.info(f"Retrieved provider {provider_id} for user {current_user.id}")
@@ -172,19 +188,19 @@ async def get_llm_provider(
     except LLMProviderNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="LLM provider configuration not found"
+            detail="LLM provider configuration not found",
         )
     except LLMProviderError as e:
         logger.error(f"LLM provider service error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve provider configuration: {e}"
+            detail=f"Failed to retrieve provider configuration: {e}",
         )
     except Exception as e:
         logger.error(f"Unexpected error retrieving provider {provider_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve provider configuration"
+            detail="Failed to retrieve provider configuration",
         )
 
 
@@ -197,14 +213,17 @@ async def get_llm_provider(
     responses={
         201: {"description": "LLM provider configuration created successfully"},
         400: {"model": ErrorResponse, "description": "Invalid request data"},
-        401: {"model": ErrorResponse, "description": "Unauthorized - invalid or missing token"},
-        500: {"model": ErrorResponse, "description": "Internal server error"}
-    }
+        401: {
+            "model": ErrorResponse,
+            "description": "Unauthorized - invalid or missing token",
+        },
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
 )
 async def create_llm_provider(
     provider_data: LLMProviderCreate,
     current_user: User = Depends(get_current_user),
-    llm_service: LLMProviderService = Depends(get_llm_service)
+    llm_service: LLMProviderService = Depends(get_llm_service),
 ):
     """
     Create new LLM provider configuration for the authenticated user.
@@ -222,7 +241,7 @@ async def create_llm_provider(
             api_key=provider_data.api_key,
             model_name=provider_data.model_name,
             max_tokens=provider_data.max_tokens,
-            temperature=provider_data.temperature
+            temperature=provider_data.temperature,
         )
 
         provider_response = LLMProviderResponse(
@@ -232,29 +251,32 @@ async def create_llm_provider(
             max_tokens=provider.max_tokens,
             temperature=provider.temperature,
             is_active=provider.is_active,
-            created_at=provider.created_at
+            created_at=provider.created_at,
         )
 
-        logger.info(f"Created provider configuration {provider.id} for user {current_user.id}")
+        logger.info(
+            f"Created provider configuration {provider.id} for user {current_user.id}"
+        )
         return provider_response
 
     except LLMProviderValidationError as e:
-        logger.warning(f"Validation error creating provider for user {current_user.id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+        logger.warning(
+            f"Validation error creating provider for user {current_user.id}: {e}"
         )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except LLMProviderError as e:
         logger.error(f"LLM provider service error for user {current_user.id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create provider configuration: {e}"
+            detail=f"Failed to create provider configuration: {e}",
         )
     except Exception as e:
-        logger.error(f"Unexpected error creating provider for user {current_user.id}: {e}")
+        logger.error(
+            f"Unexpected error creating provider for user {current_user.id}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create provider configuration"
+            detail="Failed to create provider configuration",
         )
 
 
@@ -266,16 +288,22 @@ async def create_llm_provider(
     responses={
         200: {"description": "LLM provider configuration updated successfully"},
         400: {"model": ErrorResponse, "description": "Invalid request data"},
-        401: {"model": ErrorResponse, "description": "Unauthorized - invalid or missing token"},
-        404: {"model": ErrorResponse, "description": "Provider configuration not found"},
-        500: {"model": ErrorResponse, "description": "Internal server error"}
-    }
+        401: {
+            "model": ErrorResponse,
+            "description": "Unauthorized - invalid or missing token",
+        },
+        404: {
+            "model": ErrorResponse,
+            "description": "Provider configuration not found",
+        },
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
 )
 async def update_llm_provider(
     provider_id: uuid.UUID = Path(..., description="LLM provider configuration ID"),
     update_data: LLMProviderUpdate = ...,
     current_user: User = Depends(get_current_user),
-    llm_service: LLMProviderService = Depends(get_llm_service)
+    llm_service: LLMProviderService = Depends(get_llm_service),
 ):
     """
     Update existing LLM provider configuration.
@@ -302,13 +330,11 @@ async def update_llm_provider(
         if not updates:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No valid update fields provided"
+                detail="No valid update fields provided",
             )
 
         provider = await llm_service.update_provider_configuration(
-            provider_id=provider_id,
-            user_id=current_user.id,
-            **updates
+            provider_id=provider_id, user_id=current_user.id, **updates
         )
 
         provider_response = LLMProviderResponse(
@@ -318,38 +344,39 @@ async def update_llm_provider(
             max_tokens=provider.max_tokens,
             temperature=provider.temperature,
             is_active=provider.is_active,
-            created_at=provider.created_at
+            created_at=provider.created_at,
         )
 
-        logger.info(f"Updated provider configuration {provider_id} for user {current_user.id}")
+        logger.info(
+            f"Updated provider configuration {provider_id} for user {current_user.id}"
+        )
         return provider_response
 
     except HTTPException:
         # Re-raise HTTPException without catching it
         raise
     except LLMProviderNotFoundError as e:
-        logger.warning(f"Provider {provider_id} not found for user {current_user.id}: {e}")
+        logger.warning(
+            f"Provider {provider_id} not found for user {current_user.id}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Provider configuration not found"
+            detail="Provider configuration not found",
         )
     except LLMProviderValidationError as e:
         logger.warning(f"Validation error updating provider {provider_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except LLMProviderError as e:
         logger.error(f"LLM provider service error updating {provider_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update provider configuration: {e}"
+            detail=f"Failed to update provider configuration: {e}",
         )
     except Exception as e:
         logger.error(f"Unexpected error updating provider {provider_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update provider configuration"
+            detail="Failed to update provider configuration",
         )
 
 
@@ -360,15 +387,21 @@ async def update_llm_provider(
     description="Delete existing LLM provider configuration",
     responses={
         204: {"description": "LLM provider configuration deleted successfully"},
-        401: {"model": ErrorResponse, "description": "Unauthorized - invalid or missing token"},
-        404: {"model": ErrorResponse, "description": "Provider configuration not found"},
-        500: {"model": ErrorResponse, "description": "Internal server error"}
-    }
+        401: {
+            "model": ErrorResponse,
+            "description": "Unauthorized - invalid or missing token",
+        },
+        404: {
+            "model": ErrorResponse,
+            "description": "Provider configuration not found",
+        },
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
 )
 async def delete_llm_provider(
     provider_id: uuid.UUID = Path(..., description="LLM provider configuration ID"),
     current_user: User = Depends(get_current_user),
-    llm_service: LLMProviderService = Depends(get_llm_service)
+    llm_service: LLMProviderService = Depends(get_llm_service),
 ):
     """
     Delete existing LLM provider configuration.
@@ -378,29 +411,31 @@ async def delete_llm_provider(
     """
     try:
         await llm_service.delete_provider_configuration(
-            provider_id=provider_id,
-            user_id=current_user.id
+            provider_id=provider_id, user_id=current_user.id
         )
 
-        logger.info(f"Deleted provider configuration {provider_id} for user {current_user.id}")
+        logger.info(
+            f"Deleted provider configuration {provider_id} for user {current_user.id}"
+        )
         return  # 204 No Content
 
     except LLMProviderNotFoundError as e:
-        logger.warning(f"Provider {provider_id} not found for user {current_user.id}: {e}")
+        logger.warning(
+            f"Provider {provider_id} not found for user {current_user.id}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Provider configuration not found"
+            detail="Provider configuration not found",
         )
     except LLMProviderError as e:
         logger.error(f"LLM provider service error deleting {provider_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete provider configuration: {e}"
+            detail=f"Failed to delete provider configuration: {e}",
         )
     except Exception as e:
         logger.error(f"Unexpected error deleting provider {provider_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete provider configuration"
+            detail="Failed to delete provider configuration",
         )
-

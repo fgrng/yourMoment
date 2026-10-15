@@ -4,19 +4,28 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional, List
 
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, computed_field, field_validator
+from pydantic import (
+    BaseModel,
+    EmailStr,
+    Field,
+    ConfigDict,
+    computed_field,
+    field_validator,
+)
 from src.platforms import MYMOMENT, TargetEntry, adapter_for_platform, label_target
 from src.validators.password import validate_password
 
 
 # === Authentication Schemas ===
 
+
 class UserRegisterRequest(BaseModel):
     """Request model for user registration."""
+
     email: EmailStr = Field(..., description="User email address")
     password: str = Field(..., description="User password")
 
-    @field_validator('password')
+    @field_validator("password")
     @classmethod
     def validate_password_strength(cls, v: str) -> str:
         """Validate password meets security requirements."""
@@ -28,12 +37,14 @@ class UserRegisterRequest(BaseModel):
 
 class UserLoginRequest(BaseModel):
     """Request model for user login."""
+
     email: EmailStr = Field(..., description="User email address")
     password: str = Field(..., description="User password")
 
 
 class UserResponse(BaseModel):
     """Response model for user data."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID = Field(..., description="User unique identifier")
@@ -45,6 +56,7 @@ class UserResponse(BaseModel):
 
 class AuthResponse(BaseModel):
     """Response model for authentication endpoints."""
+
     access_token: str = Field(..., description="JWT access token")
     token_type: str = Field(default="bearer", description="Token type")
     expires_in: int = Field(..., description="Token expiry in seconds")
@@ -53,13 +65,18 @@ class AuthResponse(BaseModel):
 
 class LogoutResponse(BaseModel):
     """Response model for logout endpoint."""
-    message: str = Field(default="Successfully logged out", description="Logout confirmation message")
+
+    message: str = Field(
+        default="Successfully logged out", description="Logout confirmation message"
+    )
 
 
 # === Error Response Schemas ===
 
+
 class ErrorResponse(BaseModel):
     """Standard error response model."""
+
     error: str = Field(..., description="Error type/code")
     message: str = Field(..., description="Human-readable error message")
     detail: Optional[dict] = Field(None, description="Additional error details")
@@ -67,6 +84,7 @@ class ErrorResponse(BaseModel):
 
 class ValidationErrorResponse(BaseModel):
     """Validation error response model."""
+
     error: str = Field(default="validation_error", description="Error type")
     message: str = Field(..., description="Validation error message")
     detail: list = Field(..., description="List of validation errors")
@@ -74,52 +92,83 @@ class ValidationErrorResponse(BaseModel):
 
 # === MyMoment Credentials Schemas ===
 
+
 class MyMomentCredentialsRequest(BaseModel):
     """Request model for myMoment credentials."""
-    username: str = Field(..., min_length=1, max_length=100, description="myMoment username")
+
+    username: str = Field(
+        ..., min_length=1, max_length=100, description="myMoment username"
+    )
     password: str = Field(..., min_length=1, description="myMoment password")
-    name: str = Field(..., min_length=1, max_length=100, description="Friendly name for this login")
-    is_admin: bool = Field(False, description="Whether this is an admin account (for Student Backup feature)")
+    name: str = Field(
+        ..., min_length=1, max_length=100, description="Friendly name for this login"
+    )
+    is_admin: bool = Field(
+        False,
+        description="Whether this is an admin account (for Student Backup feature)",
+    )
 
 
 class MyMomentCredentialsResponse(BaseModel):
     """Response model for myMoment credentials."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID = Field(..., description="Credentials unique identifier")
     name: str = Field(..., description="Friendly name for this login")
     username: str = Field(..., description="myMoment username")
     is_active: bool = Field(..., description="Whether credentials are active")
-    is_admin: bool = Field(False, description="Whether this is an admin account (for Student Backup feature)")
+    is_admin: bool = Field(
+        False,
+        description="Whether this is an admin account (for Student Backup feature)",
+    )
     created_at: datetime = Field(..., description="Creation timestamp")
-    last_used: Optional[datetime] = Field(None, description="Last time credentials were used")
+    last_used: Optional[datetime] = Field(
+        None, description="Last time credentials were used"
+    )
 
 
 # === LLM Provider Schemas ===
 
+
 class LLMProviderCreate(BaseModel):
     """Request model for creating LLM provider configuration."""
+
     provider_name: str = Field(
-        ...,
-        description="LLM provider name",
-        pattern="^(openai|mistral)$"
+        ..., description="LLM provider name", pattern="^(openai|mistral)$"
     )
     api_key: str = Field(..., min_length=1, description="API key for the provider")
-    model_name: str = Field(..., min_length=1, max_length=100, description="Specific model to use")
-    max_tokens: Optional[int] = Field(None, ge=1, description="Maximum tokens for responses")
-    temperature: Optional[float] = Field(None, ge=0.0, le=1.0, description="Temperature for generation")
+    model_name: str = Field(
+        ..., min_length=1, max_length=100, description="Specific model to use"
+    )
+    max_tokens: Optional[int] = Field(
+        None, ge=1, description="Maximum tokens for responses"
+    )
+    temperature: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Temperature for generation"
+    )
 
 
 class LLMProviderUpdate(BaseModel):
     """Request model for updating LLM provider configuration."""
-    api_key: Optional[str] = Field(None, min_length=1, description="API key for the provider")
-    model_name: Optional[str] = Field(None, min_length=1, max_length=100, description="Specific model to use")
-    max_tokens: Optional[int] = Field(None, ge=1, description="Maximum tokens for responses")
-    temperature: Optional[float] = Field(None, ge=0.0, le=1.0, description="Temperature for generation")
+
+    api_key: Optional[str] = Field(
+        None, min_length=1, description="API key for the provider"
+    )
+    model_name: Optional[str] = Field(
+        None, min_length=1, max_length=100, description="Specific model to use"
+    )
+    max_tokens: Optional[int] = Field(
+        None, ge=1, description="Maximum tokens for responses"
+    )
+    temperature: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Temperature for generation"
+    )
 
 
 class LLMProviderResponse(BaseModel):
     """Response model for LLM provider configuration."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID = Field(..., description="Provider configuration unique identifier")
@@ -133,58 +182,125 @@ class LLMProviderResponse(BaseModel):
 
 # === Monitoring Process Schemas ===
 
+
 class MonitoringProcessCreate(BaseModel):
     """Request model for monitoring process creation."""
+
     name: str = Field(..., min_length=1, max_length=100, description="Process name")
-    description: Optional[str] = Field(None, max_length=500, description="Process description")
-    max_duration_minutes: int = Field(..., ge=1, le=1440, description="Maximum duration in minutes (1-1440)")
-    llm_provider_id: uuid.UUID = Field(..., description="LLM provider to use for comment generation")
-    target: dict[str, Any] = Field(..., description="Ziel: platform key -> value, checked against the platform's target description")
-    search: Optional[str] = Field(None, max_length=200, description="Search term, filters article titles")
-    prompt_template_ids: list[uuid.UUID] = Field(..., min_items=1, description="List of prompt template IDs to use")
-    mymoment_login_ids: list[uuid.UUID] = Field(..., min_items=1, description="List of myMoment login IDs to use")
-    generate_only: bool = Field(default=True, description="If true, only generate comments; if false, also post to myMoment")
-    hide_comments: bool = Field(default=False, description="If true, generated comments will be hidden on myMoment")
+    description: Optional[str] = Field(
+        None, max_length=500, description="Process description"
+    )
+    max_duration_minutes: int = Field(
+        ..., ge=1, le=1440, description="Maximum duration in minutes (1-1440)"
+    )
+    llm_provider_id: uuid.UUID = Field(
+        ..., description="LLM provider to use for comment generation"
+    )
+    target: dict[str, Any] = Field(
+        ...,
+        description="Ziel: platform key -> value, checked against the platform's target description",
+    )
+    search: Optional[str] = Field(
+        None, max_length=200, description="Search term, filters article titles"
+    )
+    prompt_template_ids: list[uuid.UUID] = Field(
+        ..., min_items=1, description="List of prompt template IDs to use"
+    )
+    mymoment_login_ids: list[uuid.UUID] = Field(
+        ..., min_items=1, description="List of myMoment login IDs to use"
+    )
+    generate_only: bool = Field(
+        default=True,
+        description="If true, only generate comments; if false, also post to myMoment",
+    )
+    hide_comments: bool = Field(
+        default=False,
+        description="If true, generated comments will be hidden on myMoment",
+    )
 
 
 class MonitoringProcessUpdate(BaseModel):
     """Request model for monitoring process updates."""
-    name: Optional[str] = Field(None, min_length=1, max_length=100, description="Process name")
-    description: Optional[str] = Field(None, max_length=500, description="Process description")
-    max_duration_minutes: Optional[int] = Field(None, ge=1, le=1440, description="Maximum duration in minutes (1-1440)")
-    llm_provider_id: Optional[uuid.UUID] = Field(None, description="LLM provider to use for comment generation")
-    target: Optional[dict[str, Any]] = Field(None, description="Ziel; replaces the stored one as a whole")
-    search: Optional[str] = Field(None, max_length=200, description="Search term; null or empty clears it")
-    prompt_template_ids: Optional[list[uuid.UUID]] = Field(None, min_items=1, description="List of prompt template IDs to use")
-    mymoment_login_ids: Optional[list[uuid.UUID]] = Field(None, min_items=1, description="List of myMoment login IDs to use")
-    generate_only: Optional[bool] = Field(None, description="If true, only generate comments; if false, also post to myMoment")
-    hide_comments: Optional[bool] = Field(None, description="If true, generated comments will be hidden on myMoment")
+
+    name: Optional[str] = Field(
+        None, min_length=1, max_length=100, description="Process name"
+    )
+    description: Optional[str] = Field(
+        None, max_length=500, description="Process description"
+    )
+    max_duration_minutes: Optional[int] = Field(
+        None, ge=1, le=1440, description="Maximum duration in minutes (1-1440)"
+    )
+    llm_provider_id: Optional[uuid.UUID] = Field(
+        None, description="LLM provider to use for comment generation"
+    )
+    target: Optional[dict[str, Any]] = Field(
+        None, description="Ziel; replaces the stored one as a whole"
+    )
+    search: Optional[str] = Field(
+        None, max_length=200, description="Search term; null or empty clears it"
+    )
+    prompt_template_ids: Optional[list[uuid.UUID]] = Field(
+        None, min_items=1, description="List of prompt template IDs to use"
+    )
+    mymoment_login_ids: Optional[list[uuid.UUID]] = Field(
+        None, min_items=1, description="List of myMoment login IDs to use"
+    )
+    generate_only: Optional[bool] = Field(
+        None,
+        description="If true, only generate comments; if false, also post to myMoment",
+    )
+    hide_comments: Optional[bool] = Field(
+        None, description="If true, generated comments will be hidden on myMoment"
+    )
 
 
 class MonitoringProcessResponse(BaseModel):
     """Response model for monitoring process."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID = Field(..., description="Process unique identifier")
     name: str = Field(..., description="Process name")
     description: Optional[str] = Field(None, description="Process description")
     is_running: bool = Field(..., description="Whether process is currently running")
-    error_message: Optional[str] = Field(None, description="Error message if process failed")
+    error_message: Optional[str] = Field(
+        None, description="Error message if process failed"
+    )
     max_duration_minutes: int = Field(..., description="Maximum duration in minutes")
     started_at: Optional[datetime] = Field(None, description="When process was started")
     stopped_at: Optional[datetime] = Field(None, description="When process was stopped")
-    expires_at: Optional[datetime] = Field(None, description="When process will automatically stop")
-    llm_provider_id: Optional[uuid.UUID] = Field(None, description="LLM provider used for comment generation")
+    expires_at: Optional[datetime] = Field(
+        None, description="When process will automatically stop"
+    )
+    llm_provider_id: Optional[uuid.UUID] = Field(
+        None, description="LLM provider used for comment generation"
+    )
     target: dict[str, str] = Field(..., description="Ziel: platform key -> value")
-    search: Optional[str] = Field(None, validation_alias="search_filter", description="Search term, filters article titles")
-    prompt_template_ids: list[uuid.UUID] = Field(..., description="List of prompt template IDs")
-    mymoment_login_ids: list[uuid.UUID] = Field(..., description="List of myMoment login IDs")
-    generate_only: bool = Field(..., description="If true, only generate comments; if false, also post to myMoment")
-    hide_comments: bool = Field(..., description="If true, generated comments will be hidden on myMoment")
+    search: Optional[str] = Field(
+        None,
+        validation_alias="search_filter",
+        description="Search term, filters article titles",
+    )
+    prompt_template_ids: list[uuid.UUID] = Field(
+        ..., description="List of prompt template IDs"
+    )
+    mymoment_login_ids: list[uuid.UUID] = Field(
+        ..., description="List of myMoment login IDs"
+    )
+    generate_only: bool = Field(
+        ...,
+        description="If true, only generate comments; if false, also post to myMoment",
+    )
+    hide_comments: bool = Field(
+        ..., description="If true, generated comments will be hidden on myMoment"
+    )
     created_at: Optional[datetime] = Field(None, description="Creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
 
-    @computed_field(description="Ziel for display: dimension labels of the target description and raw values")
+    @computed_field(
+        description="Ziel for display: dimension labels of the target description and raw values"
+    )
     @property
     def target_display(self) -> list[TargetEntry]:
         # Offline, so list and detail view load while the platform is unreachable.
@@ -194,11 +310,15 @@ class MonitoringProcessResponse(BaseModel):
 
 class ProcessStartRequest(BaseModel):
     """Request model for starting a monitoring process."""
-    force_restart: bool = Field(default=False, description="Force restart if already running")
+
+    force_restart: bool = Field(
+        default=False, description="Force restart if already running"
+    )
 
 
 class ProcessControlResponse(BaseModel):
     """Response model for process control operations."""
+
     process_id: uuid.UUID = Field(..., description="Process unique identifier")
     action: str = Field(..., description="Action performed (start/stop)")
     status: str = Field(..., description="Current process status")
@@ -207,11 +327,16 @@ class ProcessControlResponse(BaseModel):
 
 class PipelineStatusResponse(BaseModel):
     """Response model for pipeline status with AIComment counts by stage."""
+
     process_id: str = Field(..., description="Process unique identifier")
     discovered: int = Field(..., ge=0, description="Number of articles discovered")
-    prepared: int = Field(..., ge=0, description="Number of articles with content prepared")
+    prepared: int = Field(
+        ..., ge=0, description="Number of articles with content prepared"
+    )
     generated: int = Field(..., ge=0, description="Number of AI comments generated")
-    posting: int = Field(..., ge=0, description="Number of comments currently being posted")
+    posting: int = Field(
+        ..., ge=0, description="Number of comments currently being posted"
+    )
     posted: int = Field(..., ge=0, description="Number of comments posted to myMoment")
     failed: int = Field(..., ge=0, description="Number of failed comments")
     total: int = Field(..., ge=0, description="Total number of AIComment records")
@@ -219,73 +344,89 @@ class PipelineStatusResponse(BaseModel):
 
 # === Prompt Template Schemas ===
 
+
 class PromptTemplateCreate(BaseModel):
     """Request model for prompt template creation."""
-    name: str = Field(..., min_length=1, max_length=100, description="Template name")
-    description: Optional[str] = Field(None, max_length=500, description="Template description")
-    system_prompt: str = Field(..., min_length=10, description="System prompt template")
-    user_prompt_template: str = Field(..., min_length=10, description="User prompt template")
 
-    @field_validator('system_prompt')
+    name: str = Field(..., min_length=1, max_length=100, description="Template name")
+    description: Optional[str] = Field(
+        None, max_length=500, description="Template description"
+    )
+    system_prompt: str = Field(..., min_length=10, description="System prompt template")
+    user_prompt_template: str = Field(
+        ..., min_length=10, description="User prompt template"
+    )
+
+    @field_validator("system_prompt")
     @classmethod
     def validate_system_prompt(cls, v: str) -> str:
         """Validate system prompt length and content."""
         if len(v.strip()) < 10:
-            raise ValueError('System prompt must be at least 10 characters')
+            raise ValueError("System prompt must be at least 10 characters")
         return v.strip()
 
-    @field_validator('user_prompt_template')
+    @field_validator("user_prompt_template")
     @classmethod
     def validate_user_prompt(cls, v: str) -> str:
         """Validate user prompt template length."""
         if len(v.strip()) < 10:
-            raise ValueError('User prompt template must be at least 10 characters')
+            raise ValueError("User prompt template must be at least 10 characters")
         return v.strip()
 
-    @field_validator('name')
+    @field_validator("name")
     @classmethod
     def validate_name(cls, v: str) -> str:
         """Validate name is not empty after stripping."""
         if not v.strip():
-            raise ValueError('Name cannot be empty')
+            raise ValueError("Name cannot be empty")
         return v.strip()
 
 
 class PromptTemplateUpdate(BaseModel):
     """Request model for prompt template updates."""
-    name: Optional[str] = Field(None, min_length=1, max_length=100, description="Template name")
-    description: Optional[str] = Field(None, max_length=500, description="Template description")
-    system_prompt: Optional[str] = Field(None, min_length=10, description="System prompt template")
-    user_prompt_template: Optional[str] = Field(None, min_length=10, description="User prompt template")
+
+    name: Optional[str] = Field(
+        None, min_length=1, max_length=100, description="Template name"
+    )
+    description: Optional[str] = Field(
+        None, max_length=500, description="Template description"
+    )
+    system_prompt: Optional[str] = Field(
+        None, min_length=10, description="System prompt template"
+    )
+    user_prompt_template: Optional[str] = Field(
+        None, min_length=10, description="User prompt template"
+    )
     is_active: Optional[bool] = Field(None, description="Whether template is active")
 
-    @field_validator('system_prompt')
+    @field_validator("system_prompt")
     @classmethod
     def validate_system_prompt(cls, v: Optional[str]) -> Optional[str]:
         """Validate system prompt length and content if provided."""
         if v is not None and len(v.strip()) < 10:
-            raise ValueError('System prompt must be at least 10 characters')
+            raise ValueError("System prompt must be at least 10 characters")
         return v.strip() if v is not None else None
 
-    @field_validator('user_prompt_template')
+    @field_validator("user_prompt_template")
     @classmethod
     def validate_user_prompt(cls, v: Optional[str]) -> Optional[str]:
         """Validate user prompt template length if provided."""
         if v is not None and len(v.strip()) < 10:
-            raise ValueError('User prompt template must be at least 10 characters')
+            raise ValueError("User prompt template must be at least 10 characters")
         return v.strip() if v is not None else None
 
-    @field_validator('name')
+    @field_validator("name")
     @classmethod
     def validate_name(cls, v: Optional[str]) -> Optional[str]:
         """Validate name is not empty after stripping if provided."""
         if v is not None and not v.strip():
-            raise ValueError('Name cannot be empty')
+            raise ValueError("Name cannot be empty")
         return v.strip() if v is not None else None
 
 
 class PromptTemplateResponse(BaseModel):
     """Response model for prompt template."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID = Field(..., description="Template unique identifier")
@@ -310,36 +451,52 @@ class PlaceholderInfoResponse(BaseModel):
 class PlaceholderListResponse(BaseModel):
     """Response model for supported placeholder list."""
 
-    items: list[PlaceholderInfoResponse] = Field(..., description="Supported placeholders")
+    items: list[PlaceholderInfoResponse] = Field(
+        ..., description="Supported placeholders"
+    )
 
 
 # === Article Schemas ===
 
+
 class ArticleResponse(BaseModel):
     """Response model for article data."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str = Field(..., description="MyMoment article ID")
     title: str = Field(..., description="Article title")
     author: str = Field(..., description="Article author name")
-    published_at: Optional[datetime] = Field(None, description="Article publication timestamp")
-    edited_at: Optional[str] = Field(None, description="Article last edit date (as displayed on myMoment)")
+    published_at: Optional[datetime] = Field(
+        None, description="Article publication timestamp"
+    )
+    edited_at: Optional[str] = Field(
+        None, description="Article last edit date (as displayed on myMoment)"
+    )
     scraped_at: datetime = Field(..., description="When article was scraped")
     mymoment_url: str = Field(..., description="URL to original myMoment article")
     visibility: str = Field(..., description="Article visibility setting")
-    ai_comments_count: int = Field(default=0, description="Number of AI comments generated")
-    accessible_by_login_ids: list[uuid.UUID] = Field(..., description="Login IDs that can access this article")
+    ai_comments_count: int = Field(
+        default=0, description="Number of AI comments generated"
+    )
+    accessible_by_login_ids: list[uuid.UUID] = Field(
+        ..., description="Login IDs that can access this article"
+    )
 
 
 class ArticleDetailResponse(ArticleResponse):
     """Response model for detailed article data."""
+
     content: str = Field(..., description="Article text content")
     raw_html: str = Field(..., description="Original HTML content for reference")
-    comment_ids: list[uuid.UUID] = Field(default_factory=list, description="List of comment IDs for this article")
+    comment_ids: list[uuid.UUID] = Field(
+        default_factory=list, description="List of comment IDs for this article"
+    )
 
 
 class ArticleListResponse(BaseModel):
     """Response model for article list with pagination."""
+
     items: list[ArticleResponse] = Field(..., description="List of articles")
     total: int = Field(..., description="Total number of articles")
     limit: int = Field(..., description="Number of articles per page")
@@ -348,92 +505,151 @@ class ArticleListResponse(BaseModel):
 
 class TargetValueResponse(BaseModel):
     """One value a target dimension can take."""
+
     model_config = ConfigDict(from_attributes=True)
 
-    value: str = Field(..., description="Value as used in the target (e.g., 'home', '7', '38')")
-    label: str = Field(..., description="Label the platform shows (e.g., 'Meine', 'Informieren', 'Dummy Klasse 01')")
+    value: str = Field(
+        ..., description="Value as used in the target (e.g., 'home', '7', '38')"
+    )
+    label: str = Field(
+        ...,
+        description="Label the platform shows (e.g., 'Meine', 'Informieren', 'Dummy Klasse 01')",
+    )
 
 
 class TargetOptionResponse(BaseModel):
     """One dimension of the target description with the values a platform account sees."""
+
     model_config = ConfigDict(from_attributes=True)
 
     key: str = Field(..., description="Key in the target (e.g., 'classroom')")
     label: str = Field(..., description="Display name of the dimension")
-    required: bool = Field(..., description="Whether every target must name a value of this dimension")
+    required: bool = Field(
+        ..., description="Whether every target must name a value of this dimension"
+    )
     values: list[TargetValueResponse] = Field(..., description="Selectable values")
 
 
 class TargetListResponse(BaseModel):
     """Response model for the target description of a platform account, with its values."""
-    items: list[TargetOptionResponse] = Field(..., description="Target dimensions in display order")
+
+    items: list[TargetOptionResponse] = Field(
+        ..., description="Target dimensions in display order"
+    )
 
 
 # === Comment Schemas ===
 
+
 class CommentResponse(BaseModel):
     """Response model for comment data."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID = Field(..., description="Comment unique identifier")
-    mymoment_comment_id: Optional[str] = Field(None, description="External comment ID from myMoment (if exists)")
+    mymoment_comment_id: Optional[str] = Field(
+        None, description="External comment ID from myMoment (if exists)"
+    )
     content: str = Field(..., description="Comment content")
     is_ai_generated: bool = Field(..., description="Whether comment is AI-generated")
-    is_posted: bool = Field(..., description="Whether comment has been posted to myMoment")
-    posted_by_login_id: Optional[uuid.UUID] = Field(None, description="myMoment login ID used to post this comment")
+    is_posted: bool = Field(
+        ..., description="Whether comment has been posted to myMoment"
+    )
+    posted_by_login_id: Optional[uuid.UUID] = Field(
+        None, description="myMoment login ID used to post this comment"
+    )
     posted_at: Optional[datetime] = Field(None, description="When comment was posted")
-    scraped_at: Optional[datetime] = Field(None, description="When comment was scraped from myMoment")
+    scraped_at: Optional[datetime] = Field(
+        None, description="When comment was scraped from myMoment"
+    )
     created_at: datetime = Field(..., description="When comment was created")
 
 
 class AICommentResponse(BaseModel):
     """Response model for AI-generated comment with article snapshot."""
+
     model_config = ConfigDict(from_attributes=True)
 
     # Comment identification
     id: uuid.UUID = Field(..., description="AI comment unique identifier")
     mymoment_article_id: str = Field(..., description="myMoment article ID")
-    mymoment_comment_id: Optional[str] = Field(None, description="myMoment comment ID (after posting)")
+    mymoment_comment_id: Optional[str] = Field(
+        None, description="myMoment comment ID (after posting)"
+    )
 
     # Article snapshot fields
     article_title: str = Field(..., description="Article title at comment time")
     article_author: str = Field(..., description="Article author at comment time")
-    article_content: Optional[str] = Field(..., description="Article content at comment time")
+    article_content: Optional[str] = Field(
+        ..., description="Article content at comment time"
+    )
     article_raw_html: Optional[str] = Field(None, description="Raw HTML content")
     article_url: str = Field(..., description="myMoment article URL")
     article_category: Optional[int] = Field(None, description="myMoment category ID")
     article_task_id: Optional[int] = Field(None, description="myMoment task ID")
-    article_published_at: Optional[datetime] = Field(None, description="Article publication date")
-    article_edited_at: Optional[datetime] = Field(None, description="Article last edit date")
-    article_scraped_at: datetime = Field(..., description="When article snapshot was captured")
+    article_published_at: Optional[datetime] = Field(
+        None, description="Article publication date"
+    )
+    article_edited_at: Optional[datetime] = Field(
+        None, description="Article last edit date"
+    )
+    article_scraped_at: datetime = Field(
+        ..., description="When article snapshot was captured"
+    )
 
     # AI comment fields
-    comment_content: Optional[str] = Field(..., description="AI-generated comment content")
-    reasoning_content: Optional[str] = Field(None, description="Native reasoning/thought process from LLM (o-series, Magistral)")
+    comment_content: Optional[str] = Field(
+        ..., description="AI-generated comment content"
+    )
+    reasoning_content: Optional[str] = Field(
+        None,
+        description="Native reasoning/thought process from LLM (o-series, Magistral)",
+    )
     is_hidden: bool = Field(..., description="Whether comment is hidden on myMoment")
-    status: str = Field(..., description="Comment status: generated, posting, posted, failed, deleted")
+    status: str = Field(
+        ..., description="Comment status: generated, posting, posted, failed, deleted"
+    )
     ai_model_name: Optional[str] = Field(None, description="LLM model used")
     ai_provider_name: Optional[str] = Field(None, description="LLM provider used")
-    generation_tokens: Optional[int] = Field(None, description="Total token count for generation")
-    generation_time_ms: Optional[int] = Field(None, description="Time taken to generate (ms)")
-    error_message: Optional[str] = Field(None, description="Error message if generation or posting failed")
-    retry_count: int = Field(..., description="Number of posting retries attempted", ge=0)
+    generation_tokens: Optional[int] = Field(
+        None, description="Total token count for generation"
+    )
+    generation_time_ms: Optional[int] = Field(
+        None, description="Time taken to generate (ms)"
+    )
+    error_message: Optional[str] = Field(
+        None, description="Error message if generation or posting failed"
+    )
+    retry_count: int = Field(
+        ..., description="Number of posting retries attempted", ge=0
+    )
 
     # Timestamps
     created_at: datetime = Field(..., description="When comment was generated")
-    posted_at: Optional[datetime] = Field(None, description="When comment was posted to myMoment")
+    posted_at: Optional[datetime] = Field(
+        None, description="When comment was posted to myMoment"
+    )
     failed_at: Optional[datetime] = Field(None, description="When processing failed")
 
     # Relations
     user_id: uuid.UUID = Field(..., description="User who owns this comment")
-    mymoment_login_id: Optional[uuid.UUID] = Field(None, description="Login used to post")
-    prompt_template_id: Optional[uuid.UUID] = Field(None, description="Prompt template used for generation")
-    llm_provider_id: Optional[uuid.UUID] = Field(None, description="Provider configuration used for generation")
-    monitoring_process_id: Optional[uuid.UUID] = Field(None, description="Monitoring process that generated this")
+    mymoment_login_id: Optional[uuid.UUID] = Field(
+        None, description="Login used to post"
+    )
+    prompt_template_id: Optional[uuid.UUID] = Field(
+        None, description="Prompt template used for generation"
+    )
+    llm_provider_id: Optional[uuid.UUID] = Field(
+        None, description="Provider configuration used for generation"
+    )
+    monitoring_process_id: Optional[uuid.UUID] = Field(
+        None, description="Monitoring process that generated this"
+    )
 
 
 class AICommentListResponse(BaseModel):
     """Response model for list of AI comments."""
+
     items: List[AICommentResponse] = Field(..., description="List of AI comments")
     total: int = Field(..., description="Total number of AI comments")
     limit: int = Field(..., description="Page size limit")
@@ -442,6 +658,7 @@ class AICommentListResponse(BaseModel):
 
 class AICommentSummaryResponse(BaseModel):
     """Lightweight summary of an AI comment (for lists/tables)."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID = Field(..., description="AI comment unique identifier")
@@ -457,35 +674,63 @@ class AICommentCreateRequest(BaseModel):
     """Request model for creating an AI comment (internal use by monitoring processes)."""
 
     # Article data (from scraping)
-    mymoment_article_id: str = Field(..., description="myMoment article ID", min_length=1)
-    article_title: str = Field(..., description="Article title", min_length=1, max_length=500)
-    article_author: str = Field(..., description="Article author", min_length=1, max_length=200)
+    mymoment_article_id: str = Field(
+        ..., description="myMoment article ID", min_length=1
+    )
+    article_title: str = Field(
+        ..., description="Article title", min_length=1, max_length=500
+    )
+    article_author: str = Field(
+        ..., description="Article author", min_length=1, max_length=200
+    )
     article_content: str = Field(..., description="Article content", min_length=1)
-    article_url: str = Field(..., description="myMoment article URL", min_length=1, max_length=500)
+    article_url: str = Field(
+        ..., description="myMoment article URL", min_length=1, max_length=500
+    )
     article_raw_html: Optional[str] = Field(None, description="Raw HTML content")
-    article_category: Optional[int] = Field(None, description="myMoment category ID", ge=0)
-    article_published_at: Optional[datetime] = Field(None, description="Article publication date")
-    article_edited_at: Optional[datetime] = Field(None, description="Article last edit date")
+    article_category: Optional[int] = Field(
+        None, description="myMoment category ID", ge=0
+    )
+    article_published_at: Optional[datetime] = Field(
+        None, description="Article publication date"
+    )
+    article_edited_at: Optional[datetime] = Field(
+        None, description="Article last edit date"
+    )
 
     # Comment generation parameters
-    prompt_template_id: Optional[uuid.UUID] = Field(None, description="Prompt template to use")
-    llm_provider_id: Optional[uuid.UUID] = Field(None, description="LLM provider to use")
-    highlight_text: Optional[str] = Field(None, description="Text to highlight when commenting", max_length=1000)
-    mymoment_username: Optional[str] = Field(None, description="myMoment username context", max_length=100)
+    prompt_template_id: Optional[uuid.UUID] = Field(
+        None, description="Prompt template to use"
+    )
+    llm_provider_id: Optional[uuid.UUID] = Field(
+        None, description="LLM provider to use"
+    )
+    highlight_text: Optional[str] = Field(
+        None, description="Text to highlight when commenting", max_length=1000
+    )
+    mymoment_username: Optional[str] = Field(
+        None, description="myMoment username context", max_length=100
+    )
 
 
 class AICommentUpdateRequest(BaseModel):
     """Request model for updating AI comment status (after posting)."""
 
-    mymoment_comment_id: Optional[str] = Field(None, description="Comment ID from myMoment")
-    status: Optional[str] = Field(None, description="New status: posted, failed, deleted")
-    error_message: Optional[str] = Field(None, description="Error message if failed", max_length=1000)
+    mymoment_comment_id: Optional[str] = Field(
+        None, description="Comment ID from myMoment"
+    )
+    status: Optional[str] = Field(
+        None, description="New status: posted, failed, deleted"
+    )
+    error_message: Optional[str] = Field(
+        None, description="Error message if failed", max_length=1000
+    )
 
-    @field_validator('status')
+    @field_validator("status")
     @classmethod
     def validate_status(cls, v):
-        if v and v not in ['posted', 'failed', 'deleted']:
-            raise ValueError('Status must be: posted, failed, or deleted')
+        if v and v not in ["posted", "failed", "deleted"]:
+            raise ValueError("Status must be: posted, failed, or deleted")
         return v
 
 
@@ -496,9 +741,15 @@ class AICommentStatisticsResponse(BaseModel):
     posted_comments: int = Field(..., description="Successfully posted comments")
     failed_comments: int = Field(..., description="Failed posting attempts")
     generated_comments: int = Field(..., description="Generated but not yet posted")
-    success_rate: float = Field(..., description="Success rate percentage", ge=0, le=100)
-    avg_generation_time_ms: float = Field(..., description="Average generation time in ms", ge=0)
-    total_articles_commented: int = Field(..., description="Unique articles commented on", ge=0)
+    success_rate: float = Field(
+        ..., description="Success rate percentage", ge=0, le=100
+    )
+    avg_generation_time_ms: float = Field(
+        ..., description="Average generation time in ms", ge=0
+    )
+    total_articles_commented: int = Field(
+        ..., description="Unique articles commented on", ge=0
+    )
 
     # Breakdown by provider
     by_provider: Optional[dict] = Field(None, description="Statistics by LLM provider")
@@ -507,59 +758,95 @@ class AICommentStatisticsResponse(BaseModel):
     by_status: Optional[dict] = Field(None, description="Count by status")
 
     # Recent activity
-    last_comment_at: Optional[datetime] = Field(None, description="Most recent comment timestamp")
-    last_posted_at: Optional[datetime] = Field(None, description="Most recent successful posting")
+    last_comment_at: Optional[datetime] = Field(
+        None, description="Most recent comment timestamp"
+    )
+    last_posted_at: Optional[datetime] = Field(
+        None, description="Most recent successful posting"
+    )
 
 
 # === Student Backup Schemas ===
 
+
 class TrackedStudentCreate(BaseModel):
     """Request model for creating a tracked student."""
-    mymoment_student_id: int = Field(..., gt=0, description="Student's user ID on myMoment platform")
-    mymoment_login_id: uuid.UUID = Field(..., description="Admin login ID to use for scraping")
-    display_name: Optional[str] = Field(None, max_length=255, description="Optional friendly name")
+
+    mymoment_student_id: int = Field(
+        ..., gt=0, description="Student's user ID on myMoment platform"
+    )
+    mymoment_login_id: uuid.UUID = Field(
+        ..., description="Admin login ID to use for scraping"
+    )
+    display_name: Optional[str] = Field(
+        None, max_length=255, description="Optional friendly name"
+    )
     notes: Optional[str] = Field(None, description="Optional notes about the student")
 
 
 class TrackedStudentUpdate(BaseModel):
     """Request model for updating a tracked student."""
-    mymoment_login_id: Optional[uuid.UUID] = Field(None, description="Admin login ID to use for scraping")
-    display_name: Optional[str] = Field(None, max_length=255, description="Optional friendly name")
+
+    mymoment_login_id: Optional[uuid.UUID] = Field(
+        None, description="Admin login ID to use for scraping"
+    )
+    display_name: Optional[str] = Field(
+        None, max_length=255, description="Optional friendly name"
+    )
     notes: Optional[str] = Field(None, description="Optional notes about the student")
     is_active: Optional[bool] = Field(None, description="Whether tracking is active")
 
 
 class TrackedStudentResponse(BaseModel):
     """Response model for a tracked student."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID = Field(..., description="Tracked student unique identifier")
     user_id: uuid.UUID = Field(..., description="User who owns this tracking")
-    mymoment_login_id: Optional[uuid.UUID] = Field(None, description="Admin login used for scraping")
+    mymoment_login_id: Optional[uuid.UUID] = Field(
+        None, description="Admin login used for scraping"
+    )
     mymoment_student_id: int = Field(..., description="Student's user ID on myMoment")
-    display_name: Optional[str] = Field(None, description="Friendly name for the student")
+    display_name: Optional[str] = Field(
+        None, description="Friendly name for the student"
+    )
     notes: Optional[str] = Field(None, description="Notes about the student")
     is_active: bool = Field(..., description="Whether tracking is active")
     created_at: datetime = Field(..., description="When tracking was created")
     updated_at: datetime = Field(..., description="Last update timestamp")
-    last_backup_at: Optional[datetime] = Field(None, description="Last successful backup timestamp")
-    dashboard_url: Optional[str] = Field(None, description="URL to student's myMoment dashboard")
-    article_count: Optional[int] = Field(None, description="Number of unique articles tracked")
-    total_versions: Optional[int] = Field(None, description="Total number of article versions")
+    last_backup_at: Optional[datetime] = Field(
+        None, description="Last successful backup timestamp"
+    )
+    dashboard_url: Optional[str] = Field(
+        None, description="URL to student's myMoment dashboard"
+    )
+    article_count: Optional[int] = Field(
+        None, description="Number of unique articles tracked"
+    )
+    total_versions: Optional[int] = Field(
+        None, description="Total number of article versions"
+    )
 
 
 class TrackedStudentListResponse(BaseModel):
     """Response model for listing tracked students."""
-    items: List[TrackedStudentResponse] = Field(..., description="List of tracked students")
+
+    items: List[TrackedStudentResponse] = Field(
+        ..., description="List of tracked students"
+    )
     total: int = Field(..., description="Total number of tracked students")
 
 
 class ArticleVersionResponse(BaseModel):
     """Response model for an article version."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID = Field(..., description="Version unique identifier")
-    tracked_student_id: uuid.UUID = Field(..., description="Tracked student this belongs to")
+    tracked_student_id: uuid.UUID = Field(
+        ..., description="Tracked student this belongs to"
+    )
     mymoment_article_id: int = Field(..., description="Article ID on myMoment")
     version_number: int = Field(..., description="Sequential version number")
     article_title: Optional[str] = Field(None, description="Article title")
@@ -568,7 +855,9 @@ class ArticleVersionResponse(BaseModel):
     article_visibility: Optional[str] = Field(None, description="Visibility/class info")
     article_category: Optional[str] = Field(None, description="Article category")
     article_task: Optional[str] = Field(None, description="Writing task if assigned")
-    article_last_modified: Optional[datetime] = Field(None, description="Last modified on myMoment")
+    article_last_modified: Optional[datetime] = Field(
+        None, description="Last modified on myMoment"
+    )
     scraped_at: datetime = Field(..., description="When this version was captured")
     content_hash: Optional[str] = Field(None, description="SHA-256 hash of content")
     is_active: bool = Field(..., description="Whether version is active")
@@ -576,6 +865,7 @@ class ArticleVersionResponse(BaseModel):
 
 class ArticleVersionDetailResponse(ArticleVersionResponse):
     """Detailed response model for an article version including content."""
+
     article_content: Optional[str] = Field(None, description="Plain text content")
     article_raw_html: Optional[str] = Field(None, description="Raw HTML content")
     extra_metadata: Optional[dict] = Field(None, description="Additional metadata")
@@ -583,38 +873,49 @@ class ArticleVersionDetailResponse(ArticleVersionResponse):
 
 class ArticleVersionListResponse(BaseModel):
     """Response model for listing article versions."""
-    items: List[ArticleVersionResponse] = Field(..., description="List of article versions")
+
+    items: List[ArticleVersionResponse] = Field(
+        ..., description="List of article versions"
+    )
     total: int = Field(..., description="Total number of versions")
 
 
 class ArticleSummaryResponse(BaseModel):
     """Summary response for an article with version count."""
+
     mymoment_article_id: int = Field(..., description="Article ID on myMoment")
     article_title: Optional[str] = Field(None, description="Latest article title")
     article_category: Optional[str] = Field(None, description="Latest category")
     article_task: Optional[str] = Field(None, description="Latest writing task")
     version_count: int = Field(..., description="Number of versions for this article")
-    latest_scraped_at: Optional[datetime] = Field(None, description="Most recent backup timestamp")
+    latest_scraped_at: Optional[datetime] = Field(
+        None, description="Most recent backup timestamp"
+    )
     article_status: Optional[str] = Field(None, description="Latest status")
     view_url: str = Field(..., description="URL to view article on myMoment")
 
 
 class ArticleSummaryListResponse(BaseModel):
     """Response model for listing article summaries."""
-    items: List[ArticleSummaryResponse] = Field(..., description="List of article summaries")
+
+    items: List[ArticleSummaryResponse] = Field(
+        ..., description="List of article summaries"
+    )
     total: int = Field(..., description="Total number of unique articles")
 
 
 class BackupTriggerRequest(BaseModel):
     """Request model for triggering a backup."""
+
     tracked_student_ids: Optional[List[uuid.UUID]] = Field(
         None,
-        description="Optional list of specific student IDs to backup. If empty, backs up all."
+        description="Optional list of specific student IDs to backup. If empty, backs up all.",
     )
 
 
 class BackupTriggerResponse(BaseModel):
     """Response model for backup trigger."""
+
     status: str = Field(..., description="Status of the trigger operation")
     task_id: Optional[str] = Field(None, description="Celery task ID for full backup")
     tasks: Optional[List[dict]] = Field(None, description="List of dispatched tasks")

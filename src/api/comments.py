@@ -7,10 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc
 
-from src.api.schemas import (
-    AICommentResponse,
-    AICommentListResponse
-)
+from src.api.schemas import AICommentResponse, AICommentListResponse
 from src.api.auth import get_current_user
 from src.config.database import get_session
 from src.models.user import User
@@ -65,19 +62,26 @@ def serialize_ai_comment(comment: AIComment) -> AICommentResponse:
         mymoment_login_id=comment.mymoment_login_id,
         prompt_template_id=comment.prompt_template_id,
         llm_provider_id=comment.llm_provider_id,
-        monitoring_process_id=comment.monitoring_process_id
+        monitoring_process_id=comment.monitoring_process_id,
     )
 
 
 @router.get("/index", response_model=AICommentListResponse)
 async def get_user_ai_comments(
-    status_filter: Optional[str] = Query(None, description="Filter by status: generated, posting, posted, failed, deleted"),
-    mymoment_login_id: Optional[uuid.UUID] = Query(None, description="Filter by myMoment login ID"),
-    monitoring_process_id: Optional[uuid.UUID] = Query(None, description="Filter by monitoring process ID"),
+    status_filter: Optional[str] = Query(
+        None,
+        description="Filter by status: generated, posting, posted, failed, deleted",
+    ),
+    mymoment_login_id: Optional[uuid.UUID] = Query(
+        None, description="Filter by myMoment login ID"
+    ),
+    monitoring_process_id: Optional[uuid.UUID] = Query(
+        None, description="Filter by monitoring process ID"
+    ),
     limit: int = Query(20, ge=1, le=100, description="Number of comments to return"),
     offset: int = Query(0, ge=0, description="Number of comments to skip"),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Get user's AI-generated comments with optional filters.
@@ -94,14 +98,20 @@ async def get_user_ai_comments(
         # Build query
         conditions = [
             AIComment.user_id == current_user.id,
-            AIComment.is_active.is_(True)
+            AIComment.is_active.is_(True),
         ]
 
         if status_filter:
-            if status_filter not in ["generated", "posting", "posted", "failed", "deleted"]:
+            if status_filter not in [
+                "generated",
+                "posting",
+                "posted",
+                "failed",
+                "deleted",
+            ]:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid status filter. Must be: generated, posting, posted, failed, or deleted"
+                    detail="Invalid status filter. Must be: generated, posting, posted, failed, or deleted",
                 )
             conditions.append(AIComment.status == status_filter)
 
@@ -127,25 +137,26 @@ async def get_user_ai_comments(
         result = await session.execute(stmt)
         ai_comments = result.scalars().all()
 
-        logger.debug(f"Retrieved {len(ai_comments)} AI comments for user {current_user.id}")
+        logger.debug(
+            f"Retrieved {len(ai_comments)} AI comments for user {current_user.id}"
+        )
 
         # Convert to response format
         comment_responses = [serialize_ai_comment(comment) for comment in ai_comments]
 
         return AICommentListResponse(
-            items=comment_responses,
-            total=total,
-            limit=limit,
-            offset=offset
+            items=comment_responses, total=total, limit=limit, offset=offset
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error retrieving AI comments for user {current_user.id}: {e}")
+        logger.error(
+            f"Unexpected error retrieving AI comments for user {current_user.id}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
+            detail="Internal server error",
         )
 
 
@@ -153,7 +164,7 @@ async def get_user_ai_comments(
 async def get_ai_comment_detail(
     comment_id: uuid.UUID = Path(..., description="AI comment unique identifier"),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Get detailed information about a specific AI comment with article snapshot.
@@ -172,7 +183,7 @@ async def get_ai_comment_detail(
             and_(
                 AIComment.id == comment_id,
                 AIComment.user_id == current_user.id,
-                AIComment.is_active.is_(True)
+                AIComment.is_active.is_(True),
             )
         )
         result = await session.execute(stmt)
@@ -181,7 +192,7 @@ async def get_ai_comment_detail(
         if not ai_comment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="AI comment not found or not accessible"
+                detail="AI comment not found or not accessible",
             )
 
         logger.debug(f"Retrieved AI comment {comment_id} for user {current_user.id}")
@@ -194,7 +205,7 @@ async def get_ai_comment_detail(
         logger.error(f"Unexpected error retrieving AI comment {comment_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
+            detail="Internal server error",
         )
 
 
@@ -202,7 +213,7 @@ async def get_ai_comment_detail(
 async def get_ai_comments_by_article(
     mymoment_article_id: str = Path(..., description="myMoment article ID"),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Get all user's AI comments for a specific myMoment article.
@@ -226,7 +237,7 @@ async def get_ai_comments_by_article(
                 and_(
                     AIComment.mymoment_article_id == mymoment_article_id,
                     AIComment.user_id == current_user.id,
-                    AIComment.is_active.is_(True)
+                    AIComment.is_active.is_(True),
                 )
             )
             .order_by(AIComment.created_at.asc())  # Chronological order
@@ -246,7 +257,7 @@ async def get_ai_comments_by_article(
             items=comment_responses,
             total=len(comment_responses),
             limit=len(comment_responses),
-            offset=0
+            offset=0,
         )
 
     except HTTPException:
@@ -257,7 +268,7 @@ async def get_ai_comments_by_article(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
+            detail="Internal server error",
         )
 
 
@@ -265,7 +276,7 @@ async def get_ai_comments_by_article(
 async def post_comment_to_mymoment(
     comment_id: uuid.UUID = Path(..., description="AI comment unique identifier"),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Post an AI comment to myMoment platform.
@@ -299,7 +310,7 @@ async def post_comment_to_mymoment(
             and_(
                 AIComment.id == comment_id,
                 AIComment.user_id == current_user.id,
-                AIComment.is_active.is_(True)
+                AIComment.is_active.is_(True),
             )
         )
         result = await session.execute(stmt)
@@ -308,53 +319,57 @@ async def post_comment_to_mymoment(
         if not ai_comment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="AI comment not found or not accessible"
+                detail="AI comment not found or not accessible",
             )
 
         # Check if already posted
         if ai_comment.status == "posted":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Comment has already been posted to myMoment"
+                detail="Comment has already been posted to myMoment",
             )
 
         if ai_comment.status == "posting":
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Comment is already being posted to myMoment"
+                detail="Comment is already being posted to myMoment",
             )
 
         if ai_comment.status != "generated":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Only generated comments can be posted to myMoment"
+                detail="Only generated comments can be posted to myMoment",
             )
 
         # Check if comment content exists
         if not ai_comment.comment_content:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Comment content is empty, cannot post"
+                detail="Comment content is empty, cannot post",
             )
 
         # Get associated myMoment login
         if not ai_comment.mymoment_login_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No myMoment login associated with this comment"
+                detail="No myMoment login associated with this comment",
             )
 
-        account = await load_platform_account(session, ai_comment.mymoment_login_id, current_user.id)
+        account = await load_platform_account(
+            session, ai_comment.mymoment_login_id, current_user.id
+        )
         if account is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Associated myMoment login not found or inactive"
+                detail="Associated myMoment login not found or inactive",
             )
 
         try:
             async with connect(account) as platform:
                 posted = await platform.post_comment(
-                    ArticleRef(id=ai_comment.mymoment_article_id, url=ai_comment.article_url),
+                    ArticleRef(
+                        id=ai_comment.mymoment_article_id, url=ai_comment.article_url
+                    ),
                     AIComment.apply_ai_prefix(ai_comment.comment_content),
                     hidden=ai_comment.is_hidden,
                 )
@@ -362,19 +377,23 @@ async def post_comment_to_mymoment(
             logger.warning(f"myMoment refused comment {comment_id}: {e}")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"myMoment refused the comment: {e}"
+                detail=f"myMoment refused the comment: {e}",
             )
         except PlatformAuthError as e:
-            logger.warning(f"myMoment rejected the credentials while posting comment {comment_id}: {e}")
+            logger.warning(
+                f"myMoment rejected the credentials while posting comment {comment_id}: {e}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="myMoment rejected the credentials of the associated login"
+                detail="myMoment rejected the credentials of the associated login",
             )
         except PlatformUnavailable as e:
-            logger.error(f"myMoment unavailable while posting comment {comment_id}: {e}")
+            logger.error(
+                f"myMoment unavailable while posting comment {comment_id}: {e}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="myMoment is not reachable, please try again later"
+                detail="myMoment is not reachable, please try again later",
             )
 
         # Platforms like myMoment return no comment ID; article_id-timestamp keeps it unique
@@ -382,7 +401,7 @@ async def post_comment_to_mymoment(
         ai_comment.mark_as_posted(
             mymoment_comment_id=posted.external_id
             or f"{ai_comment.mymoment_article_id}-{int(posted_timestamp.timestamp())}",
-            posted_at=posted_timestamp
+            posted_at=posted_timestamp,
         )
 
         await session.commit()
@@ -399,8 +418,10 @@ async def post_comment_to_mymoment(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error in post_comment_to_mymoment for comment {comment_id}: {e}")
+        logger.error(
+            f"Unexpected error in post_comment_to_mymoment for comment {comment_id}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
+            detail="Internal server error",
         )

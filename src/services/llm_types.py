@@ -16,13 +16,14 @@ class AICommentSchema(BaseModel):
     from models that do not produce native reasoning tokens.
     Reasoning models skip this schema entirely and return plain text.
     """
+
     reasoning_content: str = Field(
         ...,
         description=(
             "Internal reasoning for comment generation on the myMoment platform. "
             "Think step-by-step. This is not visible by the author. "
             "Write your reasoning here."
-        )
+        ),
     )
     comment_content: str = Field(
         ...,
@@ -33,7 +34,7 @@ class AICommentSchema(BaseModel):
             "Do not use plain-text newlines for paragraph separation. "
             "Only use <p>, <strong>, <em> tags — no block-level HTML. "
             "Example: <p>First paragraph.</p><p>Second paragraph.</p>"
-        )
+        ),
     )
 
 
@@ -41,6 +42,7 @@ class GenerationResult(BaseModel):
     """
     Encapsulates the complete response from LiteLLM, including metadata.
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     comment_content: str
@@ -61,17 +63,18 @@ class LLMGenerationConfig(BaseModel):
     Lightweight DTO for LLM generation configuration.
     Eliminates strict dependency on SQLAlchemy models for background tasks.
     """
+
     provider_name: str
     model_name: str
     api_key: str  # Decrypted API key
     max_tokens: Optional[int] = None
     temperature: Optional[float] = None
-    
+
     @classmethod
     def from_model(cls, provider_config: Any, api_key: str) -> "LLMGenerationConfig":
         """
         Create DTO from LLMProviderConfiguration SQLAlchemy model.
-        
+
         Args:
             provider_config: LLMProviderConfiguration instance
             api_key: Decrypted API key
@@ -81,5 +84,5 @@ class LLMGenerationConfig(BaseModel):
             model_name=provider_config.model_name,
             api_key=api_key,
             max_tokens=provider_config.max_tokens,
-            temperature=provider_config.temperature
+            temperature=provider_config.temperature,
         )
