@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import format_datetime, parsedate_to_datetime
 from http.cookies import SimpleCookie
 from typing import Any, Dict, Optional, Protocol
@@ -82,9 +82,9 @@ def restore_cookie_jar(jar: CookieJar, data: Optional[Dict[str, Any]], base_url:
         if expires:
             expires_dt = datetime.fromisoformat(expires)
             if expires_dt.tzinfo is None:
-                expires_dt = expires_dt.replace(tzinfo=timezone.utc)
+                expires_dt = expires_dt.replace(tzinfo=UTC)
             else:
-                expires_dt = expires_dt.astimezone(timezone.utc)
+                expires_dt = expires_dt.astimezone(UTC)
             morsel['expires'] = format_datetime(expires_dt, usegmt=True)
 
         cookie_domain = (domain or base.host or '').lstrip('.')
