@@ -357,12 +357,16 @@ class ArticleListResponse(BaseModel):
 
 class TargetValueResponse(BaseModel):
     """One value a target dimension can take."""
+    model_config = ConfigDict(from_attributes=True)
+
     value: str = Field(..., description="Value as used in the target (e.g., 'home', 'alle', '38')")
     label: str = Field(..., description="Label the platform shows (e.g., 'Meine', 'Alle', 'Dummy Klasse 01')")
 
 
 class TargetOptionResponse(BaseModel):
     """One selectable target dimension of a platform account."""
+    model_config = ConfigDict(from_attributes=True)
+
     key: str = Field(..., description="Key in the target (e.g., 'classroom')")
     label: str = Field(..., description="Display name of the dimension")
     values: list[TargetValueResponse] = Field(..., description="Selectable values")

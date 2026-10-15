@@ -13,7 +13,6 @@ from src.api.schemas import (
     ArticleListResponse,
     TargetListResponse,
     TargetOptionResponse,
-    TargetValueResponse,
 )
 from src.api.auth import get_current_user
 from src.config.database import get_session
@@ -134,14 +133,7 @@ async def get_targets(
     except PlatformError as e:
         raise _platform_error(e, "list targets") from e
 
-    return TargetListResponse(items=[
-        TargetOptionResponse(
-            key=option.key,
-            label=option.label,
-            values=[TargetValueResponse(value=v.value, label=v.label) for v in option.values],
-        )
-        for option in options
-    ])
+    return TargetListResponse(items=[TargetOptionResponse.model_validate(option) for option in options])
 
 
 @router.get("/{mymoment_login_id}/article/{mymoment_article_id}", response_model=ArticleDetailResponse)
@@ -162,7 +154,7 @@ async def get_article_detail(
     logger.info(f"User {current_user.id} fetching article {mymoment_article_id} with login {mymoment_login_id}")
     try:
         async with connect(account) as platform:
-            # Only the ID is known here; the adapter builds the URL and returns it with the content
+            # Only the ID is known here; fetch_article reads ref.id and returns the ref with its URL
             article = await platform.fetch_article(ArticleRef(id=mymoment_article_id, url=""))
     except PlatformRejected as e:
         raise HTTPException(

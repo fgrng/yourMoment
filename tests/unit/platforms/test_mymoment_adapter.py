@@ -286,6 +286,18 @@ async def test_fetch_missing_article_raises_rejected(adapter, http, account):
             await connection.fetch_article(ArticleRef(id="3170", url=ARTICLE_URL))
 
 
+@pytest.mark.parametrize("article_id", ["..", "3170?tab=alle", "3170/comment", "²", ""])
+async def test_fetch_article_rejects_malformed_id_without_request(adapter, http, account, article_id):
+    queue_login(http)
+
+    async with adapter.connect(account) as connection:
+        requests_before = len(http.requests)
+        with pytest.raises(PlatformRejected):
+            await connection.fetch_article(ArticleRef(id=article_id, url=ARTICLE_URL))
+
+    assert len(http.requests) == requests_before
+
+
 async def test_redirect_without_location_raises_unavailable(adapter, http, account):
     queue_login(http)
     http.queue_response("GET", ARTICLE_URL, AiohttpStubResponse(status=302))

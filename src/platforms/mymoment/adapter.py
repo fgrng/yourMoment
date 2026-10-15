@@ -160,6 +160,9 @@ class MyMomentConnection:
         return summaries
 
     async def fetch_article(self, ref: ArticleRef) -> ArticleContent:
+        if not parsers.is_number(ref.id):
+            raise PlatformRejected(f"Unknown myMoment article: {ref.id!r}")
+
         url = self._article_url(ref.id)
         page = await self._request('GET', url)
         if page.status != 200:

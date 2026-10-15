@@ -100,7 +100,9 @@ class PlatformConnection(Protocol):
         """List the articles of a target; the adapter validates the target's keys and values."""
         ...
 
-    async def fetch_article(self, ref: ArticleRef) -> ArticleContent: ...
+    async def fetch_article(self, ref: ArticleRef) -> ArticleContent:
+        """Read the article `ref.id` names; the content carries its ref with the URL the adapter builds."""
+        ...
 
     async def post_comment(self, ref: ArticleRef, text: str, *, hidden: bool = False) -> PostedComment:
         """Publish `text` under the article; `hidden` hides it from other readers."""

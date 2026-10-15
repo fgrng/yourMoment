@@ -32,6 +32,26 @@ async def _list(db_session, user, login, *, category=None, tab="alle", limit=20)
     )
 
 
+async def _preview(db_session, user, login, article_id="3170"):
+    return await get_article_detail(
+        mymoment_login_id=login.id,
+        mymoment_article_id=article_id,
+        current_user=user,
+        session=db_session,
+    )
+
+
+PLATFORM_ERRORS = pytest.mark.parametrize(
+    ("error", "expected_status"),
+    [
+        (PlatformRejected("unknown classroom"), 422),
+        (PlatformAuthError("wrong password"), 502),
+        (PlatformUnavailable("timeout"), 503),
+    ],
+    ids=["rejected", "wrong-credentials", "unavailable"],
+)
+
+
 async def test_targets_lists_the_options_of_the_platform_account(db_session, fake_platform):
     user, login = await _stored_login(db_session)
     fake_platform.targets = [
@@ -45,11 +65,29 @@ async def test_targets_lists_the_options_of_the_platform_account(db_session, fak
     response = await get_targets(mymoment_login_id=login.id, current_user=user, session=db_session)
 
     [option] = response.items
-    assert (
-        option.key,
-        [(v.value, v.label) for v in option.values],
-        fake_platform.connected_accounts[0].id,
-    ) == ("classroom", [("home", "Meine"), ("82", "Klasse A")], login.id)
+    assert (option.key, [(v.value, v.label) for v in option.values]) == (
+        "classroom",
+        [("home", "Meine"), ("82", "Klasse A")],
+    )
+
+
+async def test_targets_are_read_through_the_chosen_platform_account(db_session, fake_platform):
+    user, login = await _stored_login(db_session)
+
+    await get_targets(mymoment_login_id=login.id, current_user=user, session=db_session)
+
+    assert [account.id for account in fake_platform.connected_accounts] == [login.id]
+
+
+@PLATFORM_ERRORS
+async def test_platform_errors_while_listing_targets_map_to_http_status(db_session, fake_platform, error, expected_status):
+    user, login = await _stored_login(db_session)
+    fake_platform.fail("list_targets", error)
+
+    with pytest.raises(HTTPException) as raised:
+        await get_targets(mymoment_login_id=login.id, current_user=user, session=db_session)
+
+    assert raised.value.status_code == expected_status
 
 
 async def test_articles_are_listed_for_the_classroom_and_category_target(db_session, fake_platform):
@@ -77,12 +115,7 @@ async def test_article_preview_shows_the_fetched_content(db_session, fake_platfo
     user, login = await _stored_login(db_session)
     fake_platform.add_article("3170", title="Beispieldialog", author="Sam", body_text="Hallo.", body_html="<p>Hallo.</p>")
 
-    response = await get_article_detail(
-        mymoment_login_id=login.id,
-        mymoment_article_id="3170",
-        current_user=user,
-        session=db_session,
-    )
+    response = await _preview(db_session, user, login)
 
     assert (response.title, response.author, response.content, response.raw_html, response.mymoment_url) == (
         "Beispieldialog",
@@ -97,26 +130,29 @@ async def test_preview_of_an_unknown_article_is_not_found(db_session, fake_platf
     user, login = await _stored_login(db_session)
 
     with pytest.raises(HTTPException) as raised:
-        await get_article_detail(
-            mymoment_login_id=login.id,
-            mymoment_article_id="9999",
-            current_user=user,
-            session=db_session,
-        )
+        await _preview(db_session, user, login, article_id="9999")
 
     assert raised.value.status_code == 404
 
 
 @pytest.mark.parametrize(
     ("error", "expected_status"),
-    [
-        (PlatformRejected("unknown classroom"), 422),
-        (PlatformAuthError("wrong password"), 502),
-        (PlatformUnavailable("timeout"), 503),
-    ],
-    ids=["rejected", "wrong-credentials", "unavailable"],
+    [(PlatformAuthError("wrong password"), 502), (PlatformUnavailable("timeout"), 503)],
+    ids=["wrong-credentials", "unavailable"],
 )
-async def test_platform_errors_while_listing_map_to_http_status(db_session, fake_platform, error, expected_status):
+async def test_platform_errors_while_previewing_map_to_http_status(db_session, fake_platform, error, expected_status):
+    user, login = await _stored_login(db_session)
+    fake_platform.add_article("3170")
+    fake_platform.fail("fetch_article", error)
+
+    with pytest.raises(HTTPException) as raised:
+        await _preview(db_session, user, login)
+
+    assert raised.value.status_code == expected_status
+
+
+@PLATFORM_ERRORS
+async def test_platform_errors_while_listing_articles_map_to_http_status(db_session, fake_platform, error, expected_status):
     user, login = await _stored_login(db_session)
     fake_platform.fail("list_articles", error)
 
@@ -133,4 +169,14 @@ async def test_another_users_account_is_not_found(db_session, fake_platform):
     with pytest.raises(HTTPException) as raised:
         await get_targets(mymoment_login_id=login.id, current_user=stranger, session=db_session)
 
-    assert (raised.value.status_code, fake_platform.connected_accounts) == (404, [])
+    assert raised.value.status_code == 404
+
+
+async def test_another_users_account_is_never_connected(db_session, fake_platform):
+    _, login = await _stored_login(db_session)
+    stranger = await create_user(db_session)
+
+    with pytest.raises(HTTPException):
+        await get_targets(mymoment_login_id=login.id, current_user=stranger, session=db_session)
+
+    assert fake_platform.connected_accounts == []
