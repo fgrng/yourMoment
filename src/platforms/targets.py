@@ -18,7 +18,7 @@ def validate_target(adapter: PlatformAdapter, target: Mapping[str, Any]) -> dict
     description = adapter.describe_target()
     labels = {dimension.key: dimension.label for dimension in description}
 
-    unknown = sorted(set(target) - set(labels))
+    unknown = sorted(str(key) for key in set(target) - set(labels))
     if unknown:
         raise InvalidTarget(f"Unbekannte Angaben im Ziel: {', '.join(unknown)}")
     for dimension in description:

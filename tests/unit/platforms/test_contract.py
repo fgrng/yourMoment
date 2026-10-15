@@ -326,12 +326,13 @@ def test_valid_target_with_every_dimension_is_accepted(harness):
     ("target", "message"),
     [
         ({"classroom": "82", "colour": "blue"}, "colour"),
+        ({"classroom": "82", 7: "x", "colour": "blue"}, "7"),
         ({"category": "7"}, "classroom"),
         ({"classroom": ""}, "classroom"),
         ({"classroom": "   "}, "classroom"),
         ({"classroom": 82}, "classroom"),
     ],
-    ids=["unknown-key", "missing-required-key", "empty-value", "blank-value", "non-string-value"],
+    ids=["unknown-key", "non-string-key", "missing-required-key", "empty-value", "blank-value", "non-string-value"],
 )
 def test_invalid_target_is_rejected_with_a_message_naming_the_key(harness, target, message):
     with pytest.raises(InvalidTarget, match=message):

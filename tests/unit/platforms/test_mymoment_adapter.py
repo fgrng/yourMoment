@@ -720,3 +720,8 @@ def test_target_of_the_mymoment_platform_is_described_without_network():
     adapter = adapter_for_platform(MYMOMENT)
 
     assert [d.key for d in adapter.describe_target()] == ["category", "arrangement", "classroom"]
+
+
+def test_unknown_platform_has_no_adapter():
+    with pytest.raises(ValueError, match="wordpress"):
+        adapter_for_platform("wordpress")

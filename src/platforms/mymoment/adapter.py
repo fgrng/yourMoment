@@ -53,7 +53,7 @@ _TARGET_DESCRIPTION = (
     TargetDimension(key='classroom', label='Klasse', required=True),
 )
 _TARGET_KEYS = {dimension.key for dimension in _TARGET_DESCRIPTION}
-_DEFAULT_CLASSROOM = 'alle'
+_ALL_CLASSROOMS = 'alle'
 
 
 @dataclass(frozen=True)
@@ -87,7 +87,7 @@ class MyMomentAdapter:
 
     def check_target(self, target: Mapping[str, str]) -> None:
         """A process must name its classroom: "alle" would watch every classroom the account sees."""
-        if target.get('classroom') == _DEFAULT_CLASSROOM:
+        if target.get('classroom') == _ALL_CLASSROOMS:
             raise InvalidTarget("Klasse „alle“ ist nicht erlaubt; bitte eine einzelne Klasse wählen")
 
     @asynccontextmanager
@@ -145,7 +145,7 @@ class MyMomentConnection:
         Where a view does not show them, the filter value is what myMoment matched.
         """
         target = _validate_target(target or {})
-        classroom = target.get('classroom', _DEFAULT_CLASSROOM)
+        classroom = target.get('classroom', _ALL_CLASSROOMS)
         params = {'tab': classroom}
         if 'category' in target:
             params['kategorie'] = target['category']
