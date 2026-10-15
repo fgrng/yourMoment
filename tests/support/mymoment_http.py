@@ -49,6 +49,16 @@ def queue_article(http: AiohttpStubSession, article_id: str = "3170", fixture: s
     )
 
 
+def queue_comment_post(http: AiohttpStubSession, article_id: str = "3170", status: int = 302) -> None:
+    """Queue myMoment's answer to the comment form: a redirect back to the article."""
+    headers = {"Location": f"/article/{article_id}/"} if status == 302 else {}
+    http.queue_response(
+        "POST",
+        f"{MYMOMENT_BASE_URL}/article/{article_id}/comment/",
+        AiohttpStubResponse(status=status, headers=headers),
+    )
+
+
 def queue_article_list(
     http: AiohttpStubSession,
     target: Optional[Mapping[str, str]] = None,

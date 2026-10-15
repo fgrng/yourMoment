@@ -206,9 +206,10 @@ Tasks are automatically routed by module name:
 
 6. **Comment Posting Stage** (`post_comment_for_article` task)
    - Runs per AIComment with status='generated'
-   - Posts to myMoment via the article's login
+   - Posts through the platform interface (`connect`, `post_comment`) with the comment's platform account; manual posting (`POST /comments/{id}/post`, `post_comments_for_articles`) uses the same interface
    - Updates status='posted' on success, 'failed' on error
-   - Exponential backoff retry (max 3 attempts)
+   - Retry policy by error type: `PlatformUnavailable` (and unexpected errors) are retried with exponential backoff (max 3 attempts); `PlatformRejected` (article deleted, comments closed) and `PlatformAuthError` mark the comment failed without retry
+   - The batch task leaves comments with retryable errors 'generated' and raises `PostingDeferred`, so Celery retries the batch
    - Optional if `generate_only=True` (task not spawned)
 
 7. **Timeout Enforcement** (runs at configurable interval, default 30s)

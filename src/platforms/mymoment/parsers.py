@@ -202,18 +202,6 @@ def parse_article_detail(soup: BeautifulSoup, article_id: str) -> Dict[str, Any]
     # Extract category and task IDs from detail page
     category_id, task_id = extract_category_and_task(soup)
 
-    # Extract CSRF token for commenting
-    csrf_token = None
-    comment_form = soup.find('form', {'action': re.compile(f'/article/{article_id}/comment/')})
-    if not comment_form:
-        # Try a more generic match if exact article_id doesn't match
-        comment_form = soup.find('form', {'action': re.compile(r'/article/\d+/comment/')})
-
-    if comment_form:
-        csrf_input = comment_form.find('input', {'name': 'csrfmiddlewaretoken'})
-        if csrf_input:
-            csrf_token = csrf_input.get('value')
-
     return {
         'id': article_id,
         'title': title,
@@ -222,8 +210,20 @@ def parse_article_detail(soup: BeautifulSoup, article_id: str) -> Dict[str, Any]
         'full_html': full_article_html,
         'category_id': category_id,
         'task_id': task_id,
-        'csrf_token': csrf_token
+        'csrf_token': extract_comment_csrf_token(soup, article_id)
     }
+
+
+def extract_comment_csrf_token(soup: BeautifulSoup, article_id: str) -> Optional[str]:
+    """CSRF token of the article's comment form; None if the page offers no comment form."""
+    comment_form = soup.find('form', {'action': re.compile(f'/article/{re.escape(article_id)}/comment/')})
+    if not comment_form:
+        # Try a more generic match if exact article_id doesn't match
+        comment_form = soup.find('form', {'action': re.compile(r'/article/\d+/comment/')})
+    if not comment_form:
+        return None
+    csrf_input = comment_form.find('input', {'name': 'csrfmiddlewaretoken'})
+    return csrf_input.get('value') if csrf_input else None
 
 
 def extract_category_and_task(soup: BeautifulSoup) -> Tuple[Optional[int], Optional[int]]:

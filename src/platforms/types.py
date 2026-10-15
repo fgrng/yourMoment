@@ -57,6 +57,13 @@ class ArticleSummary:
     extra: Mapping[str, str] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class PostedComment:
+    """A published comment; platforms that do not report an ID return None."""
+
+    external_id: Optional[str] = None
+
+
 class PlatformConnection(Protocol):
     """An authenticated connection to one platform account."""
 
@@ -65,6 +72,10 @@ class PlatformConnection(Protocol):
         ...
 
     async def fetch_article(self, ref: ArticleRef) -> ArticleContent: ...
+
+    async def post_comment(self, ref: ArticleRef, text: str, *, hidden: bool = False) -> PostedComment:
+        """Publish `text` under the article; `hidden` hides it from other readers."""
+        ...
 
 
 class PlatformAdapter(Protocol):

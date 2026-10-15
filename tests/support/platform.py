@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 import uuid
 from typing import Any, AsyncIterator, Mapping, Optional
 
@@ -14,6 +15,7 @@ from src.platforms import (
     ArticleSummary,
     PlatformAccount,
     PlatformRejected,
+    PostedComment,
     use_adapter,
 )
 
@@ -37,6 +39,14 @@ _TARGET_KEYS = {"category", "arrangement", "classroom"}
 def _target_value(article: ArticleContent, key: str) -> Optional[str]:
     """Category is a field; arrangement and classroom live in `extra`."""
     return article.category if key == "category" else article.extra.get(key)
+
+
+@dataclass(frozen=True)
+class FakePostedComment:
+    account: PlatformAccount
+    ref: ArticleRef
+    text: str
+    hidden: bool
 
 
 class FakeConnection:
@@ -69,19 +79,34 @@ class FakeConnection:
         except KeyError:
             raise PlatformRejected(f"article {ref.id} not found") from None
 
+    async def post_comment(self, ref: ArticleRef, text: str, *, hidden: bool = False) -> PostedComment:
+        self._platform._raise_injected("post_comment")
+        if ref.id not in self._platform.articles:
+            raise PlatformRejected(f"article {ref.id} not found")
+        if ref.id in self._platform.closed_articles:
+            raise PlatformRejected(f"article {ref.id} does not accept comments")
+        self._platform.posted_comments.append(FakePostedComment(self.account, ref, text, hidden))
+        return PostedComment()
+
 
 class FakePlatform:
-    """In-memory platform: articles can be added, errors injected per operation."""
+    """In-memory platform: articles can be added, posted comments read back, errors injected per operation."""
 
     def __init__(self, base_url: str = "https://fake.example") -> None:
         self.base_url = base_url
         self.articles: dict[str, ArticleContent] = {}
         self.connected_accounts: list[PlatformAccount] = []
+        self.posted_comments: list[FakePostedComment] = []
+        self.closed_articles: set[str] = set()
         self._errors: dict[str, Exception] = {}
 
     def fail(self, operation: str, error: Exception) -> None:
-        """Raise `error` on every call of `operation` ("connect", "list_articles", "fetch_article")."""
+        """Raise `error` on every call of `operation` ("connect", "list_articles", "fetch_article", "post_comment")."""
         self._errors[operation] = error
+
+    def reject_comments(self, article_id: str) -> None:
+        """Let the platform refuse comments on this article, like a closed or deleted one."""
+        self.closed_articles.add(article_id)
 
     def add_article(
         self,

@@ -20,7 +20,7 @@ from bs4 import BeautifulSoup
 from src.platforms.errors import PlatformAuthError, PlatformRejected, PlatformUnavailable
 from src.platforms.mymoment import parsers
 from src.platforms.mymoment.cookies import CookieStore, restore_cookie_jar, serialize_cookie_jar
-from src.platforms.types import ArticleContent, ArticleRef, ArticleSummary, PlatformAccount
+from src.platforms.types import ArticleContent, ArticleRef, ArticleSummary, PlatformAccount, PostedComment
 from src.utils.url_sanitizer import is_url_malformed, sanitize_url
 
 logger = logging.getLogger(__name__)
@@ -161,6 +161,45 @@ class MyMomentConnection:
             extra=extra,
         )
 
+    async def post_comment(self, ref: ArticleRef, text: str, *, hidden: bool = False) -> PostedComment:
+        """
+        Fill in the article's comment form and submit it.
+
+        The form's CSRF token comes from the article page. myMoment answers a
+        successful post with 200 or 302; it reports no comment ID.
+        """
+        url = self._article_url(ref.id)
+        page = await self._request('GET', url)
+        if page.status != 200:
+            raise PlatformRejected(f"myMoment answered {page.status} for article {ref.id}")
+        csrf_token = parsers.extract_comment_csrf_token(page.soup(), ref.id)
+        if not csrf_token:
+            raise PlatformRejected(f"Article {ref.id} offers no comment form")
+
+        form = {
+            'csrfmiddlewaretoken': csrf_token,
+            'text': text,
+            'status': '20',  # Published
+            'highlight': '',
+        }
+        if hidden:
+            form['hide'] = 'on'
+
+        response = await self._request(
+            'POST',
+            f"{url}comment/",
+            follow_redirects=False,
+            data=form,
+            headers={
+                'Referer': url,
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+        )
+        if response.status not in (200, 302):
+            raise PlatformRejected(f"myMoment answered {response.status} to the comment on article {ref.id}")
+        logger.info(f"Posted comment to myMoment article {ref.id} (hidden={hidden})")
+        return PostedComment()
+
     def _article_url(self, article_id: str) -> str:
         return f"{self._base_url}/article/{article_id}/"
 
@@ -232,13 +271,14 @@ class MyMomentConnection:
         page = await self._request('GET', f"{self._base_url}/")
         return page.status == 200 and parsers.is_logged_in(page.soup())
 
-    async def _request(self, method: str, url: str, **kwargs: Any) -> _Page:
+    async def _request(self, method: str, url: str, *, follow_redirects: bool = True, **kwargs: Any) -> _Page:
         """
         The single HTTP helper: rate limit, manual redirects, error mapping.
 
         myMoment sends Location headers with backslashes; every redirect is
-        sanitized before it is followed. Network errors, timeouts and 5xx
-        become PlatformUnavailable.
+        sanitized before it is followed. Without `follow_redirects` a redirect
+        is returned as the page. Network errors, timeouts and 5xx become
+        PlatformUnavailable.
         """
         current_url = url
         request_method = method.upper()
@@ -257,7 +297,7 @@ class MyMomentConnection:
 
             if status >= 500:
                 raise PlatformUnavailable(f"myMoment answered {status} for {request_method} {current_url}")
-            if status not in _REDIRECT_STATUSES:
+            if status not in _REDIRECT_STATUSES or not follow_redirects:
                 return _Page(status=status, url=current_url, text=text)
 
             if not location:

@@ -22,7 +22,6 @@ from bs4 import BeautifulSoup
 from sqlalchemy.ext.asyncio import AsyncSession
 from yarl import URL
 
-from src.models.ai_comment import AIComment
 from src.services.mymoment_session_service import MyMomentSessionService
 from src.services.mymoment_credentials_service import MyMomentCredentialsService
 from src.config.settings import get_settings
@@ -857,82 +856,6 @@ class ScraperService:
         except Exception as e:
             logger.error(f"Failed to get article content for {article_id}: {e}")
             raise ScrapingError(f"Article content retrieval failed: {e}")
-
-    async def post_comment(
-        self,
-        context: SessionContext,
-        article_id: str,
-        comment_content: str,
-        highlight: Optional[str] = None,
-        hide_comment: bool = False
-    ) -> bool:
-        """
-        Post a comment to an article.
-
-        Args:
-            context: Authenticated session context
-            article_id: Article ID to comment on
-            comment_content: Comment text (should include German AI prefix)
-            highlight: Optional text to highlight in article
-            hide_comment: Whether to hide the comment on myMoment (default: False)
-
-        Returns:
-            True if comment posted successfully
-
-        Raises:
-            ScrapingError: If comment posting fails
-        """
-        try:
-            if not context.is_authenticated:
-                raise ScrapingError(f"Session not authenticated for login {context.login_id}")
-
-            # Ensure German AI prefix is included exactly once (FR-006).
-            # Generated comments are often stored as HTML paragraphs, so
-            # plain startswith(prefix) is not sufficient here.
-            comment_content = AIComment.apply_ai_prefix(comment_content)
-
-            # Get article to obtain CSRF token
-            article_content = await self.get_article_content(context, article_id)
-            if not article_content or not article_content.get('csrf_token'):
-                raise ScrapingError(f"Could not get CSRF token for article {article_id}")
-
-            comment_url = f"{self.config.base_url}/article/{article_id}/comment/"
-
-            comment_data = {
-                'csrfmiddlewaretoken': article_content['csrf_token'],
-                'text': comment_content,
-                'status': '20',  # Published
-                'highlight': highlight or ''
-            }
-
-            # Add hide parameter if requested
-            if hide_comment:
-                comment_data['hide'] = 'on'
-
-            logger.debug(f"Starting HTTP request to post comment (article_id={article_id}, login={context.login_id})")
-            await self._rate_limit()
-            async with context.aiohttp_session.post(
-                comment_url,
-                data=comment_data,
-                headers={
-                    'Referer': article_content['url'],
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                }
-            ) as response:
-                success = response.status in [200, 302]
-
-                logger.debug(f"HTTP request completed for post comment (article_id={article_id}, login={context.login_id}, status={response.status})")
-                if success:
-                    context.last_activity = datetime.utcnow()
-                    logger.info(f"Successfully posted comment to article {article_id} via login {context.login_id} (hidden={hide_comment})")
-                else:
-                    logger.warning(f"Comment posting failed with status {response.status}")
-
-                return success
-
-        except Exception as e:
-            logger.error(f"Failed to post comment to article {article_id}: {e}")
-            raise ScrapingError(f"Comment posting failed: {e}")
 
     async def _rate_limit(self):
         """Apply rate limiting to requests."""

@@ -18,6 +18,7 @@ from tests.support.mymoment_http import (
     logged_out_page,
     queue_article,
     queue_article_list,
+    queue_comment_post,
     queue_login,
 )
 from tests.support.platform import InMemoryCookieStore
@@ -371,3 +372,89 @@ async def test_list_articles_raises_rejected_when_the_list_is_missing(adapter, h
     async with adapter.connect(account) as connection:
         with pytest.raises(PlatformRejected):
             await connection.list_articles({"classroom": "82"})
+
+
+COMMENT_URL = f"{MYMOMENT_BASE_URL}/article/3170/comment/"
+
+
+def _comment_post(http) -> dict:
+    return next(r for r in http.requests if r["method"] == "POST" and r["url"] == COMMENT_URL)
+
+
+async def test_post_comment_sends_the_comment_form(adapter, http, account):
+    queue_login(http)
+    queue_article(http, "3170")
+    queue_comment_post(http, "3170")
+
+    async with adapter.connect(account) as connection:
+        await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>")
+
+    post = _comment_post(http)
+    assert (post["kwargs"]["data"], post["kwargs"]["headers"]["Referer"]) == (
+        {"csrfmiddlewaretoken": "TEST_CSRF_TOKEN", "text": "<p>Toll!</p>", "status": "20", "highlight": ""},
+        ARTICLE_URL,
+    )
+
+
+async def test_post_hidden_comment_ticks_the_hide_box(adapter, http, account):
+    queue_login(http)
+    queue_article(http, "3170")
+    queue_comment_post(http, "3170")
+
+    async with adapter.connect(account) as connection:
+        await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>", hidden=True)
+
+    assert _comment_post(http)["kwargs"]["data"]["hide"] == "on"
+
+
+async def test_post_comment_answered_with_200_succeeds_without_comment_id(adapter, http, account):
+    queue_login(http)
+    queue_article(http, "3170")
+    queue_comment_post(http, "3170", status=200)
+
+    async with adapter.connect(account) as connection:
+        posted = await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>")
+
+    assert posted.external_id is None
+
+
+async def test_post_comment_does_not_follow_the_success_redirect(adapter, http, account):
+    queue_login(http)
+    queue_article(http, "3170")
+    queue_comment_post(http, "3170")
+
+    async with adapter.connect(account) as connection:
+        await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>")
+
+    assert http.requests[-1]["url"] == COMMENT_URL
+
+
+async def test_post_comment_refused_by_myMoment_raises_rejected(adapter, http, account):
+    queue_login(http)
+    queue_article(http, "3170")
+    queue_comment_post(http, "3170", status=403)
+
+    async with adapter.connect(account) as connection:
+        with pytest.raises(PlatformRejected):
+            await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>")
+
+
+async def test_post_comment_without_comment_form_raises_rejected_without_posting(adapter, http, account):
+    queue_login(http)
+    http.queue_response("GET", ARTICLE_URL, AiohttpStubResponse(status=200, body="<html><body><h1>Text</h1></body></html>"))
+
+    async with adapter.connect(account) as connection:
+        with pytest.raises(PlatformRejected):
+            await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>")
+
+    assert [r for r in http.requests if r["method"] == "POST" and r["url"] == COMMENT_URL] == []
+
+
+async def test_post_comment_on_server_error_raises_unavailable(adapter, http, account):
+    queue_login(http)
+    queue_article(http, "3170")
+    queue_comment_post(http, "3170", status=502)
+
+    async with adapter.connect(account) as connection:
+        with pytest.raises(PlatformUnavailable):
+            await connection.post_comment(ArticleRef(id="3170", url=ARTICLE_URL), "<p>Toll!</p>")

@@ -15,14 +15,16 @@ from src.platforms import (
     PlatformAuthError,
     PlatformRejected,
     PlatformUnavailable,
+    PostedComment,
 )
 from src.platforms.mymoment.adapter import MyMomentAdapter
-from tests.fixtures.stubs import AiohttpStubSession
+from tests.fixtures.stubs import AiohttpStubResponse, AiohttpStubSession
 from tests.support.mymoment_http import (
     LOGIN_URL,
     MYMOMENT_BASE_URL,
     queue_article,
     queue_article_list,
+    queue_comment_post,
     queue_login,
 )
 from tests.support.platform import FakePlatform, InMemoryCookieStore
@@ -65,6 +67,17 @@ class FakeHarness:
         self.adapter.add_article("4802", category="9", extra={"classroom": "alle"})
         self.adapter.add_article("4803", category="7", extra={"classroom": "alle"})
 
+    def given_article_open_for_comments(self) -> ArticleRef:
+        return self.adapter.add_article("3170")
+
+    def given_article_refusing_comments(self) -> ArticleRef:
+        ref = self.adapter.add_article("3170")
+        self.adapter.reject_comments(ref.id)
+        return ref
+
+    def posted_texts(self) -> list[str]:
+        return [comment.text for comment in self.adapter.posted_comments]
+
 
 class MyMomentHarness:
     def __init__(self) -> None:
@@ -90,6 +103,19 @@ class MyMomentHarness:
 
     def given_listed_articles(self, target=None) -> None:
         queue_article_list(self.http, target)
+
+    def given_article_open_for_comments(self) -> ArticleRef:
+        queue_article(self.http, "3170")
+        queue_comment_post(self.http, "3170")
+        return ArticleRef(id="3170", url=f"{MYMOMENT_BASE_URL}/article/3170/")
+
+    def given_article_refusing_comments(self) -> ArticleRef:
+        # A deleted article: myMoment answers 404 for its page
+        self.http.queue_response("GET", f"{MYMOMENT_BASE_URL}/article/3170/", AiohttpStubResponse(status=404))
+        return ArticleRef(id="3170", url=f"{MYMOMENT_BASE_URL}/article/3170/")
+
+    def posted_texts(self) -> list[str]:
+        return [r["kwargs"]["data"]["text"] for r in self.http.requests if r["method"] == "POST" and "/comment/" in r["url"]]
 
 
 @pytest.fixture(params=["fake", "mymoment"])
@@ -179,3 +205,24 @@ async def test_list_articles_with_unknown_target_key_is_rejected(harness):
     async with harness.adapter.connect(harness.account) as connection:
         with pytest.raises(PlatformRejected):
             await connection.list_articles({"classroom": "alle", "colour": "blue"})
+
+
+async def test_post_comment_publishes_the_text(harness):
+    harness.given_valid_login()
+    ref = harness.given_article_open_for_comments()
+
+    async with harness.adapter.connect(harness.account) as connection:
+        posted = await connection.post_comment(ref, "<p>Schöner Text!</p>")
+
+    assert (isinstance(posted, PostedComment), harness.posted_texts()) == (True, ["<p>Schöner Text!</p>"])
+
+
+async def test_post_comment_to_article_refusing_comments_is_rejected(harness):
+    harness.given_valid_login()
+    ref = harness.given_article_refusing_comments()
+
+    async with harness.adapter.connect(harness.account) as connection:
+        with pytest.raises(PlatformRejected):
+            await connection.post_comment(ref, "<p>Schöner Text!</p>")
+
+    assert harness.posted_texts() == []

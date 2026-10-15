@@ -14,6 +14,7 @@ from src.platforms.types import (
     PlatformAccount,
     PlatformAdapter,
     PlatformConnection,
+    PostedComment,
 )
 
 __all__ = [
@@ -27,6 +28,7 @@ __all__ = [
     "PlatformError",
     "PlatformRejected",
     "PlatformUnavailable",
+    "PostedComment",
     "adapter_for",
     "connect",
     "use_adapter",
