@@ -138,6 +138,18 @@ async def test_discovery_passes_the_stored_target_unchanged_to_the_platform(db_s
     assert fake_platform.listed_targets == [target]
 
 
+async def test_discovery_without_classroom_does_not_contact_the_platform(db_session, db_engine, fake_platform):
+    # A process migrated from an empty tab_filter column has no classroom in its target
+    scenario = await build_scenario("minimal_happy_path", db_session, {"process": {"target": {"category": "7"}}})
+    await db_session.commit()
+    _add_target_article(fake_platform, "1")
+
+    task = _bind_task_sessions(ArticleDiscoveryTask(), db_engine)
+    result = await task._discover_articles_async(scenario["process"].id)
+
+    assert (result["discovered"], fake_platform.connected_accounts) == (0, [])
+
+
 async def test_discovery_connects_with_the_decrypted_platform_account(db_session, db_engine, fake_platform):
     scenario = await build_scenario(
         "minimal_happy_path", db_session, {"login": {"username": "teacher", "password": "Secret-1!"}}

@@ -107,3 +107,18 @@ def test_target_migration_downgrade_restores_the_columns(migrate):
     columns = ("category_filter", "task_filter", "tab_filter", "search_filter", "sort_option")
     assert _row(migrate.db_file, full, *columns) == (7, 12, "4711", "Rotpanda", None)
     assert _row(migrate.db_file, classroom_only, *columns) == (None, None, "4711", None, None)
+
+
+def test_target_migration_downgrade_drops_values_the_integer_columns_cannot_hold(migrate):
+    migrate("upgrade", BEFORE_TARGET)
+    process = _insert_old_process(migrate.db_file, category=7, task=12, tab="4711")
+    migrate("upgrade", TARGET)
+    with sqlite3.connect(migrate.db_file) as conn:
+        conn.execute(
+            "UPDATE monitoring_processes SET target = ? WHERE id = ?",
+            (json.dumps({"category": "Erzählen", "arrangement": "12a", "classroom": "4711"}), process),
+        )
+
+    migrate("downgrade", BEFORE_TARGET)
+
+    assert _row(migrate.db_file, process, "category_filter", "task_filter", "tab_filter") == (None, None, "4711")

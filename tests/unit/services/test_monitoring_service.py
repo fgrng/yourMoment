@@ -259,8 +259,8 @@ async def test_update_process_rejects_an_invalid_target_and_keeps_the_stored_one
     with pytest.raises(InvalidTarget, match="alle"):
         await service.update_process(process.id, user_id=user.id, target={"classroom": "alle"})
 
-    stored = await service._get_process_with_associations(process.id, user.id)
-    assert stored.target == CLASSROOM_ONLY
+    status = await service.get_process_status(process.id, user.id)
+    assert status["target"] == CLASSROOM_ONLY
 
 
 @pytest.mark.asyncio

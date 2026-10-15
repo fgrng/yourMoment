@@ -25,7 +25,7 @@ from src.models.llm_provider import LLMProviderConfiguration
 from src.models.ai_comment import AIComment
 from src.models.monitoring_process_login import MonitoringProcessLogin
 from src.models.monitoring_process_prompt import MonitoringProcessPrompt
-from src.platforms import ArticleSummary, connect
+from src.platforms import MYMOMENT, ArticleSummary, InvalidTarget, adapter_for_platform, connect, validate_target
 from src.platforms.accounts import load_platform_account
 from src.config.database import get_database_manager
 from src.utils.ids import as_int
@@ -161,6 +161,13 @@ class ArticleDiscoveryTask(BaseTask):
         Returns:
             Article summaries matching target and search term, at most ARTICLES_PER_LOGIN
         """
+        # A stored target that fails the check (e.g. migrated without a classroom) is never listed
+        try:
+            validate_target(adapter_for_platform(MYMOMENT), config_snapshot.target)
+        except InvalidTarget as e:
+            logger.warning(f"Invalid target for process {config_snapshot.process_id}, skipping article discovery: {e}")
+            return []
+
         session = await self.get_async_session()
         async with session:
             account = await load_platform_account(session, login_id, config_snapshot.user_id)
